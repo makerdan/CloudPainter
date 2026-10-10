@@ -592,6 +592,75 @@ test('strokes stay on the same photo details across zoom and pan, and hidden lay
   expect((await savedProject(page))?.layers[0]?.strokes).toEqual(savedBeforeHide.layers[0].strokes);
 });
 
+test('undo and redo preserve the zoomed and panned photo while moving the exact stroke between histories', async ({ page }) => {
+  await page.getByTestId('input-photo').setInputFiles(await png(page, 'undo-redo-view.png', 600, 400));
+  const preview = page.getByTestId('img-reference');
+  await expect(preview).toBeVisible();
+  const surface = page.locator('canvas.draw-surface');
+  const box = await surface.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width * 0.4, box!.y + box!.height * 0.4);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + box!.width * 0.6, box!.y + box!.height * 0.6, { steps: 8 });
+  await page.mouse.up();
+  // Wait for the debounced save before establishing history and view baselines.
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  const before = await savedProject(page);
+  expect(before.layers[0].redo).toEqual([]);
+  expect(before.layers[0].strokes[0].points.length).toBeGreaterThan(1);
+
+  await zoomAndPan(page);
+  await page.getByTestId('button-pan-mode').click();
+  const viewBefore = await photoView(page);
+  expect(viewBefore.content!.width / viewBefore.stage!.width).toBeCloseTo(1.5, 2);
+  const renderedPhoto = page.locator('.base-photo');
+  const photoBefore = {
+    src: await renderedPhoto.getAttribute('src'),
+    bounds: await renderedPhoto.boundingBox(),
+  };
+  expect(photoBefore.src).toBe(before.image);
+
+  const assertViewUnchanged = async () => {
+    await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
+    await expect(page.getByTestId('button-pan-mode')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('button-reset-photo-view')).toBeEnabled();
+    await expect(preview).toHaveAttribute('src', before.image);
+    await expect(renderedPhoto).toHaveAttribute('src', photoBefore.src!);
+    expect(await photoView(page)).toEqual(viewBefore);
+    expect(await renderedPhoto.boundingBox()).toEqual(photoBefore.bounds);
+  };
+  // Inspect the rendered stroke as well as storage: stale canvases must not pass.
+  const strokePixel = () => surface.evaluate(canvas => {
+    const element = canvas as HTMLCanvasElement;
+    return Array.from(element.getContext('2d')!.getImageData(
+      Math.round(element.width * 0.5), Math.round(element.height * 0.5), 1, 1,
+    ).data);
+  });
+  const pixelBefore = await strokePixel();
+  expect(pixelBefore[3]).toBeGreaterThan(0);
+
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+  await page.getByTestId('button-undo').click();
+  await expect.poll(() => savedProject(page)).toEqual({
+    ...before,
+    layers: before.layers.map((layer: unknown, index: number) => index === 0
+      ? { ...before.layers[0], strokes: [], redo: before.layers[0].strokes }
+      : layer),
+  });
+  await expect(page.getByTestId('button-undo')).toBeDisabled();
+  await expect(page.getByTestId('button-redo')).toBeEnabled();
+  await expect.poll(strokePixel).toEqual([0, 0, 0, 0]);
+  await assertViewUnchanged();
+
+  await page.getByTestId('button-redo').click();
+  await expect.poll(() => savedProject(page)).toEqual(before);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+  await expect.poll(strokePixel).toEqual(pixelBefore);
+  await assertViewUnchanged();
+});
+
 async function photoPan(page: Page) {
   return page.evaluate(() => {
     const stage = document.querySelector('[data-testid="canvas-stage"]')!;
