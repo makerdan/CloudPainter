@@ -427,24 +427,31 @@ function Home() {
           <aside className="panel side-panel">
             <div className="panel-title-row"><h2 className="panel-title">Your starting point</h2><span className="panel-kicker">01</span></div>
             <p className="section-label">Reference photo</p>
-            <div className={`source-card ${project.image ? 'loaded' : ''}`}>
-              {project.image ? (
-                <>
+            <div className="source-card-frame">
+              <button
+                type="button"
+                className={`source-card ${project.image ? 'loaded' : ''}`}
+                onClick={openPhoto}
+                aria-label={project.image ? 'Replace reference photo' : 'Import a reference photo'}
+                data-testid="button-photo-card"
+              >
+                {project.image ? (
                   <img src={project.image} alt="Your unchanged reference photo" data-testid="img-reference" />
-                  <button className="icon-button" style={{ position: 'absolute', top: 6, right: 6, background: '#fbfaf6ed' }} aria-label="Remove photo" onClick={() => { resetPhotoView(); updateProject(current => ({ ...current, image: null })); }} data-testid="button-remove-photo"><X size={14} /></button>
-                </>
-              ) : (
-                <>
-                  <span className="source-icon"><ImagePlus size={18} /></span>
-                  <strong>Bring in a photograph</strong>
-                  <span>JPG, PNG or another image</span>
-                </>
+                ) : (
+                  <>
+                    <span className="source-icon"><ImagePlus size={18} /></span>
+                    <strong>Bring in a photograph</strong>
+                    <span>JPG, PNG or another image</span>
+                  </>
+                )}
+              </button>
+              {project.image && (
+                <button type="button" className="icon-button source-remove" aria-label="Remove photo" onClick={() => { resetPhotoView(); updateProject(current => ({ ...current, image: null })); }} data-testid="button-remove-photo"><X size={14} /></button>
               )}
             </div>
             <div className="source-actions">
-              <button className="button" onClick={openPhoto} data-testid="button-upload"><Upload size={13} /> Upload photo</button>
               <button className="button" onClick={startBlank} data-testid="button-blank"><Plus size={13} /> Blank canvas</button>
-              <input ref={fileInput} className="sr-only" type="file" accept="image/*" onChange={handleFile} data-testid="input-photo" />
+              <input ref={fileInput} hidden type="file" accept="image/*" onChange={handleFile} data-testid="input-photo" />
             </div>
 
             <p className="section-label">Drawing layers <span className="panel-kicker"> · {project.layers.length}</span></p>

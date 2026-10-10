@@ -1,0 +1,1 @@
+- [Browser checks on Nix](browser-checks-nix.md) — Chromium needs explicit shared libraries; GBM may be packaged separately from Mesa.

@@ -11,6 +11,13 @@ A browser-based creativity app for drawing imagined shapes over photographs with
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
 
+## Photo-card regression checks
+
+- `pnpm --filter @workspace/cloudpainter run test:image-dimensions` — image proportions
+- Install the browser once with `pnpm --filter @workspace/cloudpainter exec playwright install chromium`.
+- With the existing preview running, use `CLOUDPAINTER_TEST_URL="https://${REPLIT_DEV_DOMAIN}/" pnpm --filter @workspace/cloudpainter run test:photo-card`. For another host, set the URL to its running CloudPainter page instead.
+- Browser tests use isolated local storage and do not start another server. Failed-run traces go to the ignored `generated-artifacts/` directory.
+
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
