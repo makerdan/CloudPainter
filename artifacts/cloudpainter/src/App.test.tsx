@@ -243,14 +243,15 @@ test('Remove photo is an independent control and never opens the picker', async 
   expect(await savedProject(page)).toEqual({ ...before, image: null });
 });
 
-test('Clear selected layer clears only its strokes and redo history and persists after reload', async ({ page }) => {
+for (const redoOnly of [false, true]) {
+test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, remains safe when already empty,' : 'strokes and redo history'} and persists after reload`, async ({ page }) => {
   const photo = await png(page, 'clear-layer-reference.png', 480, 320);
   const stroke = (color: string, y: number) => ({
     points: [{ x: 0.2, y }, { x: 0.7, y }],
     color, size: 8, tool: 'pen',
   });
   // Select the middle layer to catch implementations that clear the first,
-  // last, or all layers. Every layer has artwork and redo history to protect.
+  // last, or all layers. Neighboring layers have artwork and redo to protect.
   const before = {
     image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
     width: 480, height: 320, title: 'Keep the rest of my sketch',
@@ -259,7 +260,7 @@ test('Clear selected layer clears only its strokes and redo history and persists
       { id: 'layer-keep-bottom', name: 'Background lines', visible: true, opacity: 0.65,
         strokes: [stroke('#e53935', 0.25)], redo: [stroke('#ff9800', 0.3)] },
       { id: 'layer-clear-target', name: 'Draft to clear', visible: true, opacity: 0.45,
-        strokes: [stroke('#1e88e5', 0.5), stroke('#8e24aa', 0.55)], redo: [stroke('#00acc1', 0.6)] },
+        strokes: redoOnly ? [] : [stroke('#1e88e5', 0.5), stroke('#8e24aa', 0.55)], redo: [stroke('#00acc1', 0.6)] },
       { id: 'layer-keep-top', name: 'Hidden details', visible: false, opacity: 0.8,
         strokes: [stroke('#43a047', 0.75)], redo: [stroke('#3949ab', 0.8)] },
     ],
@@ -275,7 +276,8 @@ test('Clear selected layer clears only its strokes and redo history and persists
   await page.reload();
   await expect(page.getByTestId('img-reference')).toBeVisible();
   await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
-  await expect(page.getByTestId('button-undo')).toBeEnabled();
+  if (redoOnly) await expect(page.getByTestId('button-undo')).toBeDisabled();
+  else await expect(page.getByTestId('button-undo')).toBeEnabled();
   await expect(page.getByTestId('button-redo')).toBeEnabled();
   await expect.poll(() => savedProject(page)).toEqual(before);
 
@@ -302,7 +304,23 @@ test('Clear selected layer clears only its strokes and redo history and persists
   await expect(page.getByTestId('button-redo')).toBeDisabled();
   await expect(page.getByTestId('button-visibility-layer-keep-top')).toHaveAttribute('aria-label', 'Show layer');
   await expect.poll(() => savedProject(page)).toEqual(after);
+
+  if (redoOnly) {
+    // Clear again after rehydrating the now completely empty target. Neither
+    // this no-op nor another reload may change the remaining saved project.
+    await page.getByRole('button', { name: 'Clear selected layer', exact: true }).click();
+    await expect(page.getByTestId('button-undo')).toBeDisabled();
+    await expect(page.getByTestId('button-redo')).toBeDisabled();
+    await expect.poll(() => savedProject(page)).toEqual(after);
+    await page.reload();
+    await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+    await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
+    await expect(page.getByTestId('button-undo')).toBeDisabled();
+    await expect(page.getByTestId('button-redo')).toBeDisabled();
+    await expect.poll(() => savedProject(page)).toEqual(after);
+  }
 });
+}
 
 for (const deleteSelected of [true, false]) {
   test(`deleting ${deleteSelected ? 'a selected' : 'an unselected'} layer preserves the other artwork and survives reload`, async ({ page }) => {
