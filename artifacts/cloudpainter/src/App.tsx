@@ -26,6 +26,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import { Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
+import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions } from '@/lib/imageDimensions';
 
 type Point = { x: number; y: number };
 type Stroke = { points: Point[]; color: string; size: number; tool: 'pen' | 'eraser' };
@@ -81,11 +82,37 @@ function Home() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
+  const stageWrapRef = useRef<HTMLDivElement>(null);
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
+  const [stageBounds, setStageBounds] = useState({ width: 0, height: 0 });
   const drawingRef = useRef(false);
   const toastTimer = useRef<number | undefined>(undefined);
   const selectedLayer = project.layers.find(layer => layer.id === project.selectedLayerId) ?? project.layers[0];
   const visibleLayers = useMemo(() => [...project.layers].reverse(), [project.layers]);
+  const stageSize = fitStageDimensions(
+    project.width,
+    project.height,
+    stageBounds.width,
+    Math.min(stageBounds.height, Math.max(1, window.innerHeight - 310)),
+  );
+
+  useEffect(() => {
+    const stageWrap = stageWrapRef.current;
+    if (!stageWrap) return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      setStageBounds({ width: entry.contentRect.width, height: entry.contentRect.height });
+    });
+    observer.observe(stageWrap);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const updateViewportHeight = () => setStageBounds(current => ({ ...current }));
+    window.addEventListener('resize', updateViewportHeight);
+    return () => window.removeEventListener('resize', updateViewportHeight);
+  }, []);
 
   const announce = useCallback((message: string) => {
     setToast(message);
@@ -161,9 +188,7 @@ function Home() {
     reader.onload = () => {
       const image = new Image();
       image.onload = () => {
-        const scale = Math.min(1, 2000 / Math.max(image.naturalWidth, image.naturalHeight));
-        const width = Math.max(1, Math.round(image.naturalWidth * scale));
-        const height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const { width, height } = getScaledImageDimensions(image.naturalWidth, image.naturalHeight);
         const layer = createLayer('Sketch layer');
         setProject(current => ({
           ...current, image: String(reader.result), width, height,
@@ -283,7 +308,13 @@ function Home() {
     };
     if (project.image) {
       const photo = new Image();
-      photo.onload = () => { context.drawImage(photo, 0, 0, project.width, project.height); finish(); };
+      photo.onload = () => {
+        const imageSize = fitDimensionsWithinBounds(photo.naturalWidth, photo.naturalHeight, project.width, project.height);
+        const x = (project.width - imageSize.width) / 2;
+        const y = (project.height - imageSize.height) / 2;
+        context.drawImage(photo, x, y, imageSize.width, imageSize.height);
+        finish();
+      };
       photo.onerror = () => finish();
       photo.src = project.image;
     } else {
@@ -393,8 +424,12 @@ function Home() {
               </div>
             </div>
 
-            <div className="panel stage-wrap">
-              <div className="stage" style={{ aspectRatio: `${project.width} / ${project.height}` }} data-testid="canvas-stage">
+            <div className="panel stage-wrap" ref={stageWrapRef}>
+              <div className="stage" style={{
+                aspectRatio: `${project.width} / ${project.height}`,
+                width: stageSize.width || undefined,
+                height: stageSize.height || undefined,
+              }} data-testid="canvas-stage">
                 {project.image && <img className="base-photo" src={project.image} alt="" draggable={false} />}
                 {project.layers.map((layer, index) => (
                   <canvas
