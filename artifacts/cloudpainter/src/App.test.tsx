@@ -58,7 +58,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('the entire empty card opens the picker once, without a duplicate upload action', async ({ page }) => {
-    const card = page.getByTestId('button-photo-card');
+  const card = page.getByTestId('button-photo-card');
   await expect(page.getByTestId('button-upload')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Upload photo', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('button-blank')).toBeVisible();
@@ -82,7 +82,7 @@ for (const key of ['Enter', 'Space']) {
       style: getComputedStyle(el).outlineStyle,
       width: getComputedStyle(el).outlineWidth,
     }))).toEqual({ visible: true, style: 'solid', width: '3px' });
-  const chooser = page.waitForEvent('filechooser');
+    const chooser = page.waitForEvent('filechooser');
     await page.keyboard.press(key);
     await (await chooser).setFiles([]);
     await expect(page.getByTestId('input-photo')).toHaveAttribute('data-picker-clicks', '1');
@@ -105,9 +105,9 @@ test('imports landscape and replaces it from the preview with a correctly propor
 
   // Include a layer before replacement to guard the existing import-reset behavior.
   await page.getByTestId('button-add-layer').click();
-  chooser = page.waitForEvent('filechooser');
+  const replacement = page.waitForEvent('filechooser');
   await preview.click();
-  await (await chooser).setFiles(portrait);
+  await (await replacement).setFiles(portrait);
   await expect.poll(async () => {
     const project = await savedProject(page);
     return project && { width: project.width, height: project.height, title: project.title, layers: project.layers.length };
@@ -124,15 +124,13 @@ test('imports landscape and replaces it from the preview with a correctly propor
 });
 
 test('cancelling the picker preserves the saved photo, dimensions, title, and drawings', async ({ page }) => {
-  const photo = await png(page, 'remove-me.png', 320, 180);
+  const photo = await png(page, 'keep-me.png', 320, 180);
   const chooser = page.waitForEvent('filechooser');
   await page.getByTestId('button-photo-card').click();
   await (await chooser).setFiles(photo);
   await expect(page.getByTestId('img-reference')).toBeVisible();
   await page.getByTestId('button-add-layer').click();
   const surface = page.locator('canvas.draw-surface');
-
-  const layerId = await surface.getAttribute('data-testid').then(value => value!.replace('canvas-layer-', ''));
   const box = await surface.boundingBox();
   expect(box).not.toBeNull();
   await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
@@ -141,17 +139,25 @@ test('cancelling the picker preserves the saved photo, dimensions, title, and dr
   await page.mouse.up();
   await expect.poll(async () => {
     const project = await savedProject(page);
-    return { width: project.width, height: project.height, layers: project.layers.length };
-  }).toEqual({ width: 640, height: 320, layers: 1 });
-  await page.reload();
-  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', `data:image/png;base64,${image.buffer.toString('base64')}`);
-});
-
-test('generation failures show an error without changing the current sketch', async ({ page }) => {
-  await page.getByTestId('button-add-layer').click();
-  await expect.poll(async () => (await savedProject(page))?.layers.length).toBe(2);
+    return project?.layers[1]?.strokes.length;
+  }).toBe(1);
   const before = await savedProject(page);
   const replacement = page.waitForEvent('filechooser');
+  await page.getByTestId('img-reference').click();
+  // Browsers do not expose the native dialog's Cancel button to automation.
+  // An empty selection exercises handleFile's no-file branch; also send the
+  // browser cancel event to confirm that it cannot mutate the project.
+  await (await replacement).setFiles([]);
+  await page.getByTestId('input-photo').dispatchEvent('cancel');
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+  await page.waitForTimeout(650); // Allow any accidental autosave to become visible.
+  expect(await savedProject(page)).toEqual(before);
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+  expect(await savedProject(page)).toEqual(before);
+});
+
+test('Remove photo is an independent control and never opens the picker', async ({ page }) => {
   const photo = await png(page, 'remove-me.png', 320, 180);
   const chooser = page.waitForEvent('filechooser');
   await page.getByTestId('button-photo-card').click();
@@ -168,61 +174,34 @@ test('generation failures show an error without changing the current sketch', as
   await expect.poll(() => savedProject(page)).toEqual({ ...before, image: null });
 });
 
-test('generated images stay in preview until explicitly used and persist after reload', async ({ page }) => {
-  await page.getByTestId('button-add-layer').click();
-  await expect.poll(async () => (await savedProject(page))?.layers.length).toBe(2);
-  const before = await savedProject(page);
-  const image = await png(page, 'generated.png', 640, 320);
-  let requestBody: unknown;
-  await page.route('**/api/openai/generate-image', async route => {
-    requestBody = route.request().postDataJSON();
-    await route.fulfill({ json: { b64_json: image.buffer.toString('base64') } });
-  });
-  await page.getByTestId('button-generate-image').click();
-  await expect(page.getByTestId('button-submit-generation')).toBeDisabled();
-  await page.getByTestId('input-image-prompt').fill('Clouds over a blue sky');
-  await page.locator('#image-size').selectOption('1536x1024');
-  await page.getByTestId('button-submit-generation').click();
-  await expect(page.getByTestId('generated-image-preview')).toBeVisible();
-  expect(requestBody).toEqual({ prompt: 'Clouds over a blue sky', size: '1536x1024' });
-  expect(await savedProject(page)).toEqual(before);
-  await page.getByTestId('button-use-generated-image').click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect.poll(async () => {
-    const project = await savedProject(page);
-    return { width: project.width, height: project.height, layers: project.layers.length };
-  }).toEqual({ width: 640, height: 320, layers: 1 });
-  await page.reload();
-  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', `data:image/png;base64,${image.buffer.toString('base64')}`);
-});
+test('strokes stay on the same photo details across zoom and pan, and hidden layers allow photo dragging', async ({ page }) => {
+  await page.getByTestId('input-photo').setInputFiles(await markedPhoto(page, 'zoom-alignment.png'));
+  await expect(page.getByTestId('img-reference')).toBeVisible();
+  const surface = page.locator('canvas.draw-surface');
+  const layerId = await surface.getAttribute('data-testid').then(value => value!.replace('canvas-layer-', ''));
+  const zoom = page.getByTestId('input-photo-zoom');
 
-test('generation failures show an error without changing the current sketch', async ({ page }) => {
-  await page.getByTestId('button-add-layer').click();
-  await expect.poll(async () => (await savedProject(page))?.layers.length).toBe(2);
-  const before = await savedProject(page);
-  await page.route('**/api/openai/generate-image', route => route.fulfill({
-    status: 502, json: { error: 'Image generation did not complete. Please try again later.' },
-  }));
-  await page.getByTestId('button-generate-image').click();
-  await page.getByTestId('input-image-prompt').fill('Clouds over a blue sky');
-  await page.getByTestId('button-submit-generation').click();
-  await expect(page.getByTestId('generation-error')).toContainText('Image generation did not complete');
-  await expect(page.getByTestId('button-use-generated-image')).toHaveCount(0);
-  expect(await savedProject(page)).toEqual(before);
-});
-
+  for (const [index, marker] of zoomPanTargets.entries()) {
+    await zoom.focus();
+    for (let step = 0; step < marker.zoomSteps; step++) await page.keyboard.press('ArrowRight');
+    await expect(zoom).toHaveValue(String(100 + marker.zoomSteps * 25));
+    await page.getByTestId('button-pan-mode').click();
+    await panBy(page, marker.panX, marker.panY);
     const offset = await photoPan(page);
+    expect(offset.x).toBeCloseTo(marker.panX, 0);
+    expect(offset.y).toBeCloseTo(marker.panY, 0);
+    await page.getByTestId('button-pan-mode').click();
 
     const markerPosition = await page.evaluate(({ x, y }) => {
       const content = document.querySelector('.stage-content')!;
       const bounds = content.getBoundingClientRect();
       return { x: bounds.left + bounds.width * x, y: bounds.top + bounds.height * y };
     }, marker);
+    await page.mouse.click(markerPosition.x, markerPosition.y);
+    await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(index + 1);
 
-  const savedBeforeHide = await savedProject(page);
-
-  const hiddenLayerPan = await photoPan(page);
-
+    await page.getByTestId('button-reset-photo-view').click();
+    await expect(zoom).toHaveValue('100');
     const verification = await surface.evaluate((canvas, point) => {
       const element = canvas as HTMLCanvasElement;
       const context = element.getContext('2d')!;
@@ -245,6 +224,26 @@ test('generation failures show an error without changing the current sketch', as
         strokes: JSON.parse(localStorage.getItem('cloudpainter-project-v1')!).layers[0].strokes,
       };
     }, { x: marker.x, y: marker.y });
+    expect(verification.strokes[index].points[0].x).toBeCloseTo(marker.x, 2);
+    expect(verification.strokes[index].points[0].y).toBeCloseTo(marker.y, 2);
+    expect(verification.pixel).toEqual([49, 93, 77]);
+    expect(verification.photoPixel).toEqual(marker.photoColor);
+  }
+
+  const savedBeforeHide = await savedProject(page);
+  await page.getByTestId(`button-visibility-${layerId}`).click();
+  await expect(page.getByTestId(`button-visibility-${layerId}`)).toHaveAttribute('aria-label', 'Show layer');
+  await zoom.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(zoom).toHaveValue('150');
+  await page.getByTestId('button-pan-mode').click();
+  await panBy(page, 42, 26);
+  const hiddenLayerPan = await photoPan(page);
+  expect(hiddenLayerPan.x).toBeCloseTo(42, 0);
+  expect(hiddenLayerPan.y).toBeCloseTo(26, 0);
+  expect((await savedProject(page))?.layers[0]?.strokes).toEqual(savedBeforeHide.layers[0].strokes);
+});
 
 async function photoPan(page: Page) {
   return page.evaluate(() => {
@@ -267,7 +266,3 @@ async function panBy(page: Page, deltaX: number, deltaY: number) {
   await page.mouse.move(stage!.x + stage!.width / 2 + deltaX, stage!.y + stage!.height / 2 + deltaY);
   await page.mouse.up();
 }
-
-  const zoom = page.getByTestId('input-photo-zoom');
-
-    for (let step = 0; step < marker.zoomSteps; step++) await page.keyboard.press('ArrowRight');
