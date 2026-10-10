@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { LogoCreationPanel, PROMPT_MAX, TIMEOUT_MS, type LogoDirectionOption } from './LogoCreationPanel';
+import { LogoCreationPanel, MAX_CONCEPTS, PROMPT_MAX, TIMEOUT_MS, type LogoDirectionOption } from './LogoCreationPanel';
 
 const generate = vi.fn();
 vi.mock('@workspace/api-client-react', () => ({ generateLogoImage: (...a: unknown[]) => generate(...a) }));
@@ -50,14 +50,14 @@ describe('LogoCreationPanel', () => {
     type('a cloud');
     fireEvent.change(screen.getByTestId('select-logo-direction'), { target: { value: 'cloudline' } });
     submit();
-    await screen.findByTestId('img-logo-result');
+    await screen.findByTestId('img-logo-result-1');
     const [req, opts] = generate.mock.calls[0];
     expect(req).toEqual({ prompt: 'a cloud', direction: 'cloudline' });
     expect(opts.signal).toBeInstanceOf(AbortSignal);
     let name = '';
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { name = this.download; });
-    fireEvent.click(screen.getByTestId('button-download-logo'));
-    expect(name).toBe('cloudpainter-logo-concept.png');
+    fireEvent.click(screen.getByTestId('button-download-logo-1'));
+    expect(name).toBe('cloudpainter-logo-concept-1.png');
     click.mockRestore();
   });
 
@@ -66,12 +66,17 @@ describe('LogoCreationPanel', () => {
     setup();
     type('a cloud');
     submit();
-    await screen.findByTestId('img-logo-result');
+    await screen.findByTestId('img-logo-result-1');
+    generate.mockResolvedValueOnce(ok);
+    submit();
+    await screen.findByTestId('img-logo-result-2');
     generate.mockRejectedValueOnce(apiError('BUSY', true));
     submit();
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/busy/));
     expect(document.body.textContent).not.toMatch(/secret|raw server/);
-    expect(screen.getByTestId('img-logo-result')).toBeTruthy();
+    expect(screen.getByTestId('img-logo-result-1').getAttribute('src')).toBe('blob:test-1');
+    expect(screen.getByTestId('img-logo-result-2').getAttribute('src')).toBe('blob:test-2');
+    expect(revoke).not.toHaveBeenCalled();
   });
 
   it('retries retryable failures only', async () => {
@@ -80,7 +85,7 @@ describe('LogoCreationPanel', () => {
     type('a cloud');
     submit();
     fireEvent.click(await screen.findByTestId('button-retry-logo'));
-    await screen.findByTestId('img-logo-result');
+    await screen.findByTestId('img-logo-result-1');
     expect(generate).toHaveBeenCalledTimes(2);
     generate.mockRejectedValueOnce(apiError('REFUSED', false, 422));
     submit();
@@ -100,7 +105,7 @@ describe('LogoCreationPanel', () => {
     expect((screen.getByTestId('button-generate-logo') as HTMLButtonElement).disabled).toBe(true);
     expect(form.getAttribute('aria-busy')).toBe('true');
     resolve(ok);
-    await screen.findByTestId('img-logo-result');
+    await screen.findByTestId('img-logo-result-1');
   });
 
   it('rejects invalid image data', async () => {
@@ -159,18 +164,98 @@ describe('LogoCreationPanel', () => {
     expect(JSON.parse(request.body)).toEqual({ prompt: 'a cloud' });
   });
 
-  it('releases the prior URL on replacement and does not write browser projects', async () => {
+  it('compares and downloads every concept without persisting or replacing results', async () => {
     const storage = vi.spyOn(Storage.prototype, 'setItem');
+    generate.mockResolvedValue(ok);
+    const view = setup();
+    type('a cloud');
+    submit();
+    await screen.findByTestId('img-logo-result-1');
+    submit();
+    await screen.findByTestId('img-logo-result-2');
+    expect(within(screen.getByTestId('logo-concept-gallery')).getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.getByAltText('Generated logo concept 1').getAttribute('src')).toBe('blob:test-1');
+    expect(screen.getByAltText('Generated logo concept 2').getAttribute('src')).toBe('blob:test-2');
+    expect(revoke).not.toHaveBeenCalled();
+    const downloads: { url: string; name: string }[] = [];
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push({ url: this.href, name: this.download });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Download concept 1 PNG' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Download concept 2 PNG' }));
+    expect(downloads).toEqual([
+      { url: 'blob:test-1', name: 'cloudpainter-logo-concept-1.png' },
+      { url: 'blob:test-2', name: 'cloudpainter-logo-concept-2.png' },
+    ]);
+    expect(document.querySelector('a[download]')).toBeNull();
+    click.mockRestore();
+    expect(storage).not.toHaveBeenCalled();
+    view.unmount();
+    expect(revoke.mock.calls).toEqual([['blob:test-1'], ['blob:test-2']]);
+    setup();
+    expect(screen.queryByRole('img')).toBeNull();
+    storage.mockRestore();
+  });
+
+  it('caps held images, blocks even direct submits at capacity, and frees a slot on removal', async () => {
+    generate.mockResolvedValue(ok);
+    const view = setup();
+    type('a cloud');
+    for (let id = 1; id <= MAX_CONCEPTS; id++) {
+      submit();
+      await screen.findByTestId(`img-logo-result-${id}`);
+    }
+    expect(screen.getAllByRole('img')).toHaveLength(MAX_CONCEPTS);
+    expect((screen.getByTestId('button-generate-logo') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId('text-logo-gallery-limit').textContent).toMatch(/remove a concept/);
+    fireEvent.submit(screen.getByTestId('button-generate-logo').closest('form')!);
+    expect(generate).toHaveBeenCalledTimes(MAX_CONCEPTS);
+    expect(revoke).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove concept 2' }));
+    expect(screen.queryByTestId('img-logo-result-2')).toBeNull();
+    expect(revoke.mock.calls).toEqual([['blob:test-2']]);
+    expect((screen.getByTestId('button-generate-logo') as HTMLButtonElement).disabled).toBe(false);
+    submit();
+    await screen.findByTestId(`img-logo-result-${MAX_CONCEPTS + 1}`);
+    expect(screen.getAllByRole('img')).toHaveLength(MAX_CONCEPTS);
+    view.unmount();
+    expect(revoke).toHaveBeenCalledTimes(MAX_CONCEPTS + 1);
+    expect(new Set(revoke.mock.calls.map(([url]) => url)).size).toBe(MAX_CONCEPTS + 1);
+  });
+
+  it('removes a preview while generating without resurrecting it on success', async () => {
+    generate.mockResolvedValueOnce(ok);
+    const view = setup();
+    type('a cloud');
+    submit();
+    await screen.findByTestId('img-logo-result-1');
+    let resolve!: (v: unknown) => void;
+    generate.mockReturnValueOnce(new Promise(r => { resolve = r; }));
+    submit();
+    expect(screen.getByTestId('img-logo-result-1')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove concept 1' }));
+    expect(revoke.mock.calls).toEqual([['blob:test-1']]);
+    expect(screen.getByTestId('logo-result-frame').textContent).toMatch(/Sketching/);
+    resolve(ok);
+    await screen.findByTestId('img-logo-result-2');
+    expect(screen.queryByTestId('img-logo-result-1')).toBeNull();
+    view.unmount();
+    expect(revoke.mock.calls).toEqual([['blob:test-1'], ['blob:test-2']]);
+  });
+
+  it('returns to an empty gallery when the last concept is removed', async () => {
     generate.mockResolvedValue(ok);
     setup();
     type('a cloud');
     submit();
-    await screen.findByTestId('img-logo-result');
-    submit();
-    await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
-    expect(revoke).toHaveBeenCalledWith('blob:test-1');
-    expect(storage).not.toHaveBeenCalled();
-    storage.mockRestore();
+    await screen.findByTestId('img-logo-result-1');
+    const user = userEvent.setup();
+    screen.getByRole('button', { name: 'Remove concept 1' }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.getByTestId('button-generate-logo').textContent).toBe('Generate image');
+    expect(screen.getByRole('status').textContent).toBe('');
+    expect(revoke.mock.calls).toEqual([['blob:test-1']]);
   });
 
   it('allows keyboard navigation and generation without a mouse', async () => {
@@ -185,7 +270,7 @@ describe('LogoCreationPanel', () => {
     await user.tab();
     expect(document.activeElement).toBe(screen.getByTestId('button-generate-logo'));
     await user.keyboard('{Enter}');
-    await screen.findByTestId('img-logo-result');
+    await screen.findByTestId('img-logo-result-1');
     expect(generate.mock.calls[0][0]).toEqual({ prompt: 'one pencil cloud' });
   });
 
@@ -194,16 +279,19 @@ describe('LogoCreationPanel', () => {
     const first = setup();
     type('a cloud');
     submit();
-    await screen.findByTestId('img-logo-result');
+    await screen.findByTestId('img-logo-result-1');
+    generate.mockResolvedValueOnce(ok);
+    submit();
+    await screen.findByTestId('img-logo-result-2');
     let resolve!: (v: unknown) => void;
     generate.mockReturnValueOnce(new Promise(r => { resolve = r; }));
     submit();
-    const signal = generate.mock.calls[1][1].signal as AbortSignal;
+    const signal = generate.mock.calls[2][1].signal as AbortSignal;
     first.unmount();
     expect(signal.aborted).toBe(true);
-    expect(revoke).toHaveBeenCalledWith('blob:test-1');
+    expect(revoke.mock.calls).toEqual([['blob:test-1'], ['blob:test-2']]);
     resolve(ok);
     await Promise.resolve();
-    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledTimes(2);
   });
 });

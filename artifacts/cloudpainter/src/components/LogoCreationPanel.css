@@ -13,10 +13,16 @@
 .logo-create-notice { margin:14px 0 0; padding:11px 12px; background:#f0f2e9; border-radius:11px; color:#5d6a5f; font-size:11px; line-height:1.6; }
 .logo-create-notice ul { margin:0; padding-left:16px; }
 .logo-create-result { display:flex; flex-direction:column; gap:10px; align-items:stretch; }
+.logo-gallery-title { margin:0; color:#30473b; font:500 18px/1.3 var(--font-display); }
+.logo-concept-gallery { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.logo-concept-card { min-width:0; display:flex; flex-direction:column; gap:8px; }
+.logo-concept-card .logo-create-actions { margin-top:0; gap:6px; }
+.logo-concept-card .button { font-size:11px; padding:8px 10px; }
 .logo-result-frame { aspect-ratio:1/1; border:1px dashed #cfccbf; border-radius:12px; background:#f2f0e8; display:grid; place-items:center; overflow:hidden; text-align:center; color:#879187; font-size:12px; padding:14px; }
 .logo-result-frame img { width:100%; height:100%; object-fit:contain; display:block; background:#fff; }
 .logo-result-frame.busy { animation:logo-pulse 1.4s ease-in-out infinite; }
 .logo-result-caption { font:10px var(--font-mono); letter-spacing:.06em; color:#879187; }
 @keyframes logo-pulse { 50% { opacity:.6; } }
 @media (max-width:860px) { .logo-create { grid-template-columns:1fr; padding:15px; } }
+@media (max-width:420px) { .logo-concept-gallery { grid-template-columns:1fr; } }
 @media (prefers-reduced-motion:reduce) { .logo-result-frame.busy { animation:none; } }

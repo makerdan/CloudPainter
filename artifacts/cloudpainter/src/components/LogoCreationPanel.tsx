@@ -7,8 +7,8 @@ export type LogoDirectionOption = { id: LogoDirectionId; number: string; name: s
 
 export const PROMPT_MAX = 1200;
 export const TIMEOUT_MS = 100_000;
+export const MAX_CONCEPTS = 4;
 const BASE64_MAX = 11_184_812;
-const FILENAME = 'cloudpainter-logo-concept.png';
 
 const SAFE_MESSAGES: Record<string, string> = {
   INVALID_INPUT: 'That description could not be used. Adjust it and try again.',
@@ -51,25 +51,27 @@ export function pngBase64ToBlob(value: unknown): Blob | null {
 }
 
 type Status = 'idle' | 'generating' | 'error' | 'success';
+type Concept = { id: number; url: string };
 
 export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly LogoDirectionOption[] }) {
   const [prompt, setPrompt] = useState('');
   const [direction, setDirection] = useState<LogoDirectionId | ''>('');
   const [status, setStatus] = useState<Status>('idle');
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [concepts, setConcepts] = useState<Concept[]>([]);
   const inFlight = useRef(false);
   const controllerRef = useRef<AbortController | null>(null);
   const mounted = useRef(true);
-  const urlRef = useRef<string | null>(null);
+  const conceptsRef = useRef<Concept[]>([]);
+  const nextId = useRef(1);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       controllerRef.current?.abort();
-      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-      urlRef.current = null;
+      for (const concept of conceptsRef.current) URL.revokeObjectURL(concept.url);
+      conceptsRef.current = [];
     };
   }, []);
 
@@ -78,7 +80,7 @@ export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly
   const validation = !trimmed ? 'Describe the logo concept first.' : tooLong ? `Keep the description within ${PROMPT_MAX} characters.` : '';
 
   const submit = useCallback(async () => {
-    if (inFlight.current || !mounted.current) return;
+    if (inFlight.current || !mounted.current || conceptsRef.current.length >= MAX_CONCEPTS) return;
     if (!trimmed || prompt.length > PROMPT_MAX) {
       setStatus('error');
       setFailure({ message: !trimmed ? 'Describe the logo concept first.' : `Keep the description within ${PROMPT_MAX} characters.`, retryable: false });
@@ -98,12 +100,11 @@ export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly
       );
       if (!mounted.current || controller.signal.aborted && !timedOut) return;
       if (timedOut) throw { data: { code: 'TIMEOUT', retryable: true } };
-       const blob = result?.width === 1024 && result?.height === 1024 ? pngBase64ToBlob(result.pngBase64) : null;
+      const blob = result?.width === 1024 && result?.height === 1024 ? pngBase64ToBlob(result.pngBase64) : null;
       if (!blob) throw { data: { code: 'INVALID_IMAGE', retryable: true } };
-      const next = URL.createObjectURL(blob);
-      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-      urlRef.current = next;
-      setResultUrl(next);
+      const concept = { id: nextId.current++, url: URL.createObjectURL(blob) };
+      conceptsRef.current = [...conceptsRef.current, concept];
+      setConcepts(conceptsRef.current);
       setStatus('success');
     } catch (error) {
       if (!mounted.current) return;
@@ -117,21 +118,30 @@ export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly
     }
   }, [trimmed, prompt, direction]);
 
-  const download = () => {
-    if (!resultUrl) return;
+  const remove = (id: number) => {
+    const concept = conceptsRef.current.find(item => item.id === id);
+    if (!concept) return;
+    conceptsRef.current = conceptsRef.current.filter(item => item.id !== id);
+    setConcepts(conceptsRef.current);
+    URL.revokeObjectURL(concept.url);
+    if (!conceptsRef.current.length && !inFlight.current && status === 'success') setStatus('idle');
+  };
+
+  const download = (concept: Concept) => {
     const a = document.createElement('a');
-    a.href = resultUrl;
-    a.download = FILENAME;
+    a.href = concept.url;
+    a.download = `cloudpainter-logo-concept-${concept.id}.png`;
     document.body.appendChild(a);
     a.click();
     a.remove();
   };
 
   const busy = status === 'generating';
+  const full = concepts.length >= MAX_CONCEPTS;
   const selected = logoDirections.find(d => d.id === direction);
   const liveText = busy ? 'Generating your logo concept. This can take up to a minute and a half.'
     : status === 'error' && failure ? failure.message
-     : status === 'success' ? 'Concept ready. You can download it or generate again.' : '';
+    : status === 'success' ? 'Concept ready. Compare your concepts and download any PNG.' : '';
 
   return (
     <section className="logo-create" aria-labelledby="logo-create-title" data-testid="logo-creation-panel">
@@ -152,11 +162,11 @@ export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly
         </select>
          {selected && <p className="logo-create-lede" style={{ margin: '7px 0 0' }}>Text-only inspiration: {selected.description}</p>}
         <div className="logo-create-actions">
-          <button type="submit" className="button button-primary" disabled={busy} data-testid="button-generate-logo">
-             {busy ? 'Generating…' : resultUrl ? 'Generate again' : 'Generate image'}
+          <button type="submit" className="button button-primary" disabled={busy || full} aria-describedby="logo-gallery-limit" data-testid="button-generate-logo">
+             {busy ? 'Generating…' : concepts.length ? 'Generate again' : 'Generate image'}
           </button>
           {status === 'error' && failure?.retryable && trimmed && !tooLong && (
-            <button type="button" className="button" onClick={() => void submit()} disabled={busy} data-testid="button-retry-logo">Try again</button>
+            <button type="button" className="button" onClick={() => void submit()} disabled={busy || full} data-testid="button-retry-logo">Try again</button>
           )}
         </div>
         <div className={`logo-create-status ${status === 'error' ? 'is-error' : ''}`} role={status === 'error' ? 'alert' : 'status'} aria-live={status === 'error' ? 'assertive' : 'polite'} data-testid="status-logo-generation">{liveText}</div>
@@ -165,21 +175,31 @@ export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly
              <li>Your prompt and optional direction text are sent to Poe for image generation, using Poe points.</li>
             <li>Photos, drawings and browser projects are never uploaded.</li>
             <li>Generated raster concepts cannot replace the live CloudPainter identity, and transparency is not guaranteed.</li>
-            <li>Results last only for this visit.</li>
+            <li>Results last only for this visit. Download favorites before leaving this page.</li>
           </ul>
         </div>
       </form>
       <div className="logo-create-result">
-        <div className={`logo-result-frame ${busy ? 'busy' : ''}`} data-testid="logo-result-frame">
-          {resultUrl ? <img src={resultUrl} alt="Generated logo concept" width={1024} height={1024} data-testid="img-logo-result" /> : <span>{busy ? 'Sketching your concept...' : 'Your concept will appear here.'}</span>}
+        <h3 className="logo-gallery-title" id="logo-gallery-title">Compare concepts</h3>
+        <p className="logo-result-caption" id="logo-gallery-limit" data-testid="text-logo-gallery-limit">
+          {concepts.length} / {MAX_CONCEPTS} concepts · session only.
+          {full ? ' Download a favorite, then remove a concept to generate another.' : ' Up to four previews; none are replaced automatically.'}
+        </p>
+        {!concepts.length && <div className={`logo-result-frame ${busy ? 'busy' : ''}`} data-testid="logo-result-frame">
+          <span>{busy ? 'Sketching your concept...' : 'Your concepts will appear here.'}</span>
+        </div>}
+        <div className="logo-concept-gallery" role="list" aria-labelledby="logo-gallery-title" data-testid="logo-concept-gallery">
+          {concepts.map(concept => <div className="logo-concept-card" role="listitem" key={concept.id} data-testid={`card-logo-concept-${concept.id}`}>
+            <div className="logo-result-frame">
+              <img src={concept.url} alt={`Generated logo concept ${concept.id}`} width={1024} height={1024} data-testid={`img-logo-result-${concept.id}`} />
+            </div>
+            <span className="logo-result-caption">Concept {concept.id} · 1024 x 1024 PNG</span>
+            <div className="logo-create-actions">
+              <button type="button" className="button" onClick={() => download(concept)} aria-label={`Download concept ${concept.id} PNG`} data-testid={`button-download-logo-${concept.id}`}>Download PNG</button>
+              <button type="button" className="button" onClick={() => remove(concept.id)} aria-label={`Remove concept ${concept.id}`} data-testid={`button-remove-logo-${concept.id}`}>Remove</button>
+            </div>
+          </div>)}
         </div>
-        {resultUrl && <>
-          <span className="logo-result-caption">1024 x 1024 PNG{busy ? ' · previous result, replacing' : status === 'error' ? ' · previous result kept' : ''}</span>
-           <div className="logo-create-actions">
-             <button type="button" className="button" onClick={download} data-testid="button-download-logo">Download PNG</button>
-             <button type="button" className="button" onClick={() => void submit()} disabled={busy} data-testid="button-regenerate-logo">Generate again</button>
-           </div>
-        </>}
       </div>
     </section>
   );
