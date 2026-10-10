@@ -312,6 +312,104 @@ test('Clear selected layer clears only its strokes and redo history and persists
   await expect.poll(() => savedProject(page)).toEqual(after);
 });
 
+for (const deleteSelected of [true, false]) {
+  test(`deleting ${deleteSelected ? 'a selected' : 'an unselected'} layer preserves the other artwork and survives reload`, async ({ page }) => {
+    await page.getByTestId('input-photo').setInputFiles(await png(page, 'layer-deletion.png', 320, 180));
+    await expect(page.getByTestId('img-reference')).toBeVisible();
+    await expect.poll(async () => (await savedProject(page))?.title).toBe('layer-deletion');
+
+    // Build independent, non-empty layers using real controls, including undo
+    // history and different properties so broad resets cannot pass unnoticed.
+    const ids: string[] = [];
+    for (let index = 0; index < 3; index++) {
+      if (index) await page.getByTestId('button-add-layer').click();
+      const surface = page.locator('canvas.draw-surface').last();
+      const id = (await surface.getAttribute('data-testid'))!.replace('canvas-layer-', '');
+      ids.push(id);
+      const box = await surface.boundingBox();
+      expect(box).not.toBeNull();
+      for (let stroke = 0; stroke < 2; stroke++) {
+        await page.mouse.move(box!.x + box!.width * 0.2, box!.y + box!.height * (0.2 + index * 0.2 + stroke * 0.05));
+        await page.mouse.down();
+        await page.mouse.move(box!.x + box!.width * 0.6, box!.y + box!.height * (0.25 + index * 0.2 + stroke * 0.05), { steps: 4 });
+        await page.mouse.up();
+        await expect.poll(async () => (await savedProject(page))?.layers[index]?.strokes.length).toBe(stroke + 1);
+      }
+      await page.getByTestId('button-undo').click();
+      await page.getByTestId(`button-rename-${id}`).click();
+      await page.getByTestId(`input-rename-${id}`).fill(`Preserved details ${index + 1}`);
+      await page.getByTestId(`input-rename-${id}`).press('Enter');
+      await page.getByTestId('input-layer-opacity').fill(String(40 + index * 20));
+    }
+    await page.getByTestId(`button-visibility-${ids[2]}`).click();
+    await page.getByTestId(`button-select-layer-${deleteSelected ? ids[1] : ids[0]}`).click();
+    await expect.poll(async () => {
+      const project = await savedProject(page);
+      return {
+        selected: project?.selectedLayerId,
+        layers: project?.layers.map((layer: { name: string; visible: boolean; opacity: number; strokes: unknown[]; redo: unknown[] }) => ({
+          name: layer.name, visible: layer.visible, opacity: layer.opacity,
+          strokes: layer.strokes.length, redo: layer.redo.length,
+        })),
+      };
+    }).toEqual({
+      selected: deleteSelected ? ids[1] : ids[0],
+      layers: ids.map((_, index) => ({
+        name: `Preserved details ${index + 1}`, visible: index !== 2,
+        opacity: (40 + index * 20) / 100, strokes: 1, redo: 1,
+      })),
+    });
+    const before = await savedProject(page);
+    expect(before.image).toMatch(/^data:image\/png/);
+    const pixels = await Promise.all(ids.map(id =>
+      page.getByTestId(`canvas-layer-${id}`).evaluate(canvas => (canvas as HTMLCanvasElement).toDataURL()),
+    ));
+    const expected = {
+      ...before,
+      layers: [before.layers[0], before.layers[2]],
+      selectedLayerId: deleteSelected ? ids[2] : ids[0],
+    };
+
+    await page.getByTestId(`button-delete-layer-${ids[1]}`).click();
+    await expect.poll(() => savedProject(page)).toEqual(expected);
+    for (const reload of [false, true]) {
+      if (reload) await page.reload();
+      await expect(page.locator('.layer-row')).toHaveCount(2);
+      await expect(page.getByTestId(`layer-row-${ids[1]}`)).toHaveCount(0);
+      await expect(page.getByTestId(`canvas-layer-${ids[1]}`)).toHaveCount(0);
+      await expect(page.getByTestId(`layer-row-${expected.selectedLayerId}`)).toHaveClass(/active/);
+      expect(expected.layers.map((layer: { id: string }) => layer.id)).toContain(expected.selectedLayerId);
+      await expect(page.getByTestId('input-layer-opacity')).toHaveValue(deleteSelected ? '80' : '40');
+      await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+      await expect(page.getByTestId(`button-visibility-${ids[2]}`)).toHaveAttribute('aria-label', 'Show layer');
+      for (const index of [0, 2]) {
+        const canvas = page.getByTestId(`canvas-layer-${ids[index]}`);
+        await expect(page.getByTestId(`layer-row-${ids[index]}`)).toContainText(before.layers[index].name);
+        await expect.poll(() => canvas.evaluate(el => (el as HTMLCanvasElement).toDataURL())).toBe(pixels[index]);
+        await expect(canvas).toHaveCSS('opacity', index === 2 ? '0' : '0.4');
+      }
+      await expect.poll(() => savedProject(page)).toEqual(expected);
+    }
+
+    // Removing the other survivor leaves a populated sole layer. Its delete
+    // control must reject the action, rather than create an empty project.
+    await page.getByTestId(`button-delete-layer-${ids[2]}`).click();
+    const soleLayer = { ...expected, layers: [before.layers[0]], selectedLayerId: ids[0] };
+    await expect.poll(() => savedProject(page)).toEqual(soleLayer);
+    await page.getByTestId(`button-delete-layer-${ids[0]}`).click();
+    await expect(page.getByTestId('status-toast')).toContainText('Keep at least one drawing layer in your project.');
+    await expect(page.locator('.layer-row')).toHaveCount(1);
+    await expect(page.getByTestId(`layer-row-${ids[0]}`)).toHaveClass(/active/);
+    await page.waitForTimeout(650); // Observe any erroneous debounced save.
+    expect(await savedProject(page)).toEqual(soleLayer);
+    await page.reload();
+    await expect(page.locator('.layer-row')).toHaveCount(1);
+    await expect(page.getByTestId(`layer-row-${ids[0]}`)).toHaveClass(/active/);
+    await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+    expect(await savedProject(page)).toEqual(soleLayer);
+  });
+}
+
 test('strokes stay on the same photo details across zoom and pan, and hidden layers allow photo dragging', async ({ page }) => {
   await page.getByTestId('input-photo').setInputFiles(await markedPhoto(page, 'zoom-alignment.png'));
   await expect(page.getByTestId('img-reference')).toBeVisible();
