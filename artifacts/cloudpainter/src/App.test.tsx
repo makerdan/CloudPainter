@@ -89,7 +89,7 @@ for (const key of ['Enter', 'Space']) {
   });
 }
 
-test('imports landscape and replaces it from the preview with a correctly proportioned portrait', async ({ page }) => {
+test('replacing a zoomed and panned landscape fits and centers the new portrait', async ({ page }) => {
   const landscape = await png(page, 'landscape.png', 600, 400);
   const portrait = await png(page, 'portrait.png', 300, 500);
   const chooser = page.waitForEvent('filechooser');
@@ -105,6 +105,7 @@ test('imports landscape and replaces it from the preview with a correctly propor
 
   // Include a layer before replacement to guard the existing import-reset behavior.
   await page.getByTestId('button-add-layer').click();
+  await zoomAndPan(page);
   const replacement = page.waitForEvent('filechooser');
   await preview.click();
   await (await replacement).setFiles(portrait);
@@ -120,10 +121,19 @@ test('imports landscape and replaces it from the preview with a correctly propor
   const stage = await page.getByTestId('canvas-stage').boundingBox();
   expect(stage).not.toBeNull();
   expect(stage!.width / stage!.height).toBeCloseTo(300 / 500, 2);
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect(page.getByTestId('button-pan-mode')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByTestId('button-reset-photo-view')).toBeDisabled();
+  await expect.poll(() => photoPan(page)).toEqual({ x: 0, y: 0 });
+  // Check the rendered photo, not just controls: 100% means fitted to the stage.
+  await expect.poll(async () => {
+    const view = await photoView(page);
+    return { stage: view.stage, content: view.content };
+  }).toEqual({ stage, content: stage });
   await expect(page.getByTestId('input-photo')).toHaveAttribute('data-picker-clicks', '2');
 });
 
-test('cancelling the picker preserves the saved photo, dimensions, title, and drawings', async ({ page }) => {
+test('cancelling replacement preserves zoom, pan, and saved photo, dimensions, title, and drawings', async ({ page }) => {
   const photo = await png(page, 'keep-me.png', 320, 180);
   const chooser = page.waitForEvent('filechooser');
   await page.getByTestId('button-photo-card').click();
@@ -141,7 +151,9 @@ test('cancelling the picker preserves the saved photo, dimensions, title, and dr
     const project = await savedProject(page);
     return project?.layers[1]?.strokes.length;
   }).toBe(1);
+  await zoomAndPan(page);
   const before = await savedProject(page);
+  const viewBefore = await photoView(page);
   const replacement = page.waitForEvent('filechooser');
   await page.getByTestId('img-reference').click();
   // Browsers do not expose the native dialog's Cancel button to automation.
@@ -152,6 +164,11 @@ test('cancelling the picker preserves the saved photo, dimensions, title, and dr
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
   await page.waitForTimeout(650); // Allow any accidental autosave to become visible.
   expect(await savedProject(page)).toEqual(before);
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
+  await expect(page.getByTestId('button-pan-mode')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('button-reset-photo-view')).toBeEnabled();
+  expect(await photoView(page)).toEqual(viewBefore);
+  // Reload verifies artwork persistence only; zoom and pan are session-only.
   await page.reload();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
   expect(await savedProject(page)).toEqual(before);
@@ -256,6 +273,30 @@ async function photoPan(page: Page) {
       y: contentBounds.top - (stageBounds.top + (stageBounds.height - contentBounds.height) / 2),
     };
   });
+}
+
+async function photoView(page: Page) {
+  const stage = page.getByTestId('canvas-stage');
+  return {
+    stage: await stage.boundingBox(),
+    content: await stage.locator('.stage-content').boundingBox(),
+    transform: await stage.locator('.stage-content').evaluate(el => getComputedStyle(el).transform),
+    pan: await photoPan(page),
+  };
+}
+
+async function zoomAndPan(page: Page) {
+  const zoom = page.getByTestId('input-photo-zoom');
+  await zoom.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(zoom).toHaveValue('150');
+  await page.getByTestId('button-pan-mode').click();
+  await panBy(page, 42, -26);
+  // Establish a non-default view so a premature reset cannot pass unnoticed.
+  const pan = await photoPan(page);
+  expect(pan.x).toBeCloseTo(42, 0);
+  expect(pan.y).toBeCloseTo(-26, 0);
 }
 
 async function panBy(page: Page, deltaX: number, deltaY: number) {
