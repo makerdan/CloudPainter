@@ -9,6 +9,8 @@
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:image-dimensions": "node --experimental-strip-types --test src/lib/imageDimensions.test.ts",
+    "test:stroke-renderer": "node --experimental-strip-types --test --test-timeout=10000 src/lib/strokeRenderer.test.ts",
+    "test:brushes-browser": "playwright test --config playwright.brush.config.ts",
     "test:drawing-colors": "node --experimental-strip-types --test src/lib/drawingColors.test.ts",
     "test:palettes": "node --experimental-strip-types --test src/lib/palettePersistence.test.ts",
     "test:drawing-colors-browser": "node --test tests/drawing-colors.browser.test.mjs",

@@ -1,0 +1,103 @@
+export type Point = { x: number; y: number };
+export type BrushStyle = 'round' | 'chisel' | 'soft' | 'dry';
+export type Stroke = {
+  points: Point[];
+  color: string;
+  size: number;
+  tool: 'pen' | 'eraser';
+  // Absent on legacy projects. Version pins the recipe for future renderer changes.
+  brush?: { style: BrushStyle; version: 1; seed: number };
+};
+
+export const BRUSH_STYLES: { style: BrushStyle; label: string; description: string }[] = [
+  { style: 'round', label: 'Solid round', description: 'Smooth, opaque strokes with rounded ends.' },
+  { style: 'chisel', label: 'Flat / chisel', description: 'A flat diagonal tip: broad sweeps and narrow edges as direction changes.' },
+  { style: 'soft', label: 'Soft', description: 'Translucent strokes with feathered edges; overlap strokes to build color.' },
+  { style: 'dry', label: 'Dry brush', description: 'Broken, textured bristles with gaps that let the photograph show through.' },
+];
+
+// Fixed pass counts bound work to O(points), even at size 1 or on long touch strokes.
+export const SOFT_PASSES = 8;
+export const DRY_PASSES = 12;
+
+function roundPath(ctx: CanvasRenderingContext2D, stroke: Stroke, width: number, height: number, offsetX = 0, offsetY = 0) {
+  const first = stroke.points[0];
+  ctx.beginPath();
+  if (stroke.points.length === 1) {
+    ctx.arc(first.x * width + offsetX, first.y * height + offsetY, ctx.lineWidth / 2, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.moveTo(first.x * width + offsetX, first.y * height + offsetY);
+    for (let i = 1; i < stroke.points.length; i++) {
+      const point = stroke.points[i];
+      ctx.lineTo(point.x * width + offsetX, point.y * height + offsetY);
+    }
+    ctx.stroke();
+  }
+}
+
+function seededRandom(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+export function renderStroke(ctx: CanvasRenderingContext2D, stroke: Stroke, width: number, height: number) {
+  if (!stroke.points.length) return;
+  ctx.save();
+  try {
+    ctx.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over';
+    ctx.strokeStyle = stroke.color;
+    ctx.fillStyle = stroke.color;
+    ctx.lineWidth = stroke.size;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const style = stroke.brush?.style ?? 'round';
+    // Preserve the original operations exactly for metadata-free strokes and erasers.
+    if (stroke.tool === 'eraser' || style === 'round') {
+      roundPath(ctx, stroke, width, height);
+    } else if (style === 'chisel') {
+      // Sweep a fixed 45-degree nib along the entire path, with a thin edge.
+      const offset = stroke.size * 0.32;
+      ctx.lineWidth = stroke.size * 0.22;
+      ctx.lineJoin = 'bevel';
+      ctx.beginPath();
+      stroke.points.forEach((point, index) => {
+        const x = point.x * width - offset;
+        const y = point.y * height - offset;
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      for (let i = stroke.points.length - 1; i >= 0; i--) {
+        const point = stroke.points[i];
+        ctx.lineTo(point.x * width + offset, point.y * height + offset);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (style === 'soft') {
+      const alpha = ctx.globalAlpha;
+      for (let pass = 0; pass < SOFT_PASSES; pass++) {
+        ctx.globalAlpha = alpha * 0.085;
+        ctx.lineWidth = stroke.size * (1 - pass * 0.1);
+        roundPath(ctx, stroke, width, height);
+      }
+    } else if (style === 'dry') {
+      const random = seededRandom(stroke.brush?.seed ?? 0);
+      const alpha = ctx.globalAlpha;
+      for (let pass = 0; pass < DRY_PASSES; pass++) {
+        const spread = (pass / (DRY_PASSES - 1) - 0.5) * stroke.size * 0.85;
+        const jitter = (random() - 0.5) * stroke.size * 0.12;
+        ctx.globalAlpha = alpha * (0.4 + random() * 0.4);
+        ctx.lineWidth = Math.max(0.15, stroke.size * (0.025 + random() * 0.04));
+        ctx.setLineDash([stroke.size * (0.25 + random()), stroke.size * (0.15 + random() * 0.45)]);
+        ctx.lineDashOffset = random() * stroke.size * 4;
+        roundPath(ctx, stroke, width, height, spread, -spread + jitter);
+      }
+    }
+  } finally {
+    ctx.restore();
+  }
+}

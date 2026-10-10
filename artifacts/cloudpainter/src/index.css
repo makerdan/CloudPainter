@@ -151,6 +151,12 @@ h1 { font-family:var(--font-display); font-size:32px; line-height:1.1; font-weig
 .control-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:11px; font-size:11px; font-weight:700; }
 .control-value { font:10px var(--font-mono); color:#78827a; }
 .range-input { width:100%; accent-color:var(--forest); height:4px; cursor:pointer; }
+.brush-style-control { min-width:0; }
+.brush-style-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+.brush-style-button { min-width:0; min-height:64px; padding:6px; border:1px solid var(--nested-border); border-radius:9px; background:#f5f3ed; color:var(--ink); display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; }
+.brush-style-button canvas { display:block; width:100%; height:24px; max-width:100px; }
+.brush-style-button:hover { background:#edf1e5; }
+.brush-style-button.selected { background:#e9efdf; border-color:var(--forest); box-shadow:inset 0 0 0 1px var(--forest); font-weight:700; }
 .drawing-colors { min-width:0; }
 .preset-color-grid { display:grid; gap:6px; margin:10px 0; padding:3px; }
 .color-row { display:grid; grid-template-columns:repeat(6,minmax(24px,1fr)); gap:6px; }

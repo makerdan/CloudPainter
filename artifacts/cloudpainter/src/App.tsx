@@ -34,10 +34,10 @@ import { LogoCreationPanel } from '@/components/LogoCreationPanel';
 import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions } from '@/lib/imageDimensions';
 import { ImageGenerator } from '@/components/ImageGenerator';
 import { DrawingColorControl } from '@/components/DrawingColorControl';
+import { BrushStyleControl } from '@/components/BrushStyleControl';
+import { BRUSH_STYLES, renderStroke, type BrushStyle, type Point, type Stroke } from '@/lib/strokeRenderer';
 import { AccountProvider, AccountControls, SignInPage, SignUpPage } from '@/components/Account';
 
-type Point = { x: number; y: number };
-type Stroke = { points: Point[]; color: string; size: number; tool: 'pen' | 'eraser' };
 type PaintLayer = {
   id: string;
   name: string;
@@ -85,6 +85,7 @@ function Home() {
   const [tool, setTool] = useState<'pen' | 'eraser'>('pen');
   const [color, setColor] = useState('#315d4d');
   const [brushSize, setBrushSize] = useState(8);
+  const [brushStyle, setBrushStyle] = useState<BrushStyle>('round');
   const [draft, setDraft] = useState<{ layerId: string; stroke: Stroke } | null>(null);
   const [savedStatus, setSavedStatus] = useState('Saved in this browser');
   const [toast, setToast] = useState('');
@@ -172,29 +173,6 @@ function Home() {
     return () => { window.removeEventListener('pagehide', flush); flush(); };
   }, []);
 
-  const renderStroke = useCallback((ctx: CanvasRenderingContext2D, stroke: Stroke) => {
-    if (!stroke.points.length) return;
-    ctx.save();
-    ctx.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over';
-    ctx.strokeStyle = stroke.color;
-    ctx.fillStyle = stroke.color;
-    ctx.lineWidth = stroke.size;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    const first = stroke.points[0];
-    if (stroke.points.length === 1) {
-      ctx.beginPath();
-      ctx.arc(first.x * project.width, first.y * project.height, stroke.size / 2, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      ctx.beginPath();
-      ctx.moveTo(first.x * project.width, first.y * project.height);
-      stroke.points.slice(1).forEach(point => ctx.lineTo(point.x * project.width, point.y * project.height));
-      ctx.stroke();
-    }
-    ctx.restore();
-  }, [project.width, project.height]);
-
   useEffect(() => {
     project.layers.forEach(layer => {
       const canvas = canvasRefs.current[layer.id];
@@ -204,8 +182,8 @@ function Home() {
       const context = canvas.getContext('2d');
       if (!context) return;
       context.clearRect(0, 0, project.width, project.height);
-      layer.strokes.forEach(stroke => renderStroke(context, stroke));
-      if (draft?.layerId === layer.id) renderStroke(context, draft.stroke);
+      layer.strokes.forEach(stroke => renderStroke(context, stroke, project.width, project.height));
+      if (draft?.layerId === layer.id) renderStroke(context, draft.stroke, project.width, project.height);
     });
   }, [project.layers, project.width, project.height, draft, renderStroke]);
 
@@ -288,7 +266,10 @@ function Home() {
     const point = pointFromEvent(event);
     setDraft({
       layerId: layer.id,
-      stroke: { points: [point], color, size: brushSize * (project.width / stageSize.width), tool },
+      stroke: {
+        points: [point], color, size: brushSize * (project.width / stageSize.width), tool,
+        ...(tool === 'pen' ? { brush: { style: brushStyle, version: 1 as const, seed: Math.floor(Math.random() * 4294967296) } } : {}),
+      },
     });
   };
   const beginPhotoPan = (event: PointerEvent<HTMLDivElement>) => {
@@ -389,7 +370,13 @@ function Home() {
   const continueStroke = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!drawingRef.current) return;
     const point = pointFromEvent(event);
-    setDraft(current => current ? { ...current, stroke: { ...current.stroke, points: [...current.stroke.points, point] } } : current);
+    setDraft(current => {
+      if (!current) return current;
+      const last = current.stroke.points[current.stroke.points.length - 1];
+      // Stationary touch/pointer events must not grow the stroke or darken its texture.
+      if (last.x === point.x && last.y === point.y) return current;
+      return { ...current, stroke: { ...current.stroke, points: [...current.stroke.points, point] } };
+    });
   };
   const finishStroke = () => {
     if (!drawingRef.current || !draft) return;
@@ -676,6 +663,9 @@ function Home() {
 
           <aside className="panel right-panel">
             <div className="panel-title-row"><h2 className="panel-title">Brush & feel</h2><span className="panel-kicker">02</span></div>
+            <BrushDisclosure title="Brush style" id="style" defaultOpen summary={BRUSH_STYLES.find(brush => brush.style === brushStyle)?.label}>
+              <BrushStyleControl embedded value={brushStyle} color={color} onChange={style => { setBrushStyle(style); setTool('pen'); }} />
+            </BrushDisclosure>
             <BrushDisclosure title="Color" id="color" defaultOpen summary={<>
               <span className="header-color-preview" style={{ background: color }} aria-hidden="true" />
               <span>{color.toUpperCase()} · {tool === 'eraser' ? 'ERASER' : 'INK'}</span>
