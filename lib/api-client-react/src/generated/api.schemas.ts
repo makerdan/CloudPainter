@@ -5,6 +5,68 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export type LogoImageRequestDirection = typeof LogoImageRequestDirection[keyof typeof LogoImageRequestDirection];
+
+
+export const LogoImageRequestDirection = {
+  cloudline: 'cloudline',
+  viewfinder: 'viewfinder',
+  gesture: 'gesture',
+  paperfold: 'paperfold',
+  sunstudy: 'sunstudy',
+} as const;
+
+export interface LogoImageRequest {
+  /**
+     * @minLength 1
+     * @maxLength 1200
+     */
+  prompt: string;
+  direction?: LogoImageRequestDirection;
+}
+
+export type LogoImageResultWidth = typeof LogoImageResultWidth[keyof typeof LogoImageResultWidth];
+
+
+export const LogoImageResultWidth = {
+  NUMBER_1024: 1024,
+} as const;
+
+export type LogoImageResultHeight = typeof LogoImageResultHeight[keyof typeof LogoImageResultHeight];
+
+
+export const LogoImageResultHeight = {
+  NUMBER_1024: 1024,
+} as const;
+
+export interface LogoImageResult {
+  /** @maxLength 11184812 */
+  pngBase64: string;
+  width: LogoImageResultWidth;
+  height: LogoImageResultHeight;
+}
+
+export type LogoImageErrorCode = typeof LogoImageErrorCode[keyof typeof LogoImageErrorCode];
+
+
+export const LogoImageErrorCode = {
+  INVALID_INPUT: 'INVALID_INPUT',
+  BODY_TOO_LARGE: 'BODY_TOO_LARGE',
+  REFUSED: 'REFUSED',
+  RATE_LIMITED: 'RATE_LIMITED',
+  BUSY: 'BUSY',
+  UNAVAILABLE: 'UNAVAILABLE',
+  PROVIDER_FAILED: 'PROVIDER_FAILED',
+  INVALID_IMAGE: 'INVALID_IMAGE',
+  TIMEOUT: 'TIMEOUT',
+} as const;
+
+export interface LogoImageError {
+  code: LogoImageErrorCode;
+  message: string;
+  retryable: boolean;
+}
+
 export interface PaletteColor {
   /** @pattern ^[a-zA-Z0-9_-]{1,64}$ */
   id: string;
@@ -69,6 +131,11 @@ export interface ImageGenerationError {
   error: string;
   code: string;
 }
+
+/**
+ * Safe error message; rate limits include Retry-After
+ */
+export type LogoImageErrorResponse = LogoImageError;
 
 export type GetImageGenerationConfig200 = {
   configured: boolean;

@@ -12,7 +12,41 @@ tags:
     description: Health operations
   - name: images
     description: Poe-only image generation
+  - name: logos
+    description: Exploratory logo concepts
 paths:
+  /logo-images:
+    post:
+      operationId: generateLogoImage
+      tags: [logos]
+      summary: Generate one exploratory logo PNG from text only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LogoImageRequest"
+      responses:
+        "200":
+          description: A validated 1024-square PNG, not persisted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogoImageResult"
+        "400":
+          $ref: "#/components/responses/LogoImageError"
+        "413":
+          $ref: "#/components/responses/LogoImageError"
+        "422":
+          $ref: "#/components/responses/LogoImageError"
+        "429":
+          $ref: "#/components/responses/LogoImageError"
+        "502":
+          $ref: "#/components/responses/LogoImageError"
+        "503":
+          $ref: "#/components/responses/LogoImageError"
+        "504":
+          $ref: "#/components/responses/LogoImageError"
   /palette:
     parameters:
       - in: header
@@ -135,7 +169,50 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImageGenerationError"
 components:
+  responses:
+    LogoImageError:
+      description: Safe error message; rate limits include Retry-After
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LogoImageError"
   schemas:
+    LogoImageRequest:
+      type: object
+      additionalProperties: false
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+          minLength: 1
+          maxLength: 1200
+        direction:
+          type: string
+          enum: [cloudline, viewfinder, gesture, paperfold, sunstudy]
+    LogoImageResult:
+      type: object
+      required: [pngBase64, width, height]
+      properties:
+        pngBase64:
+          type: string
+          maxLength: 11184812
+        width:
+          type: integer
+          enum: [1024]
+        height:
+          type: integer
+          enum: [1024]
+    LogoImageError:
+      type: object
+      required: [code, message, retryable]
+      properties:
+        code:
+          type: string
+          enum: [INVALID_INPUT, BODY_TOO_LARGE, REFUSED, RATE_LIMITED, BUSY, UNAVAILABLE, PROVIDER_FAILED, INVALID_IMAGE, TIMEOUT]
+        message:
+          type: string
+        retryable:
+          type: boolean
     Palette:
       type: object
       additionalProperties: false

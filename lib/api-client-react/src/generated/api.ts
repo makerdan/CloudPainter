@@ -23,6 +23,9 @@ import type {
   GetImageGenerationConfig200,
   HealthStatus,
   ImageGenerationError,
+  LogoImageErrorResponse,
+  LogoImageRequest,
+  LogoImageResult,
   Palette,
   PoeImageInput,
   PoeImageOutput
@@ -54,6 +57,94 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGenerateLogoImageUrl = () => {
+
+
+
+
+  return `/api/logo-images`
+}
+
+/**
+ * @summary Generate one exploratory logo PNG from text only
+ */
+export const generateLogoImage = async (logoImageRequest: LogoImageRequest, options?: Parameters<typeof customFetch>[1]): Promise<LogoImageResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<LogoImageResult>(getGenerateLogoImageUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(logoImageRequest)
+  }
+);}
+
+
+
+
+
+export const getGenerateLogoImageMutationKey = () => ['generateLogoImage'] as const;
+
+export const getGenerateLogoImageMutationOptions = <TError = ErrorType<LogoImageErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateLogoImage>>, TError,GenerateLogoImageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateLogoImage>>, TError,GenerateLogoImageMutationVariables, TContext> => {
+
+const mutationKey = getGenerateLogoImageMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateLogoImage>>, GenerateLogoImageMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  generateLogoImage(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateLogoImageMutationResult = NonNullable<Awaited<ReturnType<typeof generateLogoImage>>>
+    export type GenerateLogoImageMutationBody = BodyType<LogoImageRequest>
+    export type GenerateLogoImageMutationError = ErrorType<LogoImageErrorResponse>
+    export type GenerateLogoImageMutationVariables = {data: BodyType<LogoImageRequest>}
+
+    /**
+ * @summary Generate one exploratory logo PNG from text only
+ */
+export const useGenerateLogoImage = <TError = ErrorType<LogoImageErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateLogoImage>>, TError,GenerateLogoImageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateLogoImage>>,
+        TError,
+        GenerateLogoImageMutationVariables,
+        TContext
+      > => {
+      return useMutation(getGenerateLogoImageMutationOptions(options));
+    }
 
 export const getGetPaletteUrl = () => {
 

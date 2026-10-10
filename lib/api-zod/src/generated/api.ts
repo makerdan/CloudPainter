@@ -8,6 +8,29 @@
 import * as zod from 'zod';
 
 
+/**
+ * @summary Generate one exploratory logo PNG from text only
+ */
+export const generateLogoImageBodyPromptMax = 1200;
+
+
+
+export const GenerateLogoImageBody = zod.object({
+  "prompt": zod.string().min(1).max(generateLogoImageBodyPromptMax),
+  "direction": zod.enum(['cloudline', 'viewfinder', 'gesture', 'paperfold', 'sunstudy']).optional()
+})
+
+export const generateLogoImageResponsePngBase64Max = 11184812;
+
+
+
+export const GenerateLogoImageResponse = zod.object({
+  "pngBase64": zod.string().max(generateLogoImageResponsePngBase64Max),
+  "width": zod.literal(1024),
+  "height": zod.literal(1024)
+})
+
+
 export const GetPaletteHeader = zod.object({
   "X-Palette-Session": zod.string().describe('Must match the verified current session, preventing delayed requests from crossing accounts.')
 })

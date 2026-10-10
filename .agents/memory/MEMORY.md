@@ -6,3 +6,5 @@
 - [Vite dependency cache](vite-dependency-cache.md) — after React upgrades, stale prebundled dependencies can cause a false version-mismatch overlay.
 - [Browser state baselines](browser-state-baselines.md) — settle initial autosave before snapshot comparisons; use keyboard modality for focus-ring assertions.
 - [Completion reconciliation](completion-reconciliation.md) — a rejected completion may still commit integrated changes; inspect current source when feedback differs from the earlier diff.
+- [Logo exploration boundaries](logo-exploration.md) — image editing, photo conditioning and generation inside the sketch workspace need an explicit scope change.
+- [Poe-only logo generation](poe-only-logos.md) — the user chose Poe as the sole runtime image connection; no managed OpenAI fallback for logo creation.

@@ -1,0 +1,22 @@
+.logo-create { margin:0 0 22px; padding:20px 21px; border:1px solid #cfccbf; border-radius:15px; background:#fbfaf6; display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:22px; }
+.logo-create h2 { margin:0; font:500 24px/1.15 var(--font-display); color:#30473b; letter-spacing:-.3px; }
+.logo-create-lede { margin:6px 0 14px; color:#778179; font-size:12px; line-height:1.55; }
+.logo-create label { display:block; font:10px var(--font-mono); letter-spacing:.09em; text-transform:uppercase; color:#6f7a71; margin:12px 0 6px; }
+.logo-create textarea, .logo-create select { width:100%; border:1px solid #cfccbf; border-radius:10px; background:#fff; color:#28352d; padding:10px 11px; font:13px/1.5 'DM Sans',sans-serif; }
+.logo-create textarea { min-height:110px; resize:vertical; }
+.logo-create textarea:focus-visible, .logo-create select:focus-visible { outline:3px solid #b9d66a; outline-offset:2px; }
+.logo-create-count { display:flex; justify-content:space-between; gap:8px; font:10px var(--font-mono); color:#879187; margin-top:5px; }
+.logo-create-count .over { color:#b0402c; }
+.logo-create-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+.logo-create-status { margin-top:12px; font-size:12px; line-height:1.5; min-height:18px; color:#52665a; }
+.logo-create-status.is-error { color:#9c3a28; }
+.logo-create-notice { margin:14px 0 0; padding:11px 12px; background:#f0f2e9; border-radius:11px; color:#5d6a5f; font-size:11px; line-height:1.6; }
+.logo-create-notice ul { margin:0; padding-left:16px; }
+.logo-create-result { display:flex; flex-direction:column; gap:10px; align-items:stretch; }
+.logo-result-frame { aspect-ratio:1/1; border:1px dashed #cfccbf; border-radius:12px; background:#f2f0e8; display:grid; place-items:center; overflow:hidden; text-align:center; color:#879187; font-size:12px; padding:14px; }
+.logo-result-frame img { width:100%; height:100%; object-fit:contain; display:block; background:#fff; }
+.logo-result-frame.busy { animation:logo-pulse 1.4s ease-in-out infinite; }
+.logo-result-caption { font:10px var(--font-mono); letter-spacing:.06em; color:#879187; }
+@keyframes logo-pulse { 50% { opacity:.6; } }
+@media (max-width:860px) { .logo-create { grid-template-columns:1fr; padding:15px; } }
+@media (prefers-reduced-motion:reduce) { .logo-result-frame.busy { animation:none; } }

@@ -6,6 +6,7 @@ import { logger } from "./lib/logger";
 import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware, getClerkProxyHost } from "./middlewares/clerkProxyMiddleware";
+import logoImagesRouter from "./routes/logo-images";
 
 const app: Express = express();
 
@@ -29,16 +30,18 @@ app.use(
   }),
 );
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
-// Same-origin browser calls need no permissive cross-origin credential policy.
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 app.use(clerkMiddleware((req) => ({
   publishableKey: publishableKeyFromHost(
     getClerkProxyHost(req) ?? "",
     process.env.CLERK_PUBLISHABLE_KEY,
   ),
 })));
+// This paid text-only endpoint owns its bounded parser and does not opt into CORS.
+app.use("/api", logoImagesRouter);
+// Other API routes retain their existing parser and account middleware.
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 

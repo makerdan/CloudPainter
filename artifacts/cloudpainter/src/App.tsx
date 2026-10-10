@@ -30,6 +30,7 @@ import { ActionTooltip, TooltipButton } from '@/components/tooltip-button';
 import { BrushDisclosure } from '@/components/BrushDisclosure';
 import NotFound from '@/pages/not-found';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
+import { LogoCreationPanel } from '@/components/LogoCreationPanel';
 import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions } from '@/lib/imageDimensions';
 import { ImageGenerator } from '@/components/ImageGenerator';
 import { DrawingColorControl } from '@/components/DrawingColorControl';
@@ -756,7 +757,7 @@ function LogoWordmark({ direction }: { direction: LogoDirectionId }) {
   return <span className={`direction-wordmark wordmark-${direction}`} aria-label="CloudPainter"><span>cloud</span><em>painter</em></span>;
 }
 
-function LogoOptions() {
+function LogoOptions({ directions }: { directions: typeof logoDirections }) {
   return (
     <main className="app-shell logo-options-shell">
       <header className="topbar logo-options-topbar">
@@ -772,8 +773,9 @@ function LogoOptions() {
           <h1>Marks for looking closer.</h1>
           <p className="intro-copy">Five distinct sketches for a calm, observant creative practice. Comparison only — your workspace mark is unchanged.</p>
         </div>
+        <LogoCreationPanel logoDirections={directions} />
         <div className="logo-directions" data-testid="logo-options-list">
-          {logoDirections.map((direction, index) => (
+          {directions.map((direction, index) => (
             <article className={`logo-direction direction-${direction.id}`} key={direction.id} data-testid={`logo-option-${direction.id}`}>
               <div className="direction-heading">
                 <span className="direction-index">{direction.number} / 05</span>
@@ -807,7 +809,7 @@ function LogoOptions() {
 
 const queryClient = new QueryClient();
 function Router() {
-  return <Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/logo-options" component={LogoOptions} /><Route component={NotFound} /></Switch>;
+  return <Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/logo-options">{() => <LogoOptions directions={logoDirections} />}</Route><Route component={NotFound} /></Switch>;
 }
 function App() {
   return (
