@@ -182,13 +182,64 @@ test('Remove photo is an independent control and never opens the picker', async 
   const remove = page.getByRole('button', { name: 'Remove photo', exact: true });
   await expect(remove).toBeVisible();
   await expect.poll(async () => (await savedProject(page))?.title).toBe('remove-me');
+
+  // Populate both layers through the drawing UI so removal cannot silently
+  // clear artwork while leaving an otherwise plausible empty project behind.
+  const firstLayerId = (await savedProject(page)).selectedLayerId;
+  for (let index = 0; index < 2; index++) {
+    if (index === 1) await page.getByTestId('button-add-layer').click();
+    const surface = page.locator('canvas.draw-surface').last();
+    const box = await surface.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width * 0.3, box!.y + box!.height * (0.3 + index * 0.3));
+    await page.mouse.down();
+    await page.mouse.move(box!.x + box!.width * 0.6, box!.y + box!.height * (0.4 + index * 0.3));
+    await page.mouse.up();
+    await expect.poll(async () => (await savedProject(page))?.layers[index]?.strokes.length).toBe(1);
+  }
+  const secondLayerId = (await savedProject(page)).selectedLayerId;
+  await page.getByTestId(`button-rename-${secondLayerId}`).click();
+  await page.getByTestId(`input-rename-${secondLayerId}`).fill('Hidden details');
+  await page.getByTestId(`input-rename-${secondLayerId}`).press('Enter');
+  await page.getByTestId('input-layer-opacity').fill('45');
+  await page.getByTestId(`button-visibility-${secondLayerId}`).click();
+  // Select the older layer rather than the default newly-created top layer.
+  await page.getByTestId(`button-select-layer-${firstLayerId}`).click();
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && {
+      selectedLayerId: project.selectedLayerId,
+      layers: project.layers.map((layer: { name: string; visible: boolean; opacity: number; strokes: unknown[] }) => ({
+        name: layer.name, visible: layer.visible, opacity: layer.opacity, strokes: layer.strokes.length,
+      })),
+    };
+  }).toEqual({
+    selectedLayerId: firstLayerId,
+    layers: [
+      { name: 'Sketch layer', visible: true, opacity: 1, strokes: 1 },
+      { name: 'Hidden details', visible: false, opacity: 0.45, strokes: 1 },
+    ],
+  });
   const before = await savedProject(page);
+  expect(before).toMatchObject({ width: 320, height: 180, title: 'remove-me' });
+  expect(before.image).not.toBeNull();
   expect(await remove.evaluate(el => el.parentElement?.closest('button'))).toBeNull();
   await remove.click();
   await expect(page.getByTestId('img-reference')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Import a reference photo', exact: true })).toBeVisible();
   await expect(page.getByTestId('input-photo')).toHaveAttribute('data-picker-clicks', '1');
+  // Full equality covers stroke points/styles, layer IDs/order/properties and
+  // history, selected layer, canvas dimensions, and title.
   await expect.poll(() => savedProject(page)).toEqual({ ...before, image: null });
+  await expect(page.getByTestId(`layer-row-${firstLayerId}`)).toHaveClass(/active/);
+
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Import a reference photo', exact: true })).toBeVisible();
+  await expect(remove).toHaveCount(0);
+  await expect(page.getByTestId(`layer-row-${firstLayerId}`)).toHaveClass(/active/);
+  await expect(page.getByTestId(`button-visibility-${secondLayerId}`)).toHaveAttribute('aria-label', 'Show layer');
+  expect(await savedProject(page)).toEqual({ ...before, image: null });
 });
 
 test('strokes stay on the same photo details across zoom and pan, and hidden layers allow photo dragging', async ({ page }) => {
