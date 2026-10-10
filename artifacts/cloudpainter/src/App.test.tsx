@@ -133,6 +133,80 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
   await expect(page.getByTestId('input-photo')).toHaveAttribute('data-picker-clicks', '2');
 });
 
+test('choosing the identical photo again handles change and saves a fresh fitted sketch', async ({ page }) => {
+  const photo = await png(page, 'same-photo.png', 600, 400);
+  const input = page.getByTestId('input-photo');
+  await input.evaluate(element => {
+    element.setAttribute('data-photo-changes', '0');
+    element.addEventListener('change', () => {
+      element.setAttribute('data-photo-changes', String(Number(element.getAttribute('data-photo-changes')) + 1));
+    });
+  });
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByTestId('button-photo-card').click();
+  await (await chooser).setFiles(photo);
+  await expect(page.getByTestId('img-reference')).toBeVisible();
+  await expect(input).toHaveAttribute('data-photo-changes', '1');
+  // Automation can force change even for an unchanged file selection. Assert
+  // the input was cleared as well, so removing handleFile's reset fails here.
+  await expect(input).toHaveValue('');
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('same-photo');
+
+  await page.getByTestId('button-add-layer').click();
+  const box = await page.locator('canvas.draw-surface').boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width * 0.4, box!.y + box!.height * 0.4);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + box!.width * 0.6, box!.y + box!.height * 0.6);
+  await page.mouse.up();
+  await expect.poll(async () => (await savedProject(page))?.layers[1]?.strokes.length).toBe(1);
+  await zoomAndPan(page);
+  const before = await savedProject(page);
+  expect(before.layers).toHaveLength(2);
+
+  const replacement = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Replace reference photo', exact: true }).click();
+  await (await replacement).setFiles(photo); // Same name, MIME type and bytes.
+  await expect(input).toHaveAttribute('data-picker-clicks', '2');
+  await expect(input).toHaveAttribute('data-photo-changes', '2');
+  await expect(input).toHaveValue('');
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect(page.getByTestId('button-pan-mode')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByTestId('button-reset-photo-view')).toBeDisabled();
+  await expect.poll(() => photoPan(page)).toEqual({ x: 0, y: 0 });
+  await expect.poll(async () => {
+    const view = await photoView(page);
+    return view.content;
+  }).toEqual(await page.getByTestId('canvas-stage').boundingBox());
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && {
+      image: project.image, width: project.width, height: project.height,
+      title: project.title, layers: project.layers.map((layer: {
+        name: string; visible: boolean; opacity: number; strokes: unknown[]; redo: unknown[];
+      }) => ({
+        name: layer.name, visible: layer.visible, opacity: layer.opacity,
+        strokes: layer.strokes, redo: layer.redo,
+      })),
+      selected: project.selectedLayerId === project.layers[0]?.id,
+    };
+  }).toEqual({
+    image: before.image, width: 600, height: 400, title: 'same-photo',
+    layers: [{ name: 'Sketch layer', visible: true, opacity: 1, strokes: [], redo: [] }],
+    selected: true,
+  });
+  const after = await savedProject(page);
+  expect(before.layers.map((layer: { id: string }) => layer.id)).not.toContain(after.selectedLayerId);
+  await expect(page.getByTestId('button-undo')).toBeDisabled();
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', after.image);
+  await expect.poll(() => savedProject(page)).toEqual(after);
+  await expect(page.getByTestId('button-undo')).toBeDisabled();
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+});
+
 test('cancelling replacement preserves zoom, pan, and saved photo, dimensions, title, and drawings', async ({ page }) => {
         const photo = await png(page, 'rename-reference.png', 480, 320);
   const chooser = page.waitForEvent('filechooser');
