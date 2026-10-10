@@ -403,6 +403,106 @@ for (const deleteSelected of [true, false]) {
   });
 }
 
+test.describe('layer rename regression', () => {
+  for (const target of ['selected', 'unselected'] as const) {
+    for (const action of ['Enter', 'blur', 'Escape', 'empty', 'whitespace'] as const) {
+      test(`${target} layer: ${action} preserves selection and artwork after reload`, async ({ page }) => {
+        const photo = await png(page, 'rename-reference.png', 480, 320);
+        const stroke = (color: string, y: number) => ({
+          points: [{ x: 0.2, y }, { x: 0.7, y }],
+          color, size: 8, tool: 'pen',
+        });
+        // Independent fixture: each layer has distinct artwork, redo history,
+        // opacity and a stable ID. The unselected target is deliberately hidden.
+        const before = {
+          image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
+          width: 480, height: 320, title: 'Preserve my named sketch',
+          selectedLayerId: 'rename-middle',
+          layers: [
+            { id: 'rename-bottom', name: 'Background lines', visible: true, opacity: 0.65,
+              strokes: [stroke('#e53935', 0.25)], redo: [stroke('#ff9800', 0.3)] },
+            { id: 'rename-middle', name: 'Selected details', visible: true, opacity: 0.45,
+              strokes: [stroke('#1e88e5', 0.5), stroke('#8e24aa', 0.55)], redo: [stroke('#00acc1', 0.6)] },
+            { id: 'rename-top', name: 'Hidden highlights', visible: false, opacity: 0.8,
+              strokes: [stroke('#43a047', 0.75)], redo: [stroke('#3949ab', 0.8)] },
+          ],
+        };
+        // Seed only the first load; later reloads must use the app's saved state.
+        await page.addInitScript(({ key, project }) => {
+          const marker = `${key}-rename-test-seeded`;
+          if (sessionStorage.getItem(marker)) return;
+          localStorage.setItem(key, JSON.stringify(project));
+          sessionStorage.setItem(marker, 'true');
+        }, { key: STORE_KEY, project: before });
+        await page.reload();
+        await expect(page.getByTestId('img-reference')).toBeVisible();
+        await expect.poll(() => savedProject(page)).toEqual(before);
+
+        const pixels = await Promise.all(before.layers.map(async layer => {
+          const canvas = page.getByTestId(`canvas-layer-${layer.id}`);
+          // A blank canvas comparison must not masquerade as preserved artwork.
+          await expect.poll(() => canvas.evaluate(el => {
+            const surface = el as HTMLCanvasElement;
+            const rgba = surface.getContext('2d')!.getImageData(0, 0, surface.width, surface.height).data;
+            return rgba.some((value, index) => index % 4 === 3 && value > 0);
+          })).toBe(true);
+          return canvas.evaluate(el => (el as HTMLCanvasElement).toDataURL());
+        }));
+        const id = target === 'selected' ? 'rename-middle' : 'rename-top';
+        const original = before.layers.find(layer => layer.id === id)!;
+        const input = page.getByTestId(`input-rename-${id}`);
+        await page.getByTestId(`button-rename-${id}`).click();
+        await expect(input).toBeFocused();
+        await expect(input).toHaveValue(original.name);
+        const draft = action === 'empty' ? '' : action === 'whitespace' ? '   ' : '  Renamed details  ';
+        await input.fill(draft);
+
+        // Editing is not a commit and must not select an unselected layer.
+        expect(await savedProject(page)).toEqual(before);
+        await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
+        if (action === 'blur' || action === 'whitespace') {
+          // Move real keyboard focus without invoking another project action.
+          await input.press('Tab');
+        } else {
+          await input.press(action === 'Escape' ? 'Escape' : 'Enter');
+        }
+        await expect(input).toHaveCount(0);
+        const committed = action === 'Enter' || action === 'blur';
+        const expected = {
+          ...before,
+          layers: before.layers.map(layer => layer.id === id && committed
+            ? { ...layer, name: 'Renamed details' }
+            : layer),
+        };
+        // Observe the debounce even for no-op/cancel paths; immediate equality
+        // alone could miss an erroneous delayed save.
+        await page.waitForTimeout(650);
+        for (const reload of [false, true]) {
+          if (reload) await page.reload();
+          await expect(page.locator('.layer-row')).toHaveCount(3);
+          await expect(page.locator('.layer-row.active')).toHaveCount(1);
+          await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
+          await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+          await expect(page.getByTestId('button-undo')).toBeEnabled();
+          await expect(page.getByTestId('button-redo')).toBeEnabled();
+          for (const [index, layer] of expected.layers.entries()) {
+            await expect(page.getByTestId(`button-select-layer-${layer.id}`)).toHaveText(layer.name);
+            await expect(page.getByTestId(`button-visibility-${layer.id}`)).toHaveAttribute(
+              'aria-label', layer.visible ? 'Hide layer' : 'Show layer',
+            );
+            const canvas = page.getByTestId(`canvas-layer-${layer.id}`);
+            await expect(canvas).toHaveCSS('opacity', String(layer.visible ? layer.opacity : 0));
+            await expect.poll(() => canvas.evaluate(el => (el as HTMLCanvasElement).toDataURL())).toBe(pixels[index]);
+          }
+          // Full equality protects IDs, ordering, selection, all properties,
+          // strokes and redo data, dimensions, title and photo bytes.
+          await expect.poll(() => savedProject(page)).toEqual(expected);
+        }
+      });
+    }
+  }
+});
+
 test('strokes stay on the same photo details across zoom and pan, and hidden layers allow photo dragging', async ({ page }) => {
   await page.getByTestId('input-photo').setInputFiles(await markedPhoto(page, 'zoom-alignment.png'));
   await expect(page.getByTestId('img-reference')).toBeVisible();
