@@ -13,6 +13,50 @@ tags:
   - name: images
     description: Poe-only image generation
 paths:
+  /palette:
+    parameters:
+      - in: header
+        name: X-Palette-Session
+        required: true
+        schema: { type: string }
+        description: Must match the verified current session, preventing delayed requests from crossing accounts.
+    get:
+      operationId: getPalette
+      tags: [palettes]
+      responses:
+        "200":
+          description: Current account palette
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Palette" }
+        "401":
+          description: Sign in required or session changed
+        "503":
+          description: Palette storage temporarily unavailable
+    put:
+      operationId: savePalette
+      tags: [palettes]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Palette" }
+      responses:
+        "200":
+          description: Saved palette with new revision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Palette" }
+        "400":
+          description: Invalid palette
+        "401":
+          description: Sign in required or session changed
+        "403":
+          description: Cross-site mutation denied
+        "409":
+          description: Palette changed on another device; reload before editing
+        "503":
+          description: Palette storage temporarily unavailable
   /healthz:
     get:
       operationId: healthCheck
@@ -92,6 +136,24 @@ paths:
                 $ref: "#/components/schemas/ImageGenerationError"
 components:
   schemas:
+    Palette:
+      type: object
+      additionalProperties: false
+      required: [colors, revision]
+      properties:
+        revision: { type: integer, minimum: 0, maximum: 2147483646 }
+        colors:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/PaletteColor" }
+    PaletteColor:
+      type: object
+      additionalProperties: false
+      required: [id, name, hex]
+      properties:
+        id: { type: string, pattern: "^[a-zA-Z0-9_-]{1,64}$" }
+        name: { type: string, minLength: 1, maxLength: 40 }
+        hex: { type: string, pattern: "^#[0-9a-fA-F]{6}$" }
     HealthStatus:
       type: object
       properties:
@@ -134,4 +196,3 @@ components:
       required:
         - error
         - code
-

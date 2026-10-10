@@ -5,6 +5,28 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface PaletteColor {
+  /** @pattern ^[a-zA-Z0-9_-]{1,64}$ */
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 40
+     */
+  name: string;
+  /** @pattern ^#[0-9a-fA-F]{6}$ */
+  hex: string;
+}
+
+export interface Palette {
+  /**
+     * @minimum 0
+     * @maximum 2147483646
+     */
+  revision: number;
+  /** @maxItems 64 */
+  colors: PaletteColor[];
+}
+
 export interface HealthStatus {
   status: string;
 }

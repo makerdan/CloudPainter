@@ -51,6 +51,10 @@ A browser-based creativity app for drawing imagined shapes over photographs with
 ## Architecture decisions
 
 - CloudPainter saves editable projects in the current browser; photos and drawings are not uploaded to a server.
+- Clerk manages accounts and verified sessions. Only named palette colors are saved in PostgreSQL per account; signing out never changes ownership of the device's local project.
+- Palette requests carry the current session ID as a transition/CSRF guard, use private no-store responses, and compare revisions to avoid overwriting changes made on another device. No browser bearer-token plumbing.
+- Required account configuration: provisioned `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, and `VITE_CLERK_PUBLISHABLE_KEY`. Production proxy variables are supplied by the host; do not set them manually.
+- Palette regression checks: `pnpm --filter @workspace/api-server run test:palettes` (isolated schema rolled back in the development DB, never production), `pnpm --filter @workspace/cloudpainter run test:palettes` (session transitions and payload privacy).
 - Canvas drawing layers are independent of the source photo so the original remains unchanged.
 - Image-generation prompts use Poe only, with Nano-Banana-Pro, Nano-Banana-2, GPT-Image-2.5-Sunburst, or Flux-2-Turbo. No provider/model substitution or Replit AI fallback is permitted for images. Uploaded photos and sketches are not sent; usage consumes the connected Poe account's points.
 - The Poe adapter reads POE_API_KEY lazily and supports linked secrets. The old direct OpenAI route is removed. The anonymous generation endpoint has an instance-wide five-request/ten-minute cap and two concurrent requests; these are not durable, per-user billing limits.

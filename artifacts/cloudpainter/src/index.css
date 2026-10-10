@@ -1,5 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
+@layer theme, base, clerk, components, utilities;
 @import 'tailwindcss';
+@import '@clerk/themes/shadcn.css';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
 
@@ -164,6 +166,19 @@ h1 { font-family:var(--font-display); font-size:32px; line-height:1.1; font-weig
 .hex-color-entry input[aria-invalid="true"] { border-color:#b42318; }
 .hex-color-feedback { margin:5px 0 0; color:#647065; font-size:10px; line-height:1.5; overflow-wrap:anywhere; }
 .hex-color-feedback.invalid { color:#b42318; }
+.account-controls { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.account-note { max-width:140px; overflow-wrap:anywhere; font-size:11px; }
+.account-page { min-height:100dvh; padding:30px 15px; display:flex; flex-direction:column; gap:20px; align-items:center; justify-content:center; }
+.account-page > p { max-width:440px; text-align:center; color:#526057; font-size:12px; }
+.account-page > a,.palette-note a,.palette-error a { color:#315d4d; text-decoration:underline; }
+.personal-palette { margin-top:16px; padding-top:10px; border-top:1px solid var(--nested-border); }
+.palette-note { color:#526057; font-size:11px; line-height:1.6; }
+.palette-error { color:#b42318; font-size:11px; line-height:1.6; }
+.palette-item { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0; }
+.palette-item > span { flex:1; min-width:60px; overflow-wrap:anywhere; font-size:11px; }
+.cl-formFieldInput::placeholder { color:#68756d; opacity:1; }
+.cl-footer { background:#fbfaf6!important; }
+.account-loading { padding:24px; color:#526057; font-size:13px; text-align:center; }
 .layer-opacity { margin-top:16px; }
 .tool-tip-card { background:#f0f2e9; border-radius:12px; padding:12px; margin-top:auto; color:#5d6a5f; }
 .tool-tip-card .tip-title { display:flex; gap:7px; align-items:center; font-size:10px; font-weight:700; color:#435f4c; }
@@ -180,7 +195,7 @@ h1 { font-family:var(--font-display); font-size:32px; line-height:1.1; font-weig
 }
 @media (max-width: 720px) {
   .app-shell { padding:0 13px 22px; }
-  .topbar { height:65px; }
+  .topbar { min-height:65px; height:auto; padding:10px 0; gap:10px; flex-wrap:wrap; }
   .privacy-note { display:none; }
   .topbar-right { gap:8px; }
   .save-state { display:none; }

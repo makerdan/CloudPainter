@@ -23,6 +23,7 @@ import type {
   GetImageGenerationConfig200,
   HealthStatus,
   ImageGenerationError,
+  Palette,
   PoeImageInput,
   PoeImageOutput
 } from './api.schemas';
@@ -53,6 +54,159 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetPaletteUrl = () => {
+
+
+
+
+  return `/api/palette`
+}
+
+export const getPalette = async ( options?: Parameters<typeof customFetch>[1]): Promise<Palette> => {
+
+  return customFetch<Palette>(getGetPaletteUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPaletteQueryKey = () => {
+    return [
+    `/api/palette`
+    ] as const;
+    }
+
+
+export const getGetPaletteQueryOptions = <TData = Awaited<ReturnType<typeof getPalette>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPalette>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPaletteQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPalette>>> = ({ signal }) => getPalette({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPalette>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPaletteQueryResult = NonNullable<Awaited<ReturnType<typeof getPalette>>>
+export type GetPaletteQueryError = ErrorType<void>
+
+
+
+export function useGetPalette<TData = Awaited<ReturnType<typeof getPalette>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPalette>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPaletteQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSavePaletteUrl = () => {
+
+
+
+
+  return `/api/palette`
+}
+
+export const savePalette = async (palette: Palette, options?: Parameters<typeof customFetch>[1]): Promise<Palette> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<Palette>(getSavePaletteUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(palette)
+  }
+);}
+
+
+
+
+
+export const getSavePaletteMutationKey = () => ['savePalette'] as const;
+
+export const getSavePaletteMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savePalette>>, TError,SavePaletteMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof savePalette>>, TError,SavePaletteMutationVariables, TContext> => {
+
+const mutationKey = getSavePaletteMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof savePalette>>, SavePaletteMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  savePalette(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SavePaletteMutationResult = NonNullable<Awaited<ReturnType<typeof savePalette>>>
+    export type SavePaletteMutationBody = BodyType<Palette>
+    export type SavePaletteMutationError = ErrorType<void>
+    export type SavePaletteMutationVariables = {data: BodyType<Palette>}
+
+    export const useSavePalette = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof savePalette>>, TError,SavePaletteMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof savePalette>>,
+        TError,
+        SavePaletteMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSavePaletteMutationOptions(options));
+    }
 
 export const getHealthCheckUrl = () => {
 

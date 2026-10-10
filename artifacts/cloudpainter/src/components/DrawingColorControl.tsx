@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { Check } from 'lucide-react';
 import { ActionTooltip, TooltipButton } from '@/components/tooltip-button';
 import { COLOR_GROUPS, normalizeHexColor } from '@/lib/drawingColors';
+import { AccountPalette } from './AccountPalette';
 
 type Props = { color: string; tool: 'pen' | 'eraser'; onChange: (color: string) => void };
 
@@ -76,6 +77,7 @@ export function DrawingColorControl({ color, tool, onChange }: Props) {
         <p id={`${fieldId}-feedback`} className={`hex-color-feedback ${error ? 'invalid' : ''}`}
           aria-live="polite">{error || '3 or 6 hex digits; # is optional.'}</p>
       </form>
+      <AccountPalette color={color} onChange={onChange} />
     </div>
   );
 }

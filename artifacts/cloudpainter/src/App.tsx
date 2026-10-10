@@ -33,6 +33,7 @@ import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter
 import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions } from '@/lib/imageDimensions';
 import { ImageGenerator } from '@/components/ImageGenerator';
 import { DrawingColorControl } from '@/components/DrawingColorControl';
+import { AccountProvider, AccountControls, SignInPage, SignUpPage } from '@/components/Account';
 
 type Point = { x: number; y: number };
 type Stroke = { points: Point[]; color: string; size: number; tool: 'pen' | 'eraser' };
@@ -78,6 +79,8 @@ function readProject(): Project {
 
 function Home() {
   const [project, setProject] = useState<Project>(readProject);
+  const latestProject = useRef(project);
+  latestProject.current = project;
   const [tool, setTool] = useState<'pen' | 'eraser'>('pen');
   const [color, setColor] = useState('#315d4d');
   const [brushSize, setBrushSize] = useState(8);
@@ -157,6 +160,16 @@ function Home() {
     }, 500);
     return () => window.clearTimeout(timer);
   }, [project]);
+
+  useEffect(() => {
+    // Account navigation must not cancel the last debounced project save.
+    const flush = () => {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(latestProject.current)); }
+      catch { setSavedStatus('Storage is full'); }
+    };
+    window.addEventListener('pagehide', flush);
+    return () => { window.removeEventListener('pagehide', flush); flush(); };
+  }, []);
 
   const renderStroke = useCallback((ctx: CanvasRenderingContext2D, stroke: Stroke) => {
     if (!stroke.points.length) return;
@@ -497,6 +510,7 @@ function Home() {
           <span className="brand-name">cloud<em>painter</em></span>
         </div>
         <div className="topbar-right">
+          <AccountControls />
           <span className="privacy-note"><Save size={13} /> Projects and photos stay in this browser</span>
           <span className="save-state" data-testid="status-save">{savedStatus}</span>
           <div className="top-actions">
@@ -794,14 +808,14 @@ function LogoOptions() {
 
 const queryClient = new QueryClient();
 function Router() {
-  return <Switch><Route path="/" component={Home} /><Route path="/logo-options" component={LogoOptions} /><Route component={NotFound} /></Switch>;
+  return <Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/logo-options" component={LogoOptions} /><Route component={NotFound} /></Switch>;
 }
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={350} skipDelayDuration={100}>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <ErrorBoundary><Router /></ErrorBoundary>
+          <ErrorBoundary><AccountProvider><Router /></AccountProvider></ErrorBoundary>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

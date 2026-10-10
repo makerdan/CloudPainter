@@ -8,6 +8,76 @@
 import * as zod from 'zod';
 
 
+export const GetPaletteHeader = zod.object({
+  "X-Palette-Session": zod.string().describe('Must match the verified current session, preventing delayed requests from crossing accounts.')
+})
+
+export const getPaletteResponseRevisionMin = 0;
+export const getPaletteResponseRevisionMax = 2147483646;
+
+export const getPaletteResponseColorsItemIdRegExp = new RegExp('^[a-zA-Z0-9_-]{1,64}$');
+export const getPaletteResponseColorsItemNameMax = 40;
+
+export const getPaletteResponseColorsItemHexRegExp = new RegExp('^#[0-9a-fA-F]{6}$');
+export const getPaletteResponseColorsMax = 64;
+
+
+
+export const GetPaletteResponse = zod.object({
+  "revision": zod.number().int().min(getPaletteResponseRevisionMin).max(getPaletteResponseRevisionMax),
+  "colors": zod.array(zod.object({
+  "id": zod.string().regex(getPaletteResponseColorsItemIdRegExp),
+  "name": zod.string().min(1).max(getPaletteResponseColorsItemNameMax),
+  "hex": zod.string().regex(getPaletteResponseColorsItemHexRegExp)
+})).max(getPaletteResponseColorsMax)
+})
+
+
+export const SavePaletteHeader = zod.object({
+  "X-Palette-Session": zod.string().describe('Must match the verified current session, preventing delayed requests from crossing accounts.')
+})
+
+export const savePaletteBodyRevisionMin = 0;
+export const savePaletteBodyRevisionMax = 2147483646;
+
+export const savePaletteBodyColorsItemIdRegExp = new RegExp('^[a-zA-Z0-9_-]{1,64}$');
+export const savePaletteBodyColorsItemNameMax = 40;
+
+export const savePaletteBodyColorsItemHexRegExp = new RegExp('^#[0-9a-fA-F]{6}$');
+export const savePaletteBodyColorsMax = 64;
+
+
+
+export const SavePaletteBody = zod.object({
+  "revision": zod.number().int().min(savePaletteBodyRevisionMin).max(savePaletteBodyRevisionMax),
+  "colors": zod.array(zod.object({
+  "id": zod.string().regex(savePaletteBodyColorsItemIdRegExp),
+  "name": zod.string().min(1).max(savePaletteBodyColorsItemNameMax),
+  "hex": zod.string().regex(savePaletteBodyColorsItemHexRegExp)
+})).max(savePaletteBodyColorsMax)
+})
+
+export const savePaletteResponseRevisionMin = 0;
+export const savePaletteResponseRevisionMax = 2147483646;
+
+export const savePaletteResponseColorsItemIdRegExp = new RegExp('^[a-zA-Z0-9_-]{1,64}$');
+export const savePaletteResponseColorsItemNameMax = 40;
+
+export const savePaletteResponseColorsItemHexRegExp = new RegExp('^#[0-9a-fA-F]{6}$');
+export const savePaletteResponseColorsMax = 64;
+
+
+
+export const SavePaletteResponse = zod.object({
+  "revision": zod.number().int().min(savePaletteResponseRevisionMin).max(savePaletteResponseRevisionMax),
+  "colors": zod.array(zod.object({
+  "id": zod.string().regex(savePaletteResponseColorsItemIdRegExp),
+  "name": zod.string().min(1).max(savePaletteResponseColorsItemNameMax),
+  "hex": zod.string().regex(savePaletteResponseColorsItemHexRegExp)
+})).max(savePaletteResponseColorsMax)
+})
+
+
 /**
  * Returns server health status
  * @summary Health check
