@@ -92,10 +92,17 @@ function Home() {
   const [isPanning, setIsPanning] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const stageWrapRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
   const [stageBounds, setStageBounds] = useState({ width: 0, height: 0 });
   const drawingRef = useRef(false);
   const panningRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const touchPointersRef = useRef(new Map<number, Point>());
+  const pinchRef = useRef<{
+    initialDistance: number;
+    initialZoom: number;
+    anchor: Point;
+  } | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
   const selectedLayer = project.layers.find(layer => layer.id === project.selectedLayerId) ?? project.layers[0];
   const visibleLayers = useMemo(() => [...project.layers].reverse(), [project.layers]);
@@ -283,6 +290,72 @@ function Home() {
       originY: photoPan.y,
     };
     setIsPanning(true);
+  };
+  const handleStagePointerDownCapture = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch') {
+      beginPhotoPan(event);
+      return;
+    }
+
+    const touches = touchPointersRef.current;
+    touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (touches.size < 2) {
+      beginPhotoPan(event);
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    if (drawingRef.current) {
+      drawingRef.current = false;
+      setDraft(null);
+    }
+    panningRef.current = null;
+    setIsPanning(false);
+
+    const [first, second] = [...touches.values()];
+    const midpoint = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+    const stageRect = stageRef.current?.getBoundingClientRect();
+    if (!stageRect) return;
+
+    pinchRef.current = {
+      initialDistance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
+      initialZoom: photoZoom,
+      anchor: {
+        x: (midpoint.x - stageRect.left - stageRect.width / 2 - photoPan.x) / photoZoom,
+        y: (midpoint.y - stageRect.top - stageRect.height / 2 - photoPan.y) / photoZoom,
+      },
+    };
+  };
+  const handleStagePointerMoveCapture = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch' || !touchPointersRef.current.has(event.pointerId)) return;
+    touchPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    const pinch = pinchRef.current;
+    if (!pinch || touchPointersRef.current.size < 2) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const [first, second] = [...touchPointersRef.current.values()];
+    const midpoint = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+    const distance = Math.hypot(second.x - first.x, second.y - first.y);
+    const nextZoom = Math.max(1, Math.min(4, pinch.initialZoom * distance / pinch.initialDistance));
+    const stageRect = stageRef.current?.getBoundingClientRect();
+    if (!stageRect) return;
+
+    const nextPan = {
+      x: midpoint.x - stageRect.left - stageRect.width / 2 - pinch.anchor.x * nextZoom,
+      y: midpoint.y - stageRect.top - stageRect.height / 2 - pinch.anchor.y * nextZoom,
+    };
+    setPhotoZoom(nextZoom);
+    setPhotoPan(clampPhotoPan(nextPan, nextZoom));
+    if (nextZoom === 1) setPanMode(false);
+  };
+  const handleStagePointerEndCapture = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch') return;
+    touchPointersRef.current.delete(event.pointerId);
+    pinchRef.current = null;
   };
   const continuePhotoPan = (event: PointerEvent<HTMLDivElement>) => {
     const panning = panningRef.current;
@@ -537,7 +610,7 @@ function Home() {
                   <TooltipButton description={photoZoom === 1 && photoPan.x === 0 && photoPan.y === 0 ? 'The photo is already centered at its fitted zoom.' : 'Reset zoom and position to center the fitted photo; leave drawings unchanged.'} className="view-control-button" type="button" aria-label="Reset photo to fitted view" onClick={resetPhotoView} disabled={photoZoom === 1 && photoPan.x === 0 && photoPan.y === 0} data-testid="button-reset-photo-view"><RotateCcw size={14} /></TooltipButton>
                 </div>
               )}
-              <div className="stage" style={{
+              <div className="stage" ref={stageRef} style={{
                 aspectRatio: `${project.width} / ${project.height}`,
                 width: stageSize.width || undefined,
                 height: stageSize.height || undefined,
@@ -545,7 +618,10 @@ function Home() {
                 <div
                   className={`stage-content ${panMode && photoZoom > 1 ? 'pan-ready' : ''} ${isPanning ? 'panning' : ''}`}
                   style={{ transform: `translate3d(${photoPan.x}px, ${photoPan.y}px, 0) scale(${photoZoom})` }}
-                  onPointerDownCapture={beginPhotoPan}
+                  onPointerDownCapture={handleStagePointerDownCapture}
+                  onPointerMoveCapture={handleStagePointerMoveCapture}
+                  onPointerUpCapture={handleStagePointerEndCapture}
+                  onPointerCancelCapture={handleStagePointerEndCapture}
                   onPointerMove={continuePhotoPan}
                   onPointerUp={finishPhotoPan}
                   onPointerCancel={finishPhotoPan}
