@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "CloudPainter"
+description = "A creative drawing workspace for finding imagined shapes in photographs. Import a photo, draw on transparent layers, save projects locally, and export finished compositions as PNG."
+version = "1.0.0"
+id = "artifacts/cloudpainter"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 26247
+
+[services.development]
+run = "pnpm --filter @workspace/cloudpainter run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/cloudpainter", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/cloudpainter/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "26247"
+BASE_PATH = "/"

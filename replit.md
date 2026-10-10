@@ -1,6 +1,6 @@
-# [Project name]
+# CloudPainter
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A browser-based creativity app for drawing imagined shapes over photographs with transparent layers, local project saving, and PNG export.
 
 ## Run & Operate
 
@@ -22,23 +22,23 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/cloudpainter/` — CloudPainter React + Vite app
+- `artifacts/api-server/` — shared API service; CloudPainter does not currently require it
+- `artifacts/mockup-sandbox/` — component preview sandbox
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- CloudPainter saves editable projects in the current browser; photos and drawings are not uploaded to a server.
+- Canvas drawing layers are independent of the source photo so the original remains unchanged.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
-
-## User preferences
-
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Import a photo or start with a blank canvas, draw using a pen or eraser, and manage transparent layers.
+- Undo and redo edits, autosave and restore browser-local projects, and export the visible composition as PNG.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Browser-local project saves are tied to that browser and device; they do not synchronize between devices.
 
 ## Pointers
 
