@@ -163,6 +163,31 @@ async function importPhoto(page, dimensions, name) {
   return details.project;
 }
 
+async function captureProjectState(page) {
+  return page.evaluate(() => {
+    const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null');
+    const reference = document.querySelector('[data-testid="img-reference"]');
+    const stage = document.querySelector('[data-testid="canvas-stage"]');
+    const stagePhoto = stage?.querySelector('img.base-photo');
+    return {
+      project,
+      reference: reference instanceof HTMLImageElement
+        ? { src: reference.src, width: reference.naturalWidth, height: reference.naturalHeight }
+        : null,
+      stagePhoto: stagePhoto instanceof HTMLImageElement
+        ? { src: stagePhoto.src, width: stagePhoto.naturalWidth, height: stagePhoto.naturalHeight }
+        : null,
+      dimensions: document.querySelector('.canvas-meta')?.textContent?.trim() ?? null,
+      stageRatio: stage instanceof HTMLElement ? stage.style.aspectRatio : null,
+      layers: [...document.querySelectorAll('canvas[data-testid^="canvas-layer-"]')].map(canvas => ({
+        id: canvas.getAttribute('data-testid'),
+        width: canvas.width,
+        height: canvas.height,
+      })),
+    };
+  });
+}
+
 async function exportAndInspect(page, name, dimensions) {
   await page.evaluate(() => {
     window.__cloudPainterExport = null;
@@ -221,3 +246,49 @@ for (const photo of [
     }
   });
 }
+
+test('an unreadable photo reports an error without changing the open project', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await page.goto(appUrl);
+    await importPhoto(page, { width: 360, height: 240 }, 'keep-this-photo.png');
+    await page.getByTestId('button-add-layer').click();
+
+    const surface = page.locator('canvas.draw-surface');
+    const bounds = await surface.boundingBox();
+    assert.ok(bounds, 'the selected drawing layer should be visible');
+    await page.mouse.move(bounds.x + bounds.width * 0.3, bounds.y + bounds.height * 0.35);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width * 0.7, bounds.y + bounds.height * 0.65);
+    await page.mouse.up();
+    await page.waitForFunction(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null');
+      return project?.layers?.length === 2 && project.layers[1].strokes.length > 0;
+    });
+
+    const before = await captureProjectState(page);
+    assert.equal(before.project.layers.length, 2, 'the project should contain both drawing layers');
+    assert.ok(before.project.layers.some(layer => layer.strokes.length > 0), 'the existing sketch should contain a stroke');
+
+    await page.locator('[data-testid="input-photo"]').setInputFiles({
+      name: 'unreadable.jpg',
+      mimeType: 'image/jpeg',
+      buffer: Buffer.from('not a valid JPEG image'),
+    });
+
+    const toast = page.getByTestId('status-toast');
+    await toast.waitFor({ state: 'visible' });
+    assert.match(await toast.textContent(), /could not be opened|could not read/i);
+    await page.waitForTimeout(650); // Allow any accidental project autosave to become visible.
+    assert.deepEqual(await captureProjectState(page), before);
+
+    await page.reload();
+    await page.waitForFunction(() => {
+      const image = document.querySelector('[data-testid="img-reference"]');
+      return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+    });
+    assert.deepEqual(await captureProjectState(page), before, 'the original project should remain intact after reload');
+  } finally {
+    await page.close();
+  }
+});
