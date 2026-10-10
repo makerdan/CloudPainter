@@ -25,7 +25,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
-import { Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
+import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions } from '@/lib/imageDimensions';
 
 type Point = { x: number; y: number };
@@ -346,6 +346,7 @@ function Home() {
           <span className="privacy-note"><Save size={13} /> Projects and photos stay in this browser</span>
           <span className="save-state" data-testid="status-save">{savedStatus}</span>
           <div className="top-actions">
+              <Link href="/logo-options" className="button button-quiet logo-options-link" data-testid="link-logo-options">Logo directions</Link>
             <button className="button button-primary" onClick={exportPng} data-testid="button-export"><Upload size={14} /> Export PNG</button>
           </div>
         </div>
@@ -493,9 +494,114 @@ function Home() {
   );
 }
 
+type LogoDirectionId = 'cloudline' | 'viewfinder' | 'gesture' | 'paperfold' | 'sunstudy';
+
+const logoDirections: { id: LogoDirectionId; number: string; name: string; description: string }[] = [
+  { id: 'cloudline', number: '01', name: 'Cloudline', description: 'A quiet sky shape traced in one continuous pencil line.' },
+  { id: 'viewfinder', number: '02', name: 'Field of view', description: 'A photo frame and a small point of focus, held in balance.' },
+  { id: 'gesture', number: '03', name: 'Brush in motion', description: 'A loose, confident stroke turns a cloud into a painter’s mark.' },
+  { id: 'paperfold', number: '04', name: 'Folded study', description: 'A sheet of sketch paper, with a corner lifted toward the light.' },
+  { id: 'sunstudy', number: '05', name: 'Weather note', description: 'A tiny sun meets an observing cloud: a mark for looking closer.' },
+];
+
+function LogoMark({ direction, size = 48 }: { direction: LogoDirectionId; size?: number }) {
+  const common = { width: size, height: size, viewBox: '0 0 64 64', role: 'img' as const, 'aria-hidden': true };
+  if (direction === 'cloudline') return (
+    <svg {...common}>
+      <path d="M14 42h34a9 9 0 0 0 .5-18 16 16 0 0 0-30.8 3.1A8 8 0 0 0 14 42Z" fill="#d2e67b" stroke="#315d4d" strokeWidth="3.2" strokeLinejoin="round" />
+      <path d="m20 50 25-25" stroke="#ee806b" strokeWidth="3.2" strokeLinecap="round" />
+      <path d="m42 24 4 1-1 4" fill="none" stroke="#ee806b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+  if (direction === 'viewfinder') return (
+    <svg {...common}>
+      <path d="M13 23v-7h9M42 16h9v9M51 41v7h-9M22 48h-9v-9" fill="none" stroke="#315d4d" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="32" cy="32" r="11" fill="#ee806b" />
+      <circle cx="32" cy="32" r="4" fill="#fbfaf6" />
+      <path d="M32 8v5M56 32h-5M32 56v-5M8 32h5" stroke="#b2c66b" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+  if (direction === 'gesture') return (
+    <svg {...common}>
+      <path d="M9 39c5-1 5-16 14-16 6 0 7 11 12 11 4 0 6-15 12-15 4 0 5 7 8 10" fill="none" stroke="#315d4d" strokeWidth="7" strokeLinecap="round" />
+      <path d="M12 48c10-3 23-2 39-7" fill="none" stroke="#ee806b" strokeWidth="4" strokeLinecap="round" />
+      <path d="m47 36 5 5-6 3" fill="#ee806b" />
+    </svg>
+  );
+  if (direction === 'paperfold') return (
+    <svg {...common}>
+      <path d="M17 10h21l12 12v32H17z" fill="#fbfaf6" stroke="#315d4d" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M38 10v14h12" fill="#d2e67b" stroke="#315d4d" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M24 35c2-7 11-8 14-1 4 0 6 3 6 7H23c0-3 0-5 1-6Z" fill="#ee806b" />
+      <path d="M24 47h17" stroke="#315d4d" strokeWidth="2.5" strokeLinecap="round" />
+    </svg>
+  );
+  return (
+    <svg {...common}>
+      <circle cx="43" cy="19" r="8" fill="#e4b33f" />
+      <path d="M14 44h36a9 9 0 0 0 0-18 16 16 0 0 0-30.8 2.9A7.5 7.5 0 0 0 14 44Z" fill="#315d4d" />
+      <path d="M21 36c3-4 7-4 10 0 3-4 7-4 10 0" fill="none" stroke="#d2e67b" strokeWidth="2.8" strokeLinecap="round" />
+      <path d="M17 52h30" stroke="#ee806b" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function LogoWordmark({ direction }: { direction: LogoDirectionId }) {
+  return <span className={`direction-wordmark wordmark-${direction}`} aria-label="CloudPainter"><span>cloud</span><em>painter</em></span>;
+}
+
+function LogoOptions() {
+  return (
+    <main className="app-shell logo-options-shell">
+      <header className="topbar logo-options-topbar">
+        <Link href="/" className="brand" aria-label="Return to CloudPainter workspace" data-testid="link-workspace-home">
+          <span className="brand-mark"><Cloud size={19} strokeWidth={2.4} /></span>
+          <span className="brand-name">cloud<em>painter</em></span>
+        </Link>
+        <Link href="/" className="button button-quiet workspace-return" data-testid="link-return-workspace">Back to sketch workspace</Link>
+      </header>
+      <section className="logo-review">
+        <div className="logo-review-heading">
+          <p className="eyebrow">Identity studies · 05 directions</p>
+          <h1>Marks for looking closer.</h1>
+          <p className="intro-copy">Five distinct sketches for a calm, observant creative practice. Comparison only — your workspace mark is unchanged.</p>
+        </div>
+        <div className="logo-directions" data-testid="logo-options-list">
+          {logoDirections.map((direction, index) => (
+            <article className={`logo-direction direction-${direction.id}`} key={direction.id} data-testid={`logo-option-${direction.id}`}>
+              <div className="direction-heading">
+                <span className="direction-index">{direction.number} / 05</span>
+                <span className="direction-note">{index % 2 === 0 ? 'SKY + SKETCH' : 'OBSERVATION + FORM'}</span>
+              </div>
+              <div className="direction-preview">
+                <div className="logo-preview-header" data-testid={`preview-header-${direction.id}`}>
+                  <span className={`logo-preview-mark mark-${direction.id}`}><LogoMark direction={direction.id} size={42} /></span>
+                  <LogoWordmark direction={direction.id} />
+                </div>
+                <div className="favicon-preview-wrap">
+                  <span className="favicon-caption">FAVICON</span>
+                  <span className={`logo-preview-favicon mark-${direction.id}`} data-testid={`preview-favicon-${direction.id}`}><LogoMark direction={direction.id} size={28} /></span>
+                </div>
+              </div>
+              <div className="direction-copy">
+                <h2>{direction.name}</h2>
+                <p>{direction.description}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+        <footer className="logo-review-footer">
+          <span>Concept explorations</span>
+          <Link href="/" className="footer-workspace-link" data-testid="link-footer-workspace">Return to your sketch →</Link>
+        </footer>
+      </section>
+    </main>
+  );
+}
+
 const queryClient = new QueryClient();
 function Router() {
-  return <Switch><Route path="/" component={Home} /><Route component={NotFound} /></Switch>;
+  return <Switch><Route path="/" component={Home} /><Route path="/logo-options" component={LogoOptions} /><Route component={NotFound} /></Switch>;
 }
 function App() {
   return (
