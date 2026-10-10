@@ -27,6 +27,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { ActionTooltip, TooltipButton } from '@/components/tooltip-button';
 import NotFound from '@/pages/not-found';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions } from '@/lib/imageDimensions';
@@ -426,8 +427,8 @@ function Home() {
           <span className="privacy-note"><Save size={13} /> Projects and photos stay in this browser</span>
           <span className="save-state" data-testid="status-save">{savedStatus}</span>
           <div className="top-actions">
-              <Link href="/logo-options" className="button button-quiet logo-options-link" data-testid="link-logo-options">Logo directions</Link>
-            <button className="button button-primary" onClick={exportPng} data-testid="button-export"><Upload size={14} /> Export PNG</button>
+              <ActionTooltip description="View five CloudPainter logo design directions."><Link href="/logo-options" className="button button-quiet logo-options-link" data-testid="link-logo-options">Logo directions</Link></ActionTooltip>
+            <TooltipButton description="Export the reference photo and visible drawing layers as a PNG." className="button button-primary" onClick={exportPng} data-testid="button-export"><Upload size={14} /> Export PNG</TooltipButton>
           </div>
         </div>
       </header>
@@ -447,7 +448,8 @@ function Home() {
             <div className="panel-title-row"><h2 className="panel-title">Your starting point</h2><span className="panel-kicker">01</span></div>
             <p className="section-label">Reference photo</p>
             <div className="source-card-frame">
-              <button
+              <TooltipButton
+                description={project.image ? 'Choose a new reference photo, replacing the current photo and drawing layers.' : 'Choose a reference photo and start a fresh drawing layer; the original photo stays unchanged.'}
                 type="button"
                 className={`source-card ${project.image ? 'loaded' : ''}`}
                 onClick={openPhoto}
@@ -463,13 +465,13 @@ function Home() {
                     <span>JPG, PNG or another image</span>
                   </>
                 )}
-              </button>
+              </TooltipButton>
               {project.image && (
-                <button type="button" className="icon-button source-remove" aria-label="Remove photo" onClick={() => { resetPhotoView(); updateProject(current => ({ ...current, image: null })); }} data-testid="button-remove-photo"><X size={14} /></button>
+                <TooltipButton description="Remove the reference photo and keep your drawing layers." type="button" className="icon-button source-remove" aria-label="Remove photo" onClick={() => { resetPhotoView(); updateProject(current => ({ ...current, image: null })); }} data-testid="button-remove-photo"><X size={14} /></TooltipButton>
               )}
             </div>
             <div className="source-actions">
-              <button className="button" onClick={startBlank} data-testid="button-blank"><Plus size={13} /> Blank canvas</button>
+              <TooltipButton description="Start a fresh transparent canvas, replacing the current photo and all drawing layers." className="button" onClick={startBlank} data-testid="button-blank"><Plus size={13} /> Blank canvas</TooltipButton>
               <input ref={fileInput} hidden type="file" accept="image/*" onChange={handleFile} data-testid="input-photo" />
             </div>
             <ImageGenerator onUse={useGeneratedReference} />
@@ -478,45 +480,45 @@ function Home() {
             <div className="layer-list">
               {visibleLayers.map((layer, index) => (
                 <div key={layer.id} className={`layer-row ${selectedLayer?.id === layer.id ? 'active' : ''}`} data-testid={`layer-row-${layer.id}`}>
-                  <button className="layer-select" onClick={() => updateProject(current => ({ ...current, selectedLayerId: layer.id }))} data-testid={`button-select-layer-${layer.id}`}>
+                  <TooltipButton description={`Select ${layer.name} for drawing and layer adjustments.${layer.visible ? '' : ' Show this layer before drawing on it.'}`} className="layer-select" onClick={() => updateProject(current => ({ ...current, selectedLayerId: layer.id }))} data-testid={`button-select-layer-${layer.id}`}>
                     <span className="layer-thumb"><Layers size={13} /></span>
                     {renamingId === layer.id ? (
                       <input className="rename-input" autoFocus value={renameValue} onChange={event => setRenameValue(event.target.value)} onBlur={saveLayerName} onKeyDown={event => { if (event.key === 'Enter') saveLayerName(); if (event.key === 'Escape') setRenamingId(null); }} onClick={event => event.stopPropagation()} aria-label="Rename layer" data-testid={`input-rename-${layer.id}`} />
                     ) : <span className="layer-name">{layer.name}</span>}
-                  </button>
-                  <button className="icon-button" aria-label={layer.visible ? 'Hide layer' : 'Show layer'} title={layer.visible ? 'Hide layer' : 'Show layer'} onClick={() => changeLayer(layer.id, current => ({ ...current, visible: !current.visible }))} data-testid={`button-visibility-${layer.id}`}>
+                  </TooltipButton>
+                  <TooltipButton description={layer.visible ? `Hide ${layer.name} from the canvas and PNG export without deleting its drawings.` : `Show ${layer.name} on the canvas and include it in PNG exports.`} className="icon-button" aria-label={layer.visible ? 'Hide layer' : 'Show layer'} onClick={() => changeLayer(layer.id, current => ({ ...current, visible: !current.visible }))} data-testid={`button-visibility-${layer.id}`}>
                     {layer.visible ? <Eye size={14} /> : <EyeOff size={14} />}
-                  </button>
-                  <button className="icon-button" aria-label="Rename layer" title="Rename layer" onClick={() => { setRenamingId(layer.id); setRenameValue(layer.name); }} data-testid={`button-rename-${layer.id}`}><span style={{ fontSize: 13, lineHeight: 1 }}>Aa</span></button>
-                  <button className="icon-button layer-order" aria-label="Move layer up" title="Move layer up" onClick={() => moveLayer(layer.id, 1)} disabled={index === 0} data-testid={`button-layer-up-${layer.id}`}><ArrowUp size={13} /></button>
-                  <button className="icon-button layer-order" aria-label="Move layer down" title="Move layer down" onClick={() => moveLayer(layer.id, -1)} disabled={index === visibleLayers.length - 1} data-testid={`button-layer-down-${layer.id}`}><ArrowDown size={13} /></button>
-                  <button className="icon-button" aria-label="Delete layer" title="Delete layer" onClick={() => deleteLayer(layer.id)} data-testid={`button-delete-layer-${layer.id}`}><Trash2 size={13} /></button>
+                  </TooltipButton>
+                  <TooltipButton description={`Change the name of ${layer.name}.`} className="icon-button" aria-label="Rename layer" onClick={() => { setRenamingId(layer.id); setRenameValue(layer.name); }} data-testid={`button-rename-${layer.id}`}><span style={{ fontSize: 13, lineHeight: 1 }}>Aa</span></TooltipButton>
+                  <TooltipButton description={index === 0 ? `${layer.name} is already the top drawing layer.` : `Move ${layer.name} above the next drawing layer.`} className="icon-button layer-order" aria-label="Move layer up" onClick={() => moveLayer(layer.id, 1)} disabled={index === 0} data-testid={`button-layer-up-${layer.id}`}><ArrowUp size={13} /></TooltipButton>
+                  <TooltipButton description={index === visibleLayers.length - 1 ? `${layer.name} is already the bottom drawing layer.` : `Move ${layer.name} below the next drawing layer.`} className="icon-button layer-order" aria-label="Move layer down" onClick={() => moveLayer(layer.id, -1)} disabled={index === visibleLayers.length - 1} data-testid={`button-layer-down-${layer.id}`}><ArrowDown size={13} /></TooltipButton>
+                  <TooltipButton description={project.layers.length === 1 ? 'Keep at least one drawing layer; this is the only layer.' : `Delete ${layer.name} and all its drawings.`} className="icon-button" aria-label="Delete layer" onClick={() => deleteLayer(layer.id)} data-testid={`button-delete-layer-${layer.id}`}><Trash2 size={13} /></TooltipButton>
                 </div>
               ))}
             </div>
-            <button className="add-layer" onClick={addLayer} data-testid="button-add-layer"><Plus size={14} /> Add a drawing layer</button>
+            <TooltipButton description="Add and select a new transparent drawing layer above the others." className="add-layer" onClick={addLayer} data-testid="button-add-layer"><Plus size={14} /> Add a drawing layer</TooltipButton>
             <p className="layer-footnote">Your photograph stays safely underneath, unchanged. Drawings live on their own layers.</p>
           </aside>
 
           <section className="editor" aria-label="Drawing workspace">
             <div className="panel toolbar">
               <div className="tool-group">
-                <button className={`tool-button ${tool === 'pen' ? 'selected' : ''}`} title="Pen" aria-label="Pen tool" onClick={() => setTool('pen')} data-testid="button-tool-pen"><Paintbrush size={17} /></button>
-                <button className={`tool-button ${tool === 'eraser' ? 'selected' : ''}`} title="Eraser" aria-label="Eraser tool" onClick={() => setTool('eraser')} data-testid="button-tool-eraser"><Eraser size={17} /></button>
+                <TooltipButton description="Draw strokes on the selected visible layer using the current color and brush size." className={`tool-button ${tool === 'pen' ? 'selected' : ''}`} aria-label="Pen tool" onClick={() => setTool('pen')} data-testid="button-tool-pen"><Paintbrush size={17} /></TooltipButton>
+                <TooltipButton description="Erase drawings from the selected visible layer without changing the photo or other layers." className={`tool-button ${tool === 'eraser' ? 'selected' : ''}`} aria-label="Eraser tool" onClick={() => setTool('eraser')} data-testid="button-tool-eraser"><Eraser size={17} /></TooltipButton>
                 <span className="tool-divider" />
-                <button className="tool-button" title="Undo" aria-label="Undo" onClick={undo} disabled={!selectedLayer?.strokes.length} data-testid="button-undo"><Undo2 size={17} /></button>
-                <button className="tool-button" title="Redo" aria-label="Redo" onClick={redo} disabled={!selectedLayer?.redo.length} data-testid="button-redo"><Redo2 size={17} /></button>
+                <TooltipButton description={selectedLayer?.strokes.length ? 'Undo the most recent drawing or erasing stroke on the selected layer.' : 'Nothing to undo: the selected layer has no strokes.'} className="tool-button" aria-label="Undo" onClick={undo} disabled={!selectedLayer?.strokes.length} data-testid="button-undo"><Undo2 size={17} /></TooltipButton>
+                <TooltipButton description={selectedLayer?.redo.length ? 'Restore the last undone stroke on the selected layer.' : 'Nothing to redo: undo a stroke on the selected layer first.'} className="tool-button" aria-label="Redo" onClick={redo} disabled={!selectedLayer?.redo.length} data-testid="button-redo"><Redo2 size={17} /></TooltipButton>
               </div>
               <div className="tool-group">
                 <span className="canvas-meta">{project.width} × {project.height}</span>
-                <button className="tool-button" title="Clear selected layer" aria-label="Clear selected layer" onClick={() => { if (selectedLayer) changeLayer(selectedLayer.id, layer => ({ ...layer, strokes: [], redo: [] })); }} data-testid="button-clear-layer"><RotateCcw size={15} /></button>
+                <TooltipButton description="Remove all drawings and undo/redo history from the selected layer; keep the photo and other layers." className="tool-button" aria-label="Clear selected layer" onClick={() => { if (selectedLayer) changeLayer(selectedLayer.id, layer => ({ ...layer, strokes: [], redo: [] })); }} data-testid="button-clear-layer"><RotateCcw size={15} /></TooltipButton>
               </div>
             </div>
 
             <div className="panel stage-wrap" ref={stageWrapRef}>
               {project.image && (
                 <div className="view-controls" aria-label="Reference photo view controls">
-                  <button className="view-control-button" type="button" title="Zoom out" aria-label="Zoom out" onClick={() => changePhotoZoom(photoZoom - 0.25)} disabled={photoZoom <= 1} data-testid="button-zoom-out"><Minus size={14} /></button>
+                  <TooltipButton description={photoZoom <= 1 ? 'Already at the minimum zoom: the photo fits the canvas.' : 'Zoom out by 25% to see more of the photo and drawings.'} className="view-control-button" type="button" aria-label="Zoom out" onClick={() => changePhotoZoom(photoZoom - 0.25)} disabled={photoZoom <= 1} data-testid="button-zoom-out"><Minus size={14} /></TooltipButton>
                   <label className="zoom-slider-label">
                     <span className="zoom-value">{Math.round(photoZoom * 100)}%</span>
                     <input
@@ -530,9 +532,9 @@ function Home() {
                       data-testid="input-photo-zoom"
                     />
                   </label>
-                  <button className="view-control-button" type="button" title="Zoom in" aria-label="Zoom in" onClick={() => changePhotoZoom(photoZoom + 0.25)} disabled={photoZoom >= 4} data-testid="button-zoom-in"><ZoomIn size={14} /></button>
-                  <button className={`view-control-button ${panMode ? 'selected' : ''}`} type="button" title="Drag to reposition photo" aria-label="Toggle photo reposition mode" aria-pressed={panMode} onClick={() => setPanMode(current => !current)} disabled={photoZoom <= 1} data-testid="button-pan-mode"><Hand size={14} /></button>
-                  <button className="view-control-button" type="button" title="Reset fitted view" aria-label="Reset photo to fitted view" onClick={resetPhotoView} disabled={photoZoom === 1 && photoPan.x === 0 && photoPan.y === 0} data-testid="button-reset-photo-view"><RotateCcw size={14} /></button>
+                  <TooltipButton description={photoZoom >= 4 ? 'Already at the maximum zoom of 400%.' : 'Zoom in by 25% to inspect photo and drawing details.'} className="view-control-button" type="button" aria-label="Zoom in" onClick={() => changePhotoZoom(photoZoom + 0.25)} disabled={photoZoom >= 4} data-testid="button-zoom-in"><ZoomIn size={14} /></TooltipButton>
+                  <TooltipButton description={photoZoom <= 1 ? 'Zoom in first to reposition the view by dragging.' : panMode ? 'Leave reposition mode and return to drawing.' : 'Drag to reposition the zoomed photo and drawings without editing them.'} className={`view-control-button ${panMode ? 'selected' : ''}`} type="button" aria-label="Toggle photo reposition mode" aria-pressed={panMode} onClick={() => setPanMode(current => !current)} disabled={photoZoom <= 1} data-testid="button-pan-mode"><Hand size={14} /></TooltipButton>
+                  <TooltipButton description={photoZoom === 1 && photoPan.x === 0 && photoPan.y === 0 ? 'The photo is already centered at its fitted zoom.' : 'Reset zoom and position to center the fitted photo; leave drawings unchanged.'} className="view-control-button" type="button" aria-label="Reset photo to fitted view" onClick={resetPhotoView} disabled={photoZoom === 1 && photoPan.x === 0 && photoPan.y === 0} data-testid="button-reset-photo-view"><RotateCcw size={14} /></TooltipButton>
                 </div>
               )}
               <div className="stage" style={{
@@ -586,7 +588,7 @@ function Home() {
             <div className="control-block">
               <div className="control-head"><span>Color</span><span className="control-value">{tool === 'eraser' ? 'ERASER' : 'INK'}</span></div>
               <div className="color-row">
-                {PALETTE.map((swatch, index) => <button key={swatch} className={`swatch ${color === swatch ? 'active' : ''}`} style={{ background: swatch }} aria-label={`Choose color ${index + 1}`} onClick={() => { setColor(swatch); setTool('pen'); }} data-testid={`button-color-${index + 1}`} />)}
+                {PALETTE.map((swatch, index) => <TooltipButton key={swatch} description={`${color === swatch && tool === 'pen' ? 'Current drawing color' : 'Use drawing color'} ${swatch.toUpperCase()}${tool === 'eraser' ? ' and switch from erasing to drawing' : ''}.`} className={`swatch ${color === swatch ? 'active' : ''}`} style={{ background: swatch }} aria-label={`Choose color ${index + 1} (${swatch.toUpperCase()})`} onClick={() => { setColor(swatch); setTool('pen'); }} data-testid={`button-color-${index + 1}`} />)}
                 <label className="color-custom" aria-label="Choose custom color"><Plus size={14} /><input type="color" value={color} onChange={event => { setColor(event.target.value); setTool('pen'); }} data-testid="input-color-custom" /></label>
               </div>
             </div>
@@ -724,7 +726,7 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
+      <TooltipProvider delayDuration={350} skipDelayDuration={100}>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <ErrorBoundary><Router /></ErrorBoundary>
         </WouterRouter>

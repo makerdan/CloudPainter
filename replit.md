@@ -18,6 +18,13 @@ A browser-based creativity app for drawing imagined shapes over photographs with
 - With the existing preview running, use `CLOUDPAINTER_TEST_URL="https://${REPLIT_DEV_DOMAIN}/" pnpm --filter @workspace/cloudpainter run test:photo-card`. For another host, set the URL to its running CloudPainter page instead.
 - Browser tests use isolated local storage and do not start another server. Failed-run traces go to the ignored `generated-artifacts/` directory.
 
+
+## Workspace tooltip checks
+
+- Reuse `TooltipButton` for new workspace buttons: supply a descriptive `description`, keep the accessible name, and do not add a native `title`.
+- With an authorized existing preview running, use `CLOUDPAINTER_TEST_URL="https://${REPLIT_DEV_DOMAIN}/" pnpm --filter @workspace/cloudpainter run test:tooltips`. Set `CHROMIUM_PATH` if using a system Chromium instead of Playwright's installed browser.
+- These checks cover hover, focus, disabled wrappers, dynamic states, portal positioning, and touch taps without starting a server. The suite is capped at four minutes; artifacts go under ignored `generated-artifacts/`.
+
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9

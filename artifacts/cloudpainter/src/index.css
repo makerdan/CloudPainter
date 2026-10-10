@@ -30,6 +30,10 @@ button, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .42; }
 button:focus-visible, input:focus-visible { outline: 3px solid #b9d66a; outline-offset: 2px; }
+.tooltip-disabled-trigger { display:inline-flex; flex:none; border-radius:8px; cursor:not-allowed; }
+.tooltip-disabled-trigger:focus-visible { outline:3px solid #b9d66a; outline-offset:2px; }
+.tooltip-disabled-trigger > button:disabled { pointer-events:none; }
+.action-tooltip { max-width:min(280px, calc(100vw - 24px)); background:var(--forest-deep); color:#fff; font:12px/1.45 'DM Sans', sans-serif; padding:8px 11px; border-radius:8px; box-shadow:0 4px 14px #24352d33; overflow-wrap:anywhere; pointer-events:none; }
 ::selection { background: #d2e67b; color: #28352d; }
 
 .app-shell { min-height: 100dvh; padding: 0 28px 28px; }
