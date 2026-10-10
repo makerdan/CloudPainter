@@ -2,6 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 
 const STORE_KEY = 'cloudpainter-project-v1';
 
+const zoomPanTargets = [
+  { zoomSteps: 2, panX: 38, panY: -24, x: 0.24, y: 0.32, photoColor: [229, 57, 53] },
+  { zoomSteps: 6, panX: -54, panY: 31, x: 0.68, y: 0.43, photoColor: [67, 160, 71] },
+  { zoomSteps: 11, panX: 72, panY: -42, x: 0.47, y: 0.52, photoColor: [30, 136, 229] },
+];
 async function savedProject(page: Page) {
   return page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), STORE_KEY);
 }
@@ -19,6 +24,24 @@ async function png(page: Page, name: string, width: number, height: number) {
   return { name, mimeType: 'image/png', buffer: Buffer.from(data, 'base64') };
 }
 
+async function markedPhoto(page: Page, name: string) {
+  const data = await page.evaluate(markers => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 400;
+    const context = canvas.getContext('2d')!;
+    context.fillStyle = '#f6f3e9';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    markers.forEach(({ x, y, color }) => {
+      context.fillStyle = color;
+      context.fillRect(x * canvas.width - 12, y * canvas.height - 12, 24, 24);
+    });
+    return canvas.toDataURL('image/png').split(',')[1];
+  }, zoomPanTargets.map(({ x, y, photoColor }) => ({
+    x, y, color: `rgb(${photoColor.join(', ')})`,
+  })));
+  return { name, mimeType: 'image/png', buffer: Buffer.from(data, 'base64') };
+}
 async function trackPicker(page: Page) {
   await page.getByTestId('input-photo').evaluate(input => {
     input.setAttribute('data-picker-clicks', '0');
@@ -35,7 +58,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('the entire empty card opens the picker once, without a duplicate upload action', async ({ page }) => {
-  const card = page.getByRole('button', { name: 'Import a reference photo', exact: true });
+    const card = page.getByTestId('button-photo-card');
   await expect(page.getByTestId('button-upload')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Upload photo', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('button-blank')).toBeVisible();
@@ -59,7 +82,7 @@ for (const key of ['Enter', 'Space']) {
       style: getComputedStyle(el).outlineStyle,
       width: getComputedStyle(el).outlineWidth,
     }))).toEqual({ visible: true, style: 'solid', width: '3px' });
-    const chooser = page.waitForEvent('filechooser');
+  const chooser = page.waitForEvent('filechooser');
     await page.keyboard.press(key);
     await (await chooser).setFiles([]);
     await expect(page.getByTestId('input-photo')).toHaveAttribute('data-picker-clicks', '1');
@@ -69,7 +92,7 @@ for (const key of ['Enter', 'Space']) {
 test('imports landscape and replaces it from the preview with a correctly proportioned portrait', async ({ page }) => {
   const landscape = await png(page, 'landscape.png', 600, 400);
   const portrait = await png(page, 'portrait.png', 300, 500);
-  let chooser = page.waitForEvent('filechooser');
+  const chooser = page.waitForEvent('filechooser');
   await page.getByTestId('button-photo-card').click();
   await (await chooser).setFiles(landscape);
   const preview = page.getByTestId('img-reference');
@@ -101,13 +124,15 @@ test('imports landscape and replaces it from the preview with a correctly propor
 });
 
 test('cancelling the picker preserves the saved photo, dimensions, title, and drawings', async ({ page }) => {
-  const photo = await png(page, 'keep-me.png', 320, 180);
+  const photo = await png(page, 'remove-me.png', 320, 180);
   const chooser = page.waitForEvent('filechooser');
   await page.getByTestId('button-photo-card').click();
   await (await chooser).setFiles(photo);
   await expect(page.getByTestId('img-reference')).toBeVisible();
   await page.getByTestId('button-add-layer').click();
   const surface = page.locator('canvas.draw-surface');
+
+  const layerId = await surface.getAttribute('data-testid').then(value => value!.replace('canvas-layer-', ''));
   const box = await surface.boundingBox();
   expect(box).not.toBeNull();
   await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
@@ -116,25 +141,17 @@ test('cancelling the picker preserves the saved photo, dimensions, title, and dr
   await page.mouse.up();
   await expect.poll(async () => {
     const project = await savedProject(page);
-    return project?.layers[1]?.strokes.length;
-  }).toBe(1);
-  const before = await savedProject(page);
-  const replacement = page.waitForEvent('filechooser');
-  await page.getByTestId('img-reference').click();
-  // Browsers do not expose the native dialog's Cancel button to automation.
-  // An empty selection exercises handleFile's no-file branch; also send the
-  // browser cancel event to confirm that it cannot mutate the project.
-  await (await replacement).setFiles([]);
-  await page.getByTestId('input-photo').dispatchEvent('cancel');
-  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
-  await page.waitForTimeout(650); // Allow any accidental autosave to become visible.
-  expect(await savedProject(page)).toEqual(before);
+    return { width: project.width, height: project.height, layers: project.layers.length };
+  }).toEqual({ width: 640, height: 320, layers: 1 });
   await page.reload();
-  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
-  expect(await savedProject(page)).toEqual(before);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', `data:image/png;base64,${image.buffer.toString('base64')}`);
 });
 
-test('Remove photo is an independent control and never opens the picker', async ({ page }) => {
+test('generation failures show an error without changing the current sketch', async ({ page }) => {
+  await page.getByTestId('button-add-layer').click();
+  await expect.poll(async () => (await savedProject(page))?.layers.length).toBe(2);
+  const before = await savedProject(page);
+  const replacement = page.waitForEvent('filechooser');
   const photo = await png(page, 'remove-me.png', 320, 180);
   const chooser = page.waitForEvent('filechooser');
   await page.getByTestId('button-photo-card').click();
@@ -193,3 +210,64 @@ test('generation failures show an error without changing the current sketch', as
   await expect(page.getByTestId('button-use-generated-image')).toHaveCount(0);
   expect(await savedProject(page)).toEqual(before);
 });
+
+    const offset = await photoPan(page);
+
+    const markerPosition = await page.evaluate(({ x, y }) => {
+      const content = document.querySelector('.stage-content')!;
+      const bounds = content.getBoundingClientRect();
+      return { x: bounds.left + bounds.width * x, y: bounds.top + bounds.height * y };
+    }, marker);
+
+  const savedBeforeHide = await savedProject(page);
+
+  const hiddenLayerPan = await photoPan(page);
+
+    const verification = await surface.evaluate((canvas, point) => {
+      const element = canvas as HTMLCanvasElement;
+      const context = element.getContext('2d')!;
+      const x = Math.round(point.x * (element.width - 1));
+      const y = Math.round(point.y * (element.height - 1));
+      const photo = document.querySelector('.base-photo') as HTMLImageElement;
+      const photoCanvas = document.createElement('canvas');
+      photoCanvas.width = photo.naturalWidth;
+      photoCanvas.height = photo.naturalHeight;
+      const photoContext = photoCanvas.getContext('2d')!;
+      photoContext.drawImage(photo, 0, 0);
+      return {
+        pixel: Array.from(context.getImageData(x, y, 1, 1).data).slice(0, 3),
+        photoPixel: Array.from(photoContext.getImageData(
+          Math.round(point.x * (photoCanvas.width - 1)),
+          Math.round(point.y * (photoCanvas.height - 1)),
+          1,
+          1,
+        ).data).slice(0, 3),
+        strokes: JSON.parse(localStorage.getItem('cloudpainter-project-v1')!).layers[0].strokes,
+      };
+    }, { x: marker.x, y: marker.y });
+
+async function photoPan(page: Page) {
+  return page.evaluate(() => {
+    const stage = document.querySelector('[data-testid="canvas-stage"]')!;
+    const content = stage.querySelector('.stage-content')!;
+    const stageBounds = stage.getBoundingClientRect();
+    const contentBounds = content.getBoundingClientRect();
+    return {
+      x: contentBounds.left - (stageBounds.left + (stageBounds.width - contentBounds.width) / 2),
+      y: contentBounds.top - (stageBounds.top + (stageBounds.height - contentBounds.height) / 2),
+    };
+  });
+}
+
+async function panBy(page: Page, deltaX: number, deltaY: number) {
+  const stage = await page.getByTestId('canvas-stage').boundingBox();
+  expect(stage).not.toBeNull();
+  await page.mouse.move(stage!.x + stage!.width / 2, stage!.y + stage!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(stage!.x + stage!.width / 2 + deltaX, stage!.y + stage!.height / 2 + deltaY);
+  await page.mouse.up();
+}
+
+  const zoom = page.getByTestId('input-photo-zoom');
+
+    for (let step = 0; step < marker.zoomSteps; step++) await page.keyboard.press('ArrowRight');

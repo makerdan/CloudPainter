@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 
 // Run against an already-running CloudPainter preview; do not launch a second server.
 const baseURL = process.env.CLOUDPAINTER_TEST_URL;
@@ -19,10 +20,10 @@ export default defineConfig({
   use: {
     baseURL,
     browserName: 'chromium',
-    launchOptions: process.env.CHROMIUM_PATH ? {
-      executablePath: process.env.CHROMIUM_PATH,
+    launchOptions: {
+      executablePath: process.env.CHROMIUM_PATH || execFileSync('which', ['chromium'], { encoding: 'utf8' }).trim(),
       args: ['--no-sandbox'],
-    } : undefined,
+    },
     viewport: { width: 1440, height: 1000 },
     trace: 'retain-on-failure',
   },
