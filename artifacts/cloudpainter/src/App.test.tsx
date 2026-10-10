@@ -353,6 +353,93 @@ test('Remove photo is an independent control and never opens the picker', async 
   expect(await savedProject(page)).toEqual({ ...before, image: null });
 });
 
+for (const action of ['undo', 'redo'] as const) {
+  test(`${action} follows the selected layer's independent history and persists after reload`, async ({ page }) => {
+    const photo = await png(page, 'independent-histories.png', 480, 320);
+    const stroke = (color: string, y: number) => ({
+      points: [{ x: 0.2, y }, { x: 0.7, y }],
+      color, size: 8, tool: 'pen',
+    });
+    const before = {
+      image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
+      width: 480, height: 320, title: 'Independent drawing histories',
+      selectedLayerId: 'history-bottom',
+      layers: [
+        { id: 'history-bottom', name: 'Background', visible: true, opacity: 0.65,
+          strokes: [stroke('#e53935', 0.2)], redo: [stroke('#ff9800', 0.25)] },
+        { id: 'history-middle', name: 'Main drawing', visible: true, opacity: 0.45,
+          strokes: [stroke('#1e88e5', 0.4), stroke('#8e24aa', 0.45)],
+          redo: [stroke('#00acc1', 0.5), stroke('#d81b60', 0.55)] },
+        { id: 'history-top', name: 'Hidden details', visible: false, opacity: 0.8,
+          strokes: [stroke('#43a047', 0.65)], redo: [stroke('#3949ab', 0.7), stroke('#6d4c41', 0.75)] },
+      ],
+    };
+    // Seed once before mount; subsequent reloads must use real autosaved results.
+    await page.addInitScript(({ key, project }) => {
+      const marker = `${key}-history-test-seeded`;
+      if (sessionStorage.getItem(marker)) return;
+      localStorage.setItem(key, JSON.stringify(project));
+      sessionStorage.setItem(marker, 'true');
+    }, { key: STORE_KEY, project: before });
+    await page.reload();
+    await expect(page.getByTestId('img-reference')).toBeVisible();
+    await expect.poll(() => savedProject(page)).toEqual(before);
+
+    let expected = before;
+    const assertProject = async () => {
+      // Full equality protects photo, dimensions, title, selection, ordering,
+      // layer properties, and every stroke and redo entry, not just counts.
+      await expect.poll(() => savedProject(page)).toEqual(expected);
+      await expect(page.getByTestId(`layer-row-${expected.selectedLayerId}`)).toHaveClass(/active/);
+      await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+      const selected = expected.layers.find(layer => layer.id === expected.selectedLayerId)!;
+      await expect(page.getByTestId('button-undo')).toBeEnabled({ enabled: selected.strokes.length > 0 });
+      await expect(page.getByTestId('button-redo')).toBeEnabled({ enabled: selected.redo.length > 0 });
+    };
+    const selectLayer = async (layerId: string) => {
+      await page.getByTestId(`button-select-layer-${layerId}`).click();
+      expected = { ...expected, selectedLayerId: layerId };
+      await assertProject();
+    };
+    const applyHistory = async (operation: 'undo' | 'redo') => {
+      await page.getByTestId(`button-${operation}`).click();
+      expected = {
+        ...expected,
+        layers: expected.layers.map(layer => {
+          if (layer.id !== expected.selectedLayerId) return layer;
+          return operation === 'undo'
+            ? { ...layer, strokes: layer.strokes.slice(0, -1),
+              redo: [...layer.redo, layer.strokes[layer.strokes.length - 1]] }
+            : { ...layer, strokes: [...layer.strokes, layer.redo[layer.redo.length - 1]],
+              redo: layer.redo.slice(0, -1) };
+        }),
+      };
+      await assertProject();
+    };
+
+    // Alternate middle, bottom and top selection to catch stale selection,
+    // first/last-layer targeting, shared stacks, and incorrect stack order.
+    for (const layerId of ['history-middle', 'history-bottom', 'history-top', 'history-middle']) {
+      await selectLayer(layerId);
+      await applyHistory(action);
+    }
+    // Two operations exhaust the middle layer's relevant stack. Other layers
+    // still have independent undo/redo availability.
+    await expect(page.getByTestId(`button-${action}`)).toBeDisabled();
+    await page.reload();
+    await expect(page.getByTestId('img-reference')).toBeVisible();
+    await assertProject();
+
+    // Restored history must remain usable, not merely serialized correctly.
+    await applyHistory(action === 'undo' ? 'redo' : 'undo');
+    await selectLayer('history-bottom');
+    await applyHistory(action === 'undo' ? 'redo' : 'undo');
+    await page.reload();
+    await expect(page.getByTestId('img-reference')).toBeVisible();
+    await assertProject();
+  });
+}
+
 for (const redoOnly of [false, true]) {
 test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, remains safe when already empty,' : 'strokes and redo history'} and persists after reload`, async ({ page }) => {
         const photo = await png(page, 'rename-reference.png', 480, 320);
