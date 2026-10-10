@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "83D5RbhJNXF2t_TcVgjWQ"
+uri = "file://attached_assets/skill-mirror-sync-workspace_(09.05.2026)_1791659112485.zip"
+type = "unspecified"
+title = "Skill Mirror Sync — updated source bundle"
+description = "Canonical workspace-skill/v1 instructions with explicit helper, fingerprint, metadata, and recovery contracts. The bundled SKILL.md matches the installed canonical file; no helper implementation is included."
+logical_id = "9a5bc792-3a16-4ac4-b063-3b31d45d06b2"
+content_hash = "sha256:91ad6f858d5361329cdda3709ba1d02755d9afa59d38e4b5b8e40e1b5c224795"
+size = 7283
+mtime_ms = 1791660792191
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:685909fe-be37-4979-baa7-4ef2f47d224b/9a5bc792-3a16-4ac4-b063-3b31d45d06b2/7e7eafc2-daa4-4ea8-a9e6-0483fabcf8c8"
+storage_version_token = "1791660822634242"
+content_type = "application/octet-stream"
