@@ -69,7 +69,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #b9d66a; outline-
 .button-quiet { border-color:transparent; background:transparent; }
 .button-small { padding:7px 9px; font-size:11px; }
 
-.workspace { max-width:1500px; margin:0 auto; padding-top:25px; }
+.workspace { max-width:1500px; margin:0 auto; padding-top:25px; padding-bottom:50vh; padding-bottom:50dvh; }
 .intro-row { display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:20px; }
 .eyebrow { font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:.13em; color:#8a9288; margin:0 0 7px; }
 h1 { font-family:var(--font-display); font-size:32px; line-height:1.1; font-weight:500; letter-spacing:-.8px; margin:0; color:#30473b; }
