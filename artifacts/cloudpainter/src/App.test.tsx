@@ -242,6 +242,76 @@ test('Remove photo is an independent control and never opens the picker', async 
   expect(await savedProject(page)).toEqual({ ...before, image: null });
 });
 
+test('Clear selected layer clears only its strokes and redo history and persists after reload', async ({ page }) => {
+  const photo = await png(page, 'clear-layer-reference.png', 480, 320);
+  const stroke = (color: string, y: number) => ({
+    points: [{ x: 0.2, y }, { x: 0.7, y }],
+    color, size: 8, tool: 'pen',
+  });
+  // Select the middle layer to catch implementations that clear the first,
+  // last, or all layers. Every layer has artwork and redo history to protect.
+  const before = {
+    image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
+    width: 480,
+    height: 320,
+    title: 'Keep the rest of my sketch',
+    selectedLayerId: 'layer-clear-target',
+    layers: [
+      {
+        id: 'layer-keep-bottom', name: 'Background lines', visible: true, opacity: 0.65,
+        strokes: [stroke('#e53935', 0.25)], redo: [stroke('#ff9800', 0.3)],
+      },
+      {
+        id: 'layer-clear-target', name: 'Draft to clear', visible: true, opacity: 0.45,
+        strokes: [stroke('#1e88e5', 0.5), stroke('#8e24aa', 0.55)],
+        redo: [stroke('#00acc1', 0.6)],
+      },
+      {
+        id: 'layer-keep-top', name: 'Hidden details', visible: false, opacity: 0.8,
+        strokes: [stroke('#43a047', 0.75)], redo: [stroke('#3949ab', 0.8)],
+      },
+    ],
+  };
+  // Seed before React mounts, after the previous page's unload save. Seed
+  // only once so the final reload reads the app's actual persisted result.
+  await page.addInitScript(({ key, project }) => {
+    const seededKey = `${key}-clear-test-seeded`;
+    if (sessionStorage.getItem(seededKey)) return;
+    localStorage.setItem(key, JSON.stringify(project));
+    sessionStorage.setItem(seededKey, 'true');
+  }, { key: STORE_KEY, project: before });
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toBeVisible();
+  await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+  await expect(page.getByTestId('button-redo')).toBeEnabled();
+  await expect.poll(() => savedProject(page)).toEqual(before);
+
+  const after = {
+    ...before,
+    layers: before.layers.map(layer => layer.id === before.selectedLayerId
+      ? { ...layer, strokes: [], redo: [] }
+      : layer),
+  };
+  await page.getByRole('button', { name: 'Clear selected layer', exact: true }).click();
+  // Full equality guards all untouched layer properties and histories, the
+  // photo bytes, dimensions, title, layer ordering, and selected layer ID.
+  await expect.poll(() => savedProject(page)).toEqual(after);
+  await expect(page.getByTestId('button-undo')).toBeDisabled();
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+  await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
+
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toBeVisible();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+  await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
+  await expect(page.getByTestId('button-undo')).toBeDisabled();
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+  await expect(page.getByTestId('button-visibility-layer-keep-top')).toHaveAttribute('aria-label', 'Show layer');
+  await expect.poll(() => savedProject(page)).toEqual(after);
+});
+
 test('strokes stay on the same photo details across zoom and pan, and hidden layers allow photo dragging', async ({ page }) => {
   await page.getByTestId('input-photo').setInputFiles(await markedPhoto(page, 'zoom-alignment.png'));
   await expect(page.getByTestId('img-reference')).toBeVisible();
