@@ -5,6 +5,10 @@
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
 
+/* Managed sign-in pages share CloudPainter's light sketchbook theme. */
+.account-page { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; background: #fffdf8; }
+.cl-formFieldInput::placeholder { color: #647782; opacity: 1; }
+
 :root {
   font-family: 'DM Sans', sans-serif;
   color: #28352d;

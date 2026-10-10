@@ -119,7 +119,23 @@ paths:
                 properties:
                   configured:
                     type: boolean
-                required: [configured]
+                  signedIn:
+                    type: boolean
+                  allowed:
+                    type: boolean
+                  dailyLimit:
+                    type: integer
+                  remaining:
+                    type: integer
+                  globalRemaining:
+                    type: integer
+                required: [configured, signedIn, allowed, dailyLimit, remaining, globalRemaining]
+        "503":
+          description: Account access database unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationError"
   /images/generate:
     post:
       operationId: generatePoeImage
@@ -144,8 +160,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ImageGenerationError"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationError"
         "403":
-          description: Requests must originate from CloudPainter
+          description: Account not approved or request did not originate from CloudPainter
           content:
             application/json:
               schema:

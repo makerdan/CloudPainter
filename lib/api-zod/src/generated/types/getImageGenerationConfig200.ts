@@ -8,4 +8,9 @@
 
 export type GetImageGenerationConfig200 = {
   configured: boolean;
+  signedIn: boolean;
+  allowed: boolean;
+  dailyLimit: number;
+  remaining: number;
+  globalRemaining: number;
 };

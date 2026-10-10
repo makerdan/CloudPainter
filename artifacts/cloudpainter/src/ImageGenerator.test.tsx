@@ -3,9 +3,14 @@ import { expect, test, type Page } from '@playwright/test';
 const STORE_KEY = 'cloudpainter-project-v1';
 const models = ['Nano-Banana-Pro', 'Nano-Banana-2', 'GPT-Image-2.5-Sunburst', 'Flux-2-Turbo'];
 const saved = (page: Page) => page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), STORE_KEY);
+const approvedConfig = { configured: true, signedIn: true, allowed: true, dailyLimit: 2, remaining: 2, globalRemaining: 20 };
+
+test.describe('signed-in generation (provider always stubbed)', () => {
+test.use({ storageState: process.env.CLOUDPAINTER_AUTH_STATE });
 
 test.beforeEach(async ({ page }) => {
-  await page.route('**/api/images/config', route => route.fulfill({ json: { configured: true } }));
+  if (!process.env.CLOUDPAINTER_AUTH_STATE) throw new Error('Set CLOUDPAINTER_AUTH_STATE to a signed-in Clerk Playwright storage-state file. No paid inference is used.');
+  await page.route('**/api/images/config', route => route.fulfill({ json: approvedConfig }));
   await page.goto('./');
   await page.getByTestId('button-add-layer').click();
   await expect.poll(async () => (await saved(page))?.layers.length).toBe(2);
@@ -64,7 +69,7 @@ test('Poe failures preserve the sketch and never issue an alternate-model reques
 test('missing Poe configuration disables generation without touching the sketch', async ({ page }) => {
   const before = await saved(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.route('**/api/images/config', route => route.fulfill({ json: { configured: false } }));
+  await page.route('**/api/images/config', route => route.fulfill({ json: { ...approvedConfig, configured: false } }));
   await page.getByTestId('button-generate-image').click();
   await page.getByTestId('input-image-prompt').fill('Clouds over a blue sky');
   await expect(page.getByRole('status').filter({ hasText: 'Poe is not configured' })).toBeVisible();
@@ -77,4 +82,38 @@ test('missing Poe configuration disables generation without touching the sketch'
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
   await page.screenshot({ path: '../../generated-artifacts/cloudpainter-poe-mobile.png' });
   expect(await saved(page)).toEqual(before);
+});
+
+for (const scope of ['account', 'global'] as const) {
+  test(`exhausted ${scope} budget disables generation`, async ({ page }) => {
+    const config = scope === 'account'
+      ? { ...approvedConfig, remaining: 0 }
+      : { ...approvedConfig, globalRemaining: 0 };
+    await page.route('**/api/images/config', route => route.fulfill({ json: config }));
+    await page.getByTestId('button-generate-image').click();
+    await expect(page.getByRole('dialog').getByRole('status').filter({ hasText: 'attempts remaining' })).toBeVisible();
+    await expect(page.getByTestId('button-submit-generation')).toBeDisabled();
+  });
+}
+
+test('unapproved accounts cannot submit a prompt', async ({ page }) => {
+  let calls = 0;
+  await page.route('**/api/images/config', route => route.fulfill({ json: { ...approvedConfig, allowed: false } }));
+  await page.route('**/api/images/generate', route => { calls++; return route.abort(); });
+  await page.getByTestId('button-generate-image').click();
+  await expect(page.getByText('This account is not approved to generate images. Ask the project owner for access.')).toBeVisible();
+  await expect(page.getByTestId('button-submit-generation')).toBeDisabled();
+  expect(calls).toBe(0);
+});
+});
+
+test('anonymous visitors can draw but must sign in before generation', async ({ page }) => {
+  let calls = 0;
+  await page.route('**/api/images/generate', route => { calls++; return route.abort(); });
+  await page.goto('./');
+  await page.getByTestId('button-add-layer').click();
+  await page.getByTestId('button-generate-image').click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
+  await expect(page.getByTestId('button-submit-generation')).toBeDisabled();
+  expect(calls).toBe(0);
 });

@@ -114,7 +114,12 @@ export const HealthCheckResponse = zod.object({
  * @summary Check whether Poe image generation is configured
  */
 export const GetImageGenerationConfigResponse = zod.object({
-  "configured": zod.boolean()
+  "configured": zod.boolean(),
+  "signedIn": zod.boolean(),
+  "allowed": zod.boolean(),
+  "dailyLimit": zod.number().int(),
+  "remaining": zod.number().int(),
+  "globalRemaining": zod.number().int()
 })
 
 

@@ -25,6 +25,13 @@ A browser-based creativity app for drawing imagined shapes over photographs with
 - `GET /api/images/config` checks local credential availability without contacting Poe. `POST /api/images/generate` only accepts the four approved models. The old `/api/openai/generate-image` route is removed.
 - Live paid Poe probes require explicit approval and are not part of ordinary validation.
 
+## Poe spending authorization
+
+- Only approved Clerk accounts may generate images. Membership and normal/admin roles are server-owned in the existing database; signup alone grants no spending access.
+- Daily UTC request budgets: normal 2, admin 15, all accounts combined 20. The shared five-attempt/ten-minute cap and two concurrent slots are durable across workers and restarts.
+- Potentially transmitted failures still count; never automatically retry or refund them.
+- See `docs/validation/poe-spending-controls.md` for approval, deployment setup, and paid-transport-free regression checks.
+
 
 ## Workspace tooltip checks
 

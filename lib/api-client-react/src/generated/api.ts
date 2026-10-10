@@ -410,7 +410,7 @@ export const getGetImageGenerationConfigQueryKey = () => {
     }
 
 
-export const getGetImageGenerationConfigQueryOptions = <TData = Awaited<ReturnType<typeof getImageGenerationConfig>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getImageGenerationConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetImageGenerationConfigQueryOptions = <TData = Awaited<ReturnType<typeof getImageGenerationConfig>>, TError = ErrorType<ImageGenerationError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getImageGenerationConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -429,14 +429,14 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type GetImageGenerationConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getImageGenerationConfig>>>
-export type GetImageGenerationConfigQueryError = ErrorType<unknown>
+export type GetImageGenerationConfigQueryError = ErrorType<ImageGenerationError>
 
 
 /**
  * @summary Check whether Poe image generation is configured
  */
 
-export function useGetImageGenerationConfig<TData = Awaited<ReturnType<typeof getImageGenerationConfig>>, TError = ErrorType<unknown>>(
+export function useGetImageGenerationConfig<TData = Awaited<ReturnType<typeof getImageGenerationConfig>>, TError = ErrorType<ImageGenerationError>>(
   options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getImageGenerationConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
