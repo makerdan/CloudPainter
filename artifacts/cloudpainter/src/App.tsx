@@ -7,9 +7,11 @@ import {
   Eye,
   EyeOff,
   Eraser,
+  Hand,
   ImagePlus,
   Layers,
   Paintbrush,
+  Minus,
   Plus,
   Redo2,
   RotateCcw,
@@ -18,6 +20,7 @@ import {
   Trash2,
   Undo2,
   Upload,
+  ZoomIn,
   X,
 } from 'lucide-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -81,11 +84,16 @@ function Home() {
   const [toast, setToast] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [photoZoom, setPhotoZoom] = useState(1);
+  const [photoPan, setPhotoPan] = useState({ x: 0, y: 0 });
+  const [panMode, setPanMode] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const stageWrapRef = useRef<HTMLDivElement>(null);
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
   const [stageBounds, setStageBounds] = useState({ width: 0, height: 0 });
   const drawingRef = useRef(false);
+  const panningRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
   const selectedLayer = project.layers.find(layer => layer.id === project.selectedLayerId) ?? project.layers[0];
   const visibleLayers = useMemo(() => [...project.layers].reverse(), [project.layers]);
@@ -95,6 +103,10 @@ function Home() {
     stageBounds.width,
     Math.min(stageBounds.height, Math.max(1, window.innerHeight - 310)),
   );
+  const clampPhotoPan = (pan: { x: number; y: number }, zoom = photoZoom) => ({
+    x: Math.max(-stageSize.width * (zoom - 1) / 2, Math.min(stageSize.width * (zoom - 1) / 2, pan.x)),
+    y: Math.max(-stageSize.height * (zoom - 1) / 2, Math.min(stageSize.height * (zoom - 1) / 2, pan.y)),
+  });
 
   useEffect(() => {
     const stageWrap = stageWrapRef.current;
@@ -113,6 +125,10 @@ function Home() {
     window.addEventListener('resize', updateViewportHeight);
     return () => window.removeEventListener('resize', updateViewportHeight);
   }, []);
+
+  useEffect(() => {
+    setPhotoPan(current => clampPhotoPan(current));
+  }, [stageSize.width, stageSize.height, photoZoom]);
 
   const announce = useCallback((message: string) => {
     setToast(message);
@@ -190,6 +206,9 @@ function Home() {
       image.onload = () => {
         const { width, height } = getScaledImageDimensions(image.naturalWidth, image.naturalHeight);
         const layer = createLayer('Sketch layer');
+        setPhotoZoom(1);
+        setPhotoPan({ x: 0, y: 0 });
+        setPanMode(false);
         setProject(current => ({
           ...current, image: String(reader.result), width, height,
           layers: [layer], selectedLayerId: layer.id,
@@ -207,6 +226,9 @@ function Home() {
 
   const startBlank = () => {
     const layer = createLayer('Layer 1');
+    setPhotoZoom(1);
+    setPhotoPan({ x: 0, y: 0 });
+    setPanMode(false);
     setProject(current => ({ ...current, image: null, width: 1200, height: 800, layers: [layer], selectedLayerId: layer.id, title: 'Untitled idea' }));
     announce('A fresh transparent canvas is ready.');
   };
@@ -223,11 +245,39 @@ function Home() {
     event.currentTarget.setPointerCapture(event.pointerId);
     drawingRef.current = true;
     const point = pointFromEvent(event);
-    const rect = event.currentTarget.getBoundingClientRect();
     setDraft({
       layerId: layer.id,
-      stroke: { points: [point], color, size: brushSize * (project.width / rect.width), tool },
+      stroke: { points: [point], color, size: brushSize * (project.width / stageSize.width), tool },
     });
+  };
+  const beginPhotoPan = (event: PointerEvent<HTMLDivElement>) => {
+    if (!panMode || photoZoom <= 1 || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    panningRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: photoPan.x,
+      originY: photoPan.y,
+    };
+    setIsPanning(true);
+  };
+  const continuePhotoPan = (event: PointerEvent<HTMLDivElement>) => {
+    const panning = panningRef.current;
+    if (panning?.pointerId === event.pointerId) {
+      setPhotoPan(clampPhotoPan({
+        x: panning.originX + event.clientX - panning.startX,
+        y: panning.originY + event.clientY - panning.startY,
+      }));
+    }
+  };
+  const finishPhotoPan = (event: PointerEvent<HTMLDivElement>) => {
+    if (panningRef.current?.pointerId === event.pointerId) {
+      panningRef.current = null;
+      setIsPanning(false);
+    }
   };
   const continueStroke = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!drawingRef.current) return;
@@ -283,6 +333,17 @@ function Home() {
     if (!renamingId) return;
     changeLayer(renamingId, layer => ({ ...layer, name: renameValue.trim() || layer.name }));
     setRenamingId(null);
+  };
+  const resetPhotoView = () => {
+    setPhotoZoom(1);
+    setPhotoPan({ x: 0, y: 0 });
+    setPanMode(false);
+  };
+  const changePhotoZoom = (value: number) => {
+    const nextZoom = Math.max(1, Math.min(4, value));
+    setPhotoZoom(nextZoom);
+    setPhotoPan(current => clampPhotoPan(current, nextZoom));
+    if (nextZoom === 1) setPanMode(false);
   };
 
   const exportPng = () => {
@@ -370,7 +431,7 @@ function Home() {
               {project.image ? (
                 <>
                   <img src={project.image} alt="Your unchanged reference photo" data-testid="img-reference" />
-                  <button className="icon-button" style={{ position: 'absolute', top: 6, right: 6, background: '#fbfaf6ed' }} aria-label="Remove photo" onClick={() => updateProject(current => ({ ...current, image: null }))} data-testid="button-remove-photo"><X size={14} /></button>
+                  <button className="icon-button" style={{ position: 'absolute', top: 6, right: 6, background: '#fbfaf6ed' }} aria-label="Remove photo" onClick={() => { resetPhotoView(); updateProject(current => ({ ...current, image: null })); }} data-testid="button-remove-photo"><X size={14} /></button>
                 </>
               ) : (
                 <>
@@ -426,26 +487,56 @@ function Home() {
             </div>
 
             <div className="panel stage-wrap" ref={stageWrapRef}>
+              {project.image && (
+                <div className="view-controls" aria-label="Reference photo view controls">
+                  <button className="view-control-button" type="button" title="Zoom out" aria-label="Zoom out" onClick={() => changePhotoZoom(photoZoom - 0.25)} disabled={photoZoom <= 1} data-testid="button-zoom-out"><Minus size={14} /></button>
+                  <label className="zoom-slider-label">
+                    <span className="zoom-value">{Math.round(photoZoom * 100)}%</span>
+                    <input
+                      type="range"
+                      min="100"
+                      max="400"
+                      step="25"
+                      value={Math.round(photoZoom * 100)}
+                      onChange={event => changePhotoZoom(Number(event.target.value) / 100)}
+                      aria-label="Reference photo zoom"
+                      data-testid="input-photo-zoom"
+                    />
+                  </label>
+                  <button className="view-control-button" type="button" title="Zoom in" aria-label="Zoom in" onClick={() => changePhotoZoom(photoZoom + 0.25)} disabled={photoZoom >= 4} data-testid="button-zoom-in"><ZoomIn size={14} /></button>
+                  <button className={`view-control-button ${panMode ? 'selected' : ''}`} type="button" title="Drag to reposition photo" aria-label="Toggle photo reposition mode" aria-pressed={panMode} onClick={() => setPanMode(current => !current)} disabled={photoZoom <= 1} data-testid="button-pan-mode"><Hand size={14} /></button>
+                  <button className="view-control-button" type="button" title="Reset fitted view" aria-label="Reset photo to fitted view" onClick={resetPhotoView} disabled={photoZoom === 1 && photoPan.x === 0 && photoPan.y === 0} data-testid="button-reset-photo-view"><RotateCcw size={14} /></button>
+                </div>
+              )}
               <div className="stage" style={{
                 aspectRatio: `${project.width} / ${project.height}`,
                 width: stageSize.width || undefined,
                 height: stageSize.height || undefined,
               }} data-testid="canvas-stage">
-                {project.image && <img className="base-photo" src={project.image} alt="" draggable={false} />}
-                {project.layers.map((layer, index) => (
-                  <canvas
-                    key={layer.id}
-                    ref={node => { canvasRefs.current[layer.id] = node; }}
-                    style={{ zIndex: index + 1, opacity: layer.visible ? layer.opacity : 0, pointerEvents: layer.id === project.selectedLayerId && layer.visible ? 'auto' : 'none' }}
-                    className={layer.id === project.selectedLayerId ? 'draw-surface' : ''}
-                    onPointerDown={event => beginStroke(event, layer)}
-                    onPointerMove={continueStroke}
-                    onPointerUp={finishStroke}
-                    onPointerCancel={finishStroke}
-                    aria-label={`Drawing surface for ${layer.name}`}
-                    data-testid={`canvas-layer-${layer.id}`}
-                  />
-                ))}
+                <div
+                  className={`stage-content ${panMode && photoZoom > 1 ? 'pan-ready' : ''} ${isPanning ? 'panning' : ''}`}
+                  style={{ transform: `translate3d(${photoPan.x}px, ${photoPan.y}px, 0) scale(${photoZoom})` }}
+                  onPointerDownCapture={beginPhotoPan}
+                  onPointerMove={continuePhotoPan}
+                  onPointerUp={finishPhotoPan}
+                  onPointerCancel={finishPhotoPan}
+                >
+                  {project.image && <img className="base-photo" src={project.image} alt="" draggable={false} />}
+                  {project.layers.map((layer, index) => (
+                    <canvas
+                      key={layer.id}
+                      ref={node => { canvasRefs.current[layer.id] = node; }}
+                      style={{ zIndex: index + 1, opacity: layer.visible ? layer.opacity : 0, pointerEvents: layer.id === project.selectedLayerId && layer.visible ? 'auto' : 'none' }}
+                      className={layer.id === project.selectedLayerId ? 'draw-surface' : ''}
+                      onPointerDown={event => beginStroke(event, layer)}
+                      onPointerMove={continueStroke}
+                      onPointerUp={finishStroke}
+                      onPointerCancel={finishStroke}
+                      aria-label={`Drawing surface for ${layer.name}`}
+                      data-testid={`canvas-layer-${layer.id}`}
+                    />
+                  ))}
+                </div>
                 {!project.image && !project.layers.some(layer => layer.strokes.length) && (
                   <div className="empty-stage">
                     <div className="empty-stage-inner">
@@ -459,7 +550,7 @@ function Home() {
             </div>
             <div className="statusbar">
               <span className="hint"><span className="keyboard-key">⌘ Z</span> undo <span className="keyboard-key">⇧ ⌘ Z</span> redo</span>
-              <span>{tool === 'pen' ? 'Draw over the photo; your original stays put.' : 'Erase only from the selected layer.'}</span>
+              <span>{panMode ? 'Drag the photo to reposition it; your drawing stays unchanged.' : tool === 'pen' ? 'Draw over the photo; your original stays put.' : 'Erase only from the selected layer.'}</span>
             </div>
           </section>
 
