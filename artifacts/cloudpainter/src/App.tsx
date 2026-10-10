@@ -32,6 +32,7 @@ import NotFound from '@/pages/not-found';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions } from '@/lib/imageDimensions';
 import { ImageGenerator } from '@/components/ImageGenerator';
+import { DrawingColorControl } from '@/components/DrawingColorControl';
 
 type Point = { x: number; y: number };
 type Stroke = { points: Point[]; color: string; size: number; tool: 'pen' | 'eraser' };
@@ -53,7 +54,6 @@ type Project = {
 };
 
 const STORE_KEY = 'cloudpainter-project-v1';
-const PALETTE = ['#315d4d', '#ee806b', '#e3ad3b', '#6d86a3', '#8b72a6', '#e6c9a9'];
 const id = () => `layer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const createLayer = (name: string): PaintLayer => ({
   id: id(), name, visible: true, opacity: 1, strokes: [], redo: [],
@@ -79,7 +79,7 @@ function readProject(): Project {
 function Home() {
   const [project, setProject] = useState<Project>(readProject);
   const [tool, setTool] = useState<'pen' | 'eraser'>('pen');
-  const [color, setColor] = useState(PALETTE[0]);
+  const [color, setColor] = useState('#315d4d');
   const [brushSize, setBrushSize] = useState(8);
   const [draft, setDraft] = useState<{ layerId: string; stroke: Stroke } | null>(null);
   const [savedStatus, setSavedStatus] = useState('Saved in this browser');
@@ -663,10 +663,7 @@ function Home() {
             <div className="panel-title-row"><h2 className="panel-title">Brush & feel</h2><span className="panel-kicker">02</span></div>
             <div className="control-block">
               <div className="control-head"><span>Color</span><span className="control-value">{tool === 'eraser' ? 'ERASER' : 'INK'}</span></div>
-              <div className="color-row">
-                {PALETTE.map((swatch, index) => <TooltipButton key={swatch} description={`${color === swatch && tool === 'pen' ? 'Current drawing color' : 'Use drawing color'} ${swatch.toUpperCase()}${tool === 'eraser' ? ' and switch from erasing to drawing' : ''}.`} className={`swatch ${color === swatch ? 'active' : ''}`} style={{ background: swatch }} aria-label={`Choose color ${index + 1} (${swatch.toUpperCase()})`} onClick={() => { setColor(swatch); setTool('pen'); }} data-testid={`button-color-${index + 1}`} />)}
-                <label className="color-custom" aria-label="Choose custom color"><Plus size={14} /><input type="color" value={color} onChange={event => { setColor(event.target.value); setTool('pen'); }} data-testid="input-color-custom" /></label>
-              </div>
+              <DrawingColorControl color={color} tool={tool} onChange={nextColor => { setColor(nextColor); setTool('pen'); }} />
             </div>
             <div className="control-block">
               <div className="control-head"><span>Brush size</span><span className="control-value">{brushSize} px</span></div>
