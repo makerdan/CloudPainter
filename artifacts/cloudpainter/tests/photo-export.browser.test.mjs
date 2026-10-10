@@ -231,6 +231,93 @@ async function exportAndInspect(page, name, dimensions) {
   ], `${name}: export should retain all four photo corners and its center without cropping`);
 }
 
+async function drawStroke(page, { startX, endX, y }) {
+  const surface = page.locator('canvas.draw-surface');
+  const bounds = await surface.boundingBox();
+  assert.ok(bounds, 'selected drawing layer should have a visible canvas');
+  await page.mouse.move(bounds.x + bounds.width * startX, bounds.y + bounds.height * y);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width * endX, bounds.y + bounds.height * y, { steps: 5 });
+  await page.mouse.up();
+}
+
+async function waitForStrokeCount(page, layerIndex, count) {
+  await page.waitForFunction(({ layerIndex, count }) => {
+    const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null');
+    return project?.layers?.[layerIndex]?.strokes?.length === count;
+  }, { layerIndex, count });
+}
+
+async function inspectExportedPixels(page, locations) {
+  await page.evaluate(() => {
+    window.__cloudPainterExport = null;
+    HTMLAnchorElement.prototype.click = function capturePngDownload() {
+      window.__cloudPainterExport = this.href;
+    };
+  });
+  await page.getByTestId('button-export').click();
+  await page.waitForFunction(() => typeof window.__cloudPainterExport === 'string');
+
+  return page.evaluate(async locations => {
+    const image = new Image();
+    image.src = window.__cloudPainterExport;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d');
+    context.drawImage(image, 0, 0);
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      pixels: locations.map(([x, y]) => [
+        ...context.getImageData(Math.floor(canvas.width * x), Math.floor(canvas.height * y), 1, 1).data,
+      ]),
+    };
+  }, locations);
+}
+
+test('exports only visible sketch layers and preserves their opacity', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await page.goto(appUrl);
+
+    await drawStroke(page, { startX: 0.15, endX: 0.35, y: 0.25 });
+    await waitForStrokeCount(page, 0, 1);
+
+    await page.getByTestId('button-add-layer').click();
+    await drawStroke(page, { startX: 0.4, endX: 0.6, y: 0.5 });
+    await waitForStrokeCount(page, 1, 1);
+    const hiddenLayer = page.locator('[data-testid^="layer-row-"]').filter({ hasText: 'Layer 2' });
+    await hiddenLayer.getByRole('button', { name: 'Hide layer' }).click();
+
+    await page.getByTestId('button-add-layer').click();
+    const opacity = page.getByTestId('input-layer-opacity');
+    await opacity.focus();
+    await opacity.press('Home');
+    for (let step = 0; step < 40; step++) await opacity.press('ArrowRight');
+    await drawStroke(page, { startX: 0.65, endX: 0.85, y: 0.75 });
+    await waitForStrokeCount(page, 2, 1);
+
+    const exported = await inspectExportedPixels(page, [
+      [0.25, 0.25],
+      [0.5, 0.5],
+      [0.75, 0.75],
+    ]);
+    assert.deepEqual([exported.width, exported.height], [1200, 800], 'blank sketch export should retain project dimensions');
+    assert.deepEqual(exported.pixels[0], [49, 93, 77, 255], 'fully opaque visible layer should remain fully opaque');
+    assert.deepEqual(exported.pixels[1], [0, 0, 0, 0], 'hidden layer stroke should be absent from the PNG');
+    const translucentColor = exported.pixels[2].slice(0, 3);
+    assert.ok(
+      translucentColor.every((channel, index) => Math.abs(channel - [49, 93, 77][index]) <= 3),
+      `visible translucent layer should retain its stroke color; received ${translucentColor}`,
+    );
+    assert.ok(Math.abs(exported.pixels[2][3] - 102) <= 1, `40% layer opacity should export at about 40% alpha; received ${exported.pixels[2][3]}`);
+  } finally {
+    await page.close();
+  }
+});
+
 for (const photo of [
   { name: 'landscape photo', width: 960, height: 480 },
   { name: 'portrait photo', width: 480, height: 960 },
