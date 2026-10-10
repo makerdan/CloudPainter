@@ -30,13 +30,16 @@ A browser-based creativity app for drawing imagined shapes over photographs with
 ## Where things live
 
 - `artifacts/cloudpainter/` — CloudPainter React + Vite app
-- `artifacts/api-server/` — shared API service; CloudPainter does not currently require it
+- `artifacts/api-server/` — shared API service, including the OpenAI image-generation endpoint
+- `lib/integrations-openai-ai-server/` — server-only Replit-managed OpenAI SDK integration
 - `artifacts/mockup-sandbox/` — component preview sandbox
 
 ## Architecture decisions
 
 - CloudPainter saves editable projects in the current browser; photos and drawings are not uploaded to a server.
 - Canvas drawing layers are independent of the source photo so the original remains unchanged.
+- Image-generation prompts are sent to OpenAI via Replit AI Integrations; uploaded photos and sketches are not sent. Usage is billed to Replit credits.
+- Generated images are previewed before the user explicitly starts a new sketch with them.
 
 ## Product
 

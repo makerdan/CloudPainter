@@ -27,8 +27,10 @@ export async function generateImageBuffer(
     model: "gpt-image-1",
     prompt,
     size,
-  });
+    n: 1,
+  }, { timeout: 120_000, maxRetries: 0 });
   const base64 = response.data?.[0]?.b64_json ?? "";
+  if (!base64) throw new Error("Image generation returned no image.");
   return Buffer.from(base64, "base64");
 }
 

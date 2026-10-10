@@ -1,1 +1,3 @@
 - [Browser checks on Nix](browser-checks-nix.md) — Chromium needs explicit shared libraries; GBM may be packaged separately from Mesa.
+- [OpenAI image templates](openai-image-templates.md) — template image-size values may be legacy; align the helper and contract with the chosen model.
+- [Poe-only image generation](poe-image-routing.md) — CloudPainter's four approved image-model options must route through Poe, without provider or model substitution.

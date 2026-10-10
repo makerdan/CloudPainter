@@ -150,3 +150,46 @@ test('Remove photo is an independent control and never opens the picker', async 
   await expect(page.getByTestId('input-photo')).toHaveAttribute('data-picker-clicks', '1');
   await expect.poll(() => savedProject(page)).toEqual({ ...before, image: null });
 });
+
+test('generated images stay in preview until explicitly used and persist after reload', async ({ page }) => {
+  await page.getByTestId('button-add-layer').click();
+  await expect.poll(async () => (await savedProject(page))?.layers.length).toBe(2);
+  const before = await savedProject(page);
+  const image = await png(page, 'generated.png', 640, 320);
+  let requestBody: unknown;
+  await page.route('**/api/openai/generate-image', async route => {
+    requestBody = route.request().postDataJSON();
+    await route.fulfill({ json: { b64_json: image.buffer.toString('base64') } });
+  });
+  await page.getByTestId('button-generate-image').click();
+  await expect(page.getByTestId('button-submit-generation')).toBeDisabled();
+  await page.getByTestId('input-image-prompt').fill('Clouds over a blue sky');
+  await page.locator('#image-size').selectOption('1536x1024');
+  await page.getByTestId('button-submit-generation').click();
+  await expect(page.getByTestId('generated-image-preview')).toBeVisible();
+  expect(requestBody).toEqual({ prompt: 'Clouds over a blue sky', size: '1536x1024' });
+  expect(await savedProject(page)).toEqual(before);
+  await page.getByTestId('button-use-generated-image').click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return { width: project.width, height: project.height, layers: project.layers.length };
+  }).toEqual({ width: 640, height: 320, layers: 1 });
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', `data:image/png;base64,${image.buffer.toString('base64')}`);
+});
+
+test('generation failures show an error without changing the current sketch', async ({ page }) => {
+  await page.getByTestId('button-add-layer').click();
+  await expect.poll(async () => (await savedProject(page))?.layers.length).toBe(2);
+  const before = await savedProject(page);
+  await page.route('**/api/openai/generate-image', route => route.fulfill({
+    status: 502, json: { error: 'Image generation did not complete. Please try again later.' },
+  }));
+  await page.getByTestId('button-generate-image').click();
+  await page.getByTestId('input-image-prompt').fill('Clouds over a blue sky');
+  await page.getByTestId('button-submit-generation').click();
+  await expect(page.getByTestId('generation-error')).toContainText('Image generation did not complete');
+  await expect(page.getByTestId('button-use-generated-image')).toHaveCount(0);
+  expect(await savedProject(page)).toEqual(before);
+});

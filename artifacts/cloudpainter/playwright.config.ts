@@ -19,6 +19,10 @@ export default defineConfig({
   use: {
     baseURL,
     browserName: 'chromium',
+    launchOptions: process.env.CHROMIUM_PATH ? {
+      executablePath: process.env.CHROMIUM_PATH,
+      args: ['--no-sandbox'],
+    } : undefined,
     viewport: { width: 1440, height: 1000 },
     trace: 'retain-on-failure',
   },

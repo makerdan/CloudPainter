@@ -30,6 +30,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions } from '@/lib/imageDimensions';
+import { ImageGenerator } from '@/components/ImageGenerator';
 
 type Point = { x: number; y: number };
 type Stroke = { points: Point[]; color: string; size: number; tool: 'pen' | 'eraser' };
@@ -192,6 +193,24 @@ function Home() {
   };
 
   const openPhoto = () => fileInput.current?.click();
+  const useGeneratedReference = (source: string, prompt: string): Promise<void> => new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const { width, height } = getScaledImageDimensions(image.naturalWidth, image.naturalHeight);
+      const layer = createLayer('Sketch layer');
+      setPhotoZoom(1);
+      setPhotoPan({ x: 0, y: 0 });
+      setPanMode(false);
+      setProject({
+        image: source, width, height, layers: [layer], selectedLayerId: layer.id,
+        title: prompt.slice(0, 42) || 'Generated idea',
+      });
+      announce('Generated image added. You can now sketch over it.');
+      resolve();
+    };
+    image.onerror = () => reject(new Error('Generated image could not be opened.'));
+    image.src = source;
+  });
   const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -453,6 +472,7 @@ function Home() {
               <button className="button" onClick={startBlank} data-testid="button-blank"><Plus size={13} /> Blank canvas</button>
               <input ref={fileInput} hidden type="file" accept="image/*" onChange={handleFile} data-testid="input-photo" />
             </div>
+            <ImageGenerator onUse={useGeneratedReference} />
 
             <p className="section-label">Drawing layers <span className="panel-kicker"> · {project.layers.length}</span></p>
             <div className="layer-list">
