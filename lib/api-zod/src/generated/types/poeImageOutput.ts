@@ -5,8 +5,10 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { PoeImageOutputMime } from './poeImageOutputMime';
 
-export interface OpenaiImageOutput {
+export interface PoeImageOutput {
   /** @minLength 1 */
   b64_json: string;
+  mime: PoeImageOutputMime;
 }

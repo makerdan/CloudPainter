@@ -9,31 +9,46 @@ export interface HealthStatus {
   status: string;
 }
 
-export type OpenaiImageInputSize = typeof OpenaiImageInputSize[keyof typeof OpenaiImageInputSize];
+export type PoeImageInputModel = typeof PoeImageInputModel[keyof typeof PoeImageInputModel];
 
 
-export const OpenaiImageInputSize = {
-  '1024x1024': '1024x1024',
-  '1536x1024': '1536x1024',
-  '1024x1536': '1024x1536',
-  auto: 'auto',
+export const PoeImageInputModel = {
+  'Nano-Banana-Pro': 'Nano-Banana-Pro',
+  'Nano-Banana-2': 'Nano-Banana-2',
+  'GPT-Image-25-Sunburst': 'GPT-Image-2.5-Sunburst',
+  'Flux-2-Turbo': 'Flux-2-Turbo',
 } as const;
 
-export interface OpenaiImageInput {
+export interface PoeImageInput {
   /**
      * @minLength 1
      * @maxLength 1000
      */
   prompt: string;
-  size?: OpenaiImageInputSize;
+  model: PoeImageInputModel;
 }
 
-export interface OpenaiImageOutput {
+export type PoeImageOutputMime = typeof PoeImageOutputMime[keyof typeof PoeImageOutputMime];
+
+
+export const PoeImageOutputMime = {
+  'image/png': 'image/png',
+  'image/jpeg': 'image/jpeg',
+  'image/webp': 'image/webp',
+} as const;
+
+export interface PoeImageOutput {
   /** @minLength 1 */
   b64_json: string;
+  mime: PoeImageOutputMime;
 }
 
-export interface OpenaiError {
+export interface ImageGenerationError {
   error: string;
+  code: string;
 }
+
+export type GetImageGenerationConfig200 = {
+  configured: boolean;
+};
 

@@ -6,8 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './getImageGenerationConfig200';
 export * from './healthStatus';
-export * from './openaiError';
-export * from './openaiImageInput';
-export * from './openaiImageInputSize';
-export * from './openaiImageOutput';
+export * from './imageGenerationError';
+export * from './poeImageInput';
+export * from './poeImageInputModel';
+export * from './poeImageOutput';
+export * from './poeImageOutputMime';

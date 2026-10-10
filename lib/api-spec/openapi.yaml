@@ -10,8 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
-  - name: openai
-    description: OpenAI image generation
+  - name: images
+    description: Poe-only image generation
 paths:
   /healthz:
     get:
@@ -26,42 +26,70 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
-  /openai/generate-image:
+  /images/config:
+    get:
+      operationId: getImageGenerationConfig
+      tags: [images]
+      summary: Check whether Poe image generation is configured
+      responses:
+        "200":
+          description: Local configuration status; does not contact Poe
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configured:
+                    type: boolean
+                required: [configured]
+  /images/generate:
     post:
-      operationId: generateOpenaiImage
-      tags: [openai]
-      summary: Generate a reference image from a prompt
+      operationId: generatePoeImage
+      tags: [images]
+      summary: Generate a reference image using an approved Poe model
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/OpenaiImageInput"
+              $ref: "#/components/schemas/PoeImageInput"
       responses:
         "200":
-          description: Generated image as base64-encoded PNG data
+          description: Validated generated image as base64 data
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OpenaiImageOutput"
+                $ref: "#/components/schemas/PoeImageOutput"
         "400":
-          description: Invalid prompt or image size
+          description: Invalid prompt or unapproved model
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OpenaiError"
+                $ref: "#/components/schemas/ImageGenerationError"
+        "403":
+          description: Requests must originate from CloudPainter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationError"
         "429":
           description: Image generation limit reached
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OpenaiError"
+                $ref: "#/components/schemas/ImageGenerationError"
         "502":
           description: Image generation provider failed
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OpenaiError"
+                $ref: "#/components/schemas/ImageGenerationError"
+        "503":
+          description: Poe configuration or selected model unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationError"
 components:
   schemas:
     HealthStatus:
@@ -71,32 +99,39 @@ components:
           type: string
       required:
         - status
-    OpenaiImageInput:
+    PoeImageInput:
       type: object
       properties:
         prompt:
           type: string
           minLength: 1
           maxLength: 1000
-        size:
+        model:
           type: string
-          enum: ["1024x1024", "1536x1024", "1024x1536", "auto"]
-          default: "1024x1024"
+          enum: ["Nano-Banana-Pro", "Nano-Banana-2", "GPT-Image-2.5-Sunburst", "Flux-2-Turbo"]
       required:
         - prompt
-    OpenaiImageOutput:
+        - model
+    PoeImageOutput:
       type: object
       properties:
         b64_json:
           type: string
           minLength: 1
+        mime:
+          type: string
+          enum: ["image/png", "image/jpeg", "image/webp"]
       required:
         - b64_json
-    OpenaiError:
+        - mime
+    ImageGenerationError:
       type: object
       properties:
         error:
           type: string
+        code:
+          type: string
       required:
         - error
+        - code
 

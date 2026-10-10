@@ -18,6 +18,13 @@ A browser-based creativity app for drawing imagined shapes over photographs with
 - With the existing preview running, use `CLOUDPAINTER_TEST_URL="https://${REPLIT_DEV_DOMAIN}/" pnpm --filter @workspace/cloudpainter run test:photo-card`. For another host, set the URL to its running CloudPainter page instead.
 - Browser tests use isolated local storage and do not start another server. Failed-run traces go to the ignored `generated-artifacts/` directory.
 
+## Poe image-generation checks
+
+- `pnpm --filter @workspace/integrations-openai-ai-server run test:poe` — mocked provider, model allowlist, errors, cancellation, and image-safety checks; no paid inference.
+- `CLOUDPAINTER_TEST_URL="https://${REPLIT_DEV_DOMAIN}/" pnpm --filter @workspace/cloudpainter run test:poe-images` — isolated model-picker, preview, preservation, error, and missing-configuration checks against the running app.
+- `GET /api/images/config` checks local credential availability without contacting Poe. `POST /api/images/generate` only accepts the four approved models. The old `/api/openai/generate-image` route is removed.
+- Live paid Poe probes require explicit approval and are not part of ordinary validation.
+
 
 ## Workspace tooltip checks
 
@@ -37,15 +44,16 @@ A browser-based creativity app for drawing imagined shapes over photographs with
 ## Where things live
 
 - `artifacts/cloudpainter/` — CloudPainter React + Vite app
-- `artifacts/api-server/` — shared API service, including the OpenAI image-generation endpoint
-- `lib/integrations-openai-ai-server/` — server-only Replit-managed OpenAI SDK integration
+- `artifacts/api-server/` — shared API service, including the Poe-only image-generation endpoint
+- `lib/integrations-openai-ai-server/` — server-only integration package; CloudPainter image generation uses its Poe adapter
 - `artifacts/mockup-sandbox/` — component preview sandbox
 
 ## Architecture decisions
 
 - CloudPainter saves editable projects in the current browser; photos and drawings are not uploaded to a server.
 - Canvas drawing layers are independent of the source photo so the original remains unchanged.
-- Image-generation prompts are sent to OpenAI via Replit AI Integrations; uploaded photos and sketches are not sent. Usage is billed to Replit credits.
+- Image-generation prompts use Poe only, with Nano-Banana-Pro, Nano-Banana-2, GPT-Image-2.5-Sunburst, or Flux-2-Turbo. No provider/model substitution or Replit AI fallback is permitted for images. Uploaded photos and sketches are not sent; usage consumes the connected Poe account's points.
+- The Poe adapter reads POE_API_KEY lazily and supports linked secrets. The old direct OpenAI route is removed. The anonymous generation endpoint has an instance-wide five-request/ten-minute cap and two concurrent requests; these are not durable, per-user billing limits.
 - Generated images are previewed before the user explicitly starts a new sketch with them.
 
 ## Product

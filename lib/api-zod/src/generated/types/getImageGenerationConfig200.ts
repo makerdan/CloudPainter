@@ -6,6 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface OpenaiError {
-  error: string;
-}
+export type GetImageGenerationConfig200 = {
+  configured: boolean;
+};

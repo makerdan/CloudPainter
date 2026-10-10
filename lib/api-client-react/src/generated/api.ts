@@ -20,10 +20,11 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  GetImageGenerationConfig200,
   HealthStatus,
-  OpenaiError,
-  OpenaiImageInput,
-  OpenaiImageOutput
+  ImageGenerationError,
+  PoeImageInput,
+  PoeImageOutput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -131,18 +132,95 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 
 
 
-export const getGenerateOpenaiImageUrl = () => {
+export const getGetImageGenerationConfigUrl = () => {
 
 
 
 
-  return `/api/openai/generate-image`
+  return `/api/images/config`
 }
 
 /**
- * @summary Generate a reference image from a prompt
+ * @summary Check whether Poe image generation is configured
  */
-export const generateOpenaiImage = async (openaiImageInput: OpenaiImageInput, options?: Parameters<typeof customFetch>[1]): Promise<OpenaiImageOutput> => {
+export const getImageGenerationConfig = async ( options?: Parameters<typeof customFetch>[1]): Promise<GetImageGenerationConfig200> => {
+
+  return customFetch<GetImageGenerationConfig200>(getGetImageGenerationConfigUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetImageGenerationConfigQueryKey = () => {
+    return [
+    `/api/images/config`
+    ] as const;
+    }
+
+
+export const getGetImageGenerationConfigQueryOptions = <TData = Awaited<ReturnType<typeof getImageGenerationConfig>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getImageGenerationConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetImageGenerationConfigQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getImageGenerationConfig>>> = ({ signal }) => getImageGenerationConfig({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getImageGenerationConfig>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetImageGenerationConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getImageGenerationConfig>>>
+export type GetImageGenerationConfigQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Check whether Poe image generation is configured
+ */
+
+export function useGetImageGenerationConfig<TData = Awaited<ReturnType<typeof getImageGenerationConfig>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getImageGenerationConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetImageGenerationConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGeneratePoeImageUrl = () => {
+
+
+
+
+  return `/api/images/generate`
+}
+
+/**
+ * @summary Generate a reference image using an approved Poe model
+ */
+export const generatePoeImage = async (poeImageInput: PoeImageInput, options?: Parameters<typeof customFetch>[1]): Promise<PoeImageOutput> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -158,12 +236,12 @@ export const generateOpenaiImage = async (openaiImageInput: OpenaiImageInput, op
     }
     return headers;
   };
-return customFetch<OpenaiImageOutput>(getGenerateOpenaiImageUrl(),
+return customFetch<PoeImageOutput>(getGeneratePoeImageUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(openaiImageInput)
+    body: JSON.stringify(poeImageInput)
   }
 );}
 
@@ -171,13 +249,13 @@ return customFetch<OpenaiImageOutput>(getGenerateOpenaiImageUrl(),
 
 
 
-export const getGenerateOpenaiImageMutationKey = () => ['generateOpenaiImage'] as const;
+export const getGeneratePoeImageMutationKey = () => ['generatePoeImage'] as const;
 
-export const getGenerateOpenaiImageMutationOptions = <TError = ErrorType<OpenaiError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateOpenaiImage>>, TError,GenerateOpenaiImageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof generateOpenaiImage>>, TError,GenerateOpenaiImageMutationVariables, TContext> => {
+export const getGeneratePoeImageMutationOptions = <TError = ErrorType<ImageGenerationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generatePoeImage>>, TError,GeneratePoeImageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generatePoeImage>>, TError,GeneratePoeImageMutationVariables, TContext> => {
 
-const mutationKey = getGenerateOpenaiImageMutationKey();
+const mutationKey = getGeneratePoeImageMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -187,10 +265,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateOpenaiImage>>, GenerateOpenaiImageMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generatePoeImage>>, GeneratePoeImageMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  generateOpenaiImage(data,requestOptions)
+          return  generatePoeImage(data,requestOptions)
         }
 
 
@@ -200,22 +278,22 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type GenerateOpenaiImageMutationResult = NonNullable<Awaited<ReturnType<typeof generateOpenaiImage>>>
-    export type GenerateOpenaiImageMutationBody = BodyType<OpenaiImageInput>
-    export type GenerateOpenaiImageMutationError = ErrorType<OpenaiError>
-    export type GenerateOpenaiImageMutationVariables = {data: BodyType<OpenaiImageInput>}
+    export type GeneratePoeImageMutationResult = NonNullable<Awaited<ReturnType<typeof generatePoeImage>>>
+    export type GeneratePoeImageMutationBody = BodyType<PoeImageInput>
+    export type GeneratePoeImageMutationError = ErrorType<ImageGenerationError>
+    export type GeneratePoeImageMutationVariables = {data: BodyType<PoeImageInput>}
 
     /**
- * @summary Generate a reference image from a prompt
+ * @summary Generate a reference image using an approved Poe model
  */
-export const useGenerateOpenaiImage = <TError = ErrorType<OpenaiError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateOpenaiImage>>, TError,GenerateOpenaiImageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useGeneratePoeImage = <TError = ErrorType<ImageGenerationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generatePoeImage>>, TError,GeneratePoeImageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof generateOpenaiImage>>,
+        Awaited<ReturnType<typeof generatePoeImage>>,
         TError,
-        GenerateOpenaiImageMutationVariables,
+        GeneratePoeImageMutationVariables,
         TContext
       > => {
-      return useMutation(getGenerateOpenaiImageMutationOptions(options));
+      return useMutation(getGeneratePoeImageMutationOptions(options));
     }
 

@@ -2,3 +2,4 @@
 - [OpenAI image templates](openai-image-templates.md) — template image-size values may be legacy; align the helper and contract with the chosen model.
 - [Poe-only image generation](poe-image-routing.md) — CloudPainter's four approved image-model options must route through Poe, without provider or model substitution.
 - [Tooltip keyboard checks](tooltip-keyboard-checks.md) — wait for dismissed content to close and use real focus transitions when checking changed Radix descriptions.
+- [Linked secret visibility](linked-secret-visibility.md) — account-linked secrets may reach the runtime even when secret-status metadata reports them absent.

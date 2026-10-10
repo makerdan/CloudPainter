@@ -5,13 +5,13 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { OpenaiImageInputSize } from './openaiImageInputSize';
+import type { PoeImageInputModel } from './poeImageInputModel';
 
-export interface OpenaiImageInput {
+export interface PoeImageInput {
   /**
      * @minLength 1
      * @maxLength 1000
      */
   prompt: string;
-  size?: OpenaiImageInputSize;
+  model: PoeImageInputModel;
 }

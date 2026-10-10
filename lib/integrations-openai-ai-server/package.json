@@ -3,10 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test:poe": "tsx --test tests/poe-image.test.ts"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./batch": "./src/batch/index.ts",
     "./image": "./src/image/index.ts",
+    "./poe": "./src/poe/images.ts",
     "./audio": "./src/audio/index.ts"
   },
   "dependencies": {
@@ -15,6 +19,7 @@
     "p-retry": "^7.1.1"
   },
   "devDependencies": {
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "tsx": "catalog:"
   }
 }

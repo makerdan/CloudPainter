@@ -1,10 +1,10 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
-import openaiImagesRouter from "./openai/images";
+import imagesRouter from "./images";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
-router.use(openaiImagesRouter);
+router.use(imagesRouter);
 
 export default router;

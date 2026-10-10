@@ -18,22 +18,31 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * @summary Generate a reference image from a prompt
+ * @summary Check whether Poe image generation is configured
  */
-export const generateOpenaiImageBodyPromptMax = 1000;
+export const GetImageGenerationConfigResponse = zod.object({
+  "configured": zod.boolean()
+})
 
-export const generateOpenaiImageBodySizeDefault = `1024x1024`;
 
-export const GenerateOpenaiImageBody = zod.object({
-  "prompt": zod.string().min(1).max(generateOpenaiImageBodyPromptMax),
-  "size": zod.enum(['1024x1024', '1536x1024', '1024x1536', 'auto']).default(generateOpenaiImageBodySizeDefault)
+/**
+ * @summary Generate a reference image using an approved Poe model
+ */
+export const generatePoeImageBodyPromptMax = 1000;
+
+
+
+export const GeneratePoeImageBody = zod.object({
+  "prompt": zod.string().min(1).max(generatePoeImageBodyPromptMax),
+  "model": zod.enum(['Nano-Banana-Pro', 'Nano-Banana-2', 'GPT-Image-2.5-Sunburst', 'Flux-2-Turbo'])
 })
 
 
 
 
-export const GenerateOpenaiImageResponse = zod.object({
-  "b64_json": zod.string().min(1)
+export const GeneratePoeImageResponse = zod.object({
+  "b64_json": zod.string().min(1),
+  "mime": zod.enum(['image/png', 'image/jpeg', 'image/webp'])
 })
 
 
