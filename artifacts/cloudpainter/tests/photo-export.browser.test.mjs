@@ -292,6 +292,7 @@ test('exports only visible sketch layers and preserves their opacity', async () 
     await hiddenLayer.getByRole('button', { name: 'Hide layer' }).click();
 
     await page.getByTestId('button-add-layer').click();
+    await page.getByTestId('disclosure-opacity').click();
     const opacity = page.getByTestId('input-layer-opacity');
     await opacity.focus();
     await opacity.press('Home');

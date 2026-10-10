@@ -58,7 +58,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('the entire empty card opens the picker once, without a duplicate upload action', async ({ page }) => {
-  const card = page.getByTestId('button-photo-card');
+    const card = page.getByTestId('button-photo-card');
   await expect(page.getByTestId('button-upload')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Upload photo', exact: true })).toHaveCount(0);
   await expect(page.getByTestId('button-blank')).toBeVisible();
@@ -82,7 +82,7 @@ for (const key of ['Enter', 'Space']) {
       style: getComputedStyle(el).outlineStyle,
       width: getComputedStyle(el).outlineWidth,
     }))).toEqual({ visible: true, style: 'solid', width: '3px' });
-    const chooser = page.waitForEvent('filechooser');
+  const chooser = page.waitForEvent('filechooser');
     await page.keyboard.press(key);
     await (await chooser).setFiles([]);
     await expect(page.getByTestId('input-photo')).toHaveAttribute('data-picker-clicks', '1');
@@ -99,7 +99,7 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
   await expect(preview).toBeVisible();
   await expect(page.getByRole('button', { name: 'Replace reference photo', exact: true })).toBeVisible();
   await expect.poll(async () => {
-    const project = await savedProject(page);
+      const project = await savedProject(page);
     return project && { width: project.width, height: project.height, title: project.title };
   }).toEqual({ width: 600, height: 400, title: 'landscape' });
 
@@ -110,7 +110,7 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
   await preview.click();
   await (await replacement).setFiles(portrait);
   await expect.poll(async () => {
-    const project = await savedProject(page);
+      const project = await savedProject(page);
     return project && { width: project.width, height: project.height, title: project.title, layers: project.layers.length };
   }).toEqual({ width: 300, height: 500, title: 'portrait', layers: 1 });
   const dimensions = await preview.evaluate(image => {
@@ -134,25 +134,36 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
 });
 
 test('cancelling replacement preserves zoom, pan, and saved photo, dimensions, title, and drawings', async ({ page }) => {
-  const photo = await png(page, 'keep-me.png', 320, 180);
+  const photo = await png(page, 'clear-layer-reference.png', 480, 320);
   const chooser = page.waitForEvent('filechooser');
   await page.getByTestId('button-photo-card').click();
   await (await chooser).setFiles(photo);
   await expect(page.getByTestId('img-reference')).toBeVisible();
   await page.getByTestId('button-add-layer').click();
   const surface = page.locator('canvas.draw-surface');
-  const box = await surface.boundingBox();
+      const box = await surface.boundingBox();
   expect(box).not.toBeNull();
   await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
   await page.mouse.down();
   await page.mouse.move(box!.x + box!.width * 0.6, box!.y + box!.height * 0.6);
   await page.mouse.up();
   await expect.poll(async () => {
-    const project = await savedProject(page);
-    return project?.layers[1]?.strokes.length;
-  }).toBe(1);
-  await zoomAndPan(page);
-  const before = await savedProject(page);
+      const project = await savedProject(page);
+      return {
+        selected: project?.selectedLayerId,
+        layers: project?.layers.map((layer: { name: string; visible: boolean; opacity: number; strokes: unknown[]; redo: unknown[] }) => ({
+          name: layer.name, visible: layer.visible, opacity: layer.opacity,
+          strokes: layer.strokes.length, redo: layer.redo.length,
+        })),
+      };
+    }).toEqual({
+      selected: deleteSelected ? ids[1] : ids[0],
+      layers: ids.map((_, index) => ({
+        name: `Preserved details ${index + 1}`, visible: index !== 2,
+        opacity: (40 + index * 20) / 100, strokes: 1, redo: 1,
+      })),
+    });
+    const before = await savedProject(page);
   const viewBefore = await photoView(page);
   const replacement = page.waitForEvent('filechooser');
   await page.getByTestId('img-reference').click();
@@ -175,7 +186,7 @@ test('cancelling replacement preserves zoom, pan, and saved photo, dimensions, t
 });
 
 test('Remove photo is an independent control and never opens the picker', async ({ page }) => {
-  const photo = await png(page, 'remove-me.png', 320, 180);
+  const photo = await png(page, 'clear-layer-reference.png', 480, 320);
   const chooser = page.waitForEvent('filechooser');
   await page.getByTestId('button-photo-card').click();
   await (await chooser).setFiles(photo);
@@ -186,10 +197,10 @@ test('Remove photo is an independent control and never opens the picker', async 
   // Populate both layers through the drawing UI so removal cannot silently
   // clear artwork while leaving an otherwise plausible empty project behind.
   const firstLayerId = (await savedProject(page)).selectedLayerId;
-  for (let index = 0; index < 2; index++) {
-    if (index === 1) await page.getByTestId('button-add-layer').click();
-    const surface = page.locator('canvas.draw-surface').last();
-    const box = await surface.boundingBox();
+    for (let index = 0; index < 3; index++) {
+      if (index) await page.getByTestId('button-add-layer').click();
+  const surface = page.locator('canvas.draw-surface');
+      const box = await surface.boundingBox();
     expect(box).not.toBeNull();
     await page.mouse.move(box!.x + box!.width * 0.3, box!.y + box!.height * (0.3 + index * 0.3));
     await page.mouse.down();
@@ -201,26 +212,28 @@ test('Remove photo is an independent control and never opens the picker', async 
   await page.getByTestId(`button-rename-${secondLayerId}`).click();
   await page.getByTestId(`input-rename-${secondLayerId}`).fill('Hidden details');
   await page.getByTestId(`input-rename-${secondLayerId}`).press('Enter');
+  await page.getByTestId('disclosure-opacity').click();
   await page.getByTestId('input-layer-opacity').fill('45');
   await page.getByTestId(`button-visibility-${secondLayerId}`).click();
   // Select the older layer rather than the default newly-created top layer.
   await page.getByTestId(`button-select-layer-${firstLayerId}`).click();
   await expect.poll(async () => {
-    const project = await savedProject(page);
-    return project && {
-      selectedLayerId: project.selectedLayerId,
-      layers: project.layers.map((layer: { name: string; visible: boolean; opacity: number; strokes: unknown[] }) => ({
-        name: layer.name, visible: layer.visible, opacity: layer.opacity, strokes: layer.strokes.length,
+      const project = await savedProject(page);
+      return {
+        selected: project?.selectedLayerId,
+        layers: project?.layers.map((layer: { name: string; visible: boolean; opacity: number; strokes: unknown[]; redo: unknown[] }) => ({
+          name: layer.name, visible: layer.visible, opacity: layer.opacity,
+          strokes: layer.strokes.length, redo: layer.redo.length,
+        })),
+      };
+    }).toEqual({
+      selected: deleteSelected ? ids[1] : ids[0],
+      layers: ids.map((_, index) => ({
+        name: `Preserved details ${index + 1}`, visible: index !== 2,
+        opacity: (40 + index * 20) / 100, strokes: 1, redo: 1,
       })),
-    };
-  }).toEqual({
-    selectedLayerId: firstLayerId,
-    layers: [
-      { name: 'Sketch layer', visible: true, opacity: 1, strokes: 1 },
-      { name: 'Hidden details', visible: false, opacity: 0.45, strokes: 1 },
-    ],
-  });
-  const before = await savedProject(page);
+    });
+    const before = await savedProject(page);
   expect(before).toMatchObject({ width: 320, height: 180, title: 'remove-me' });
   expect(before.image).not.toBeNull();
   expect(await remove.evaluate(el => el.parentElement?.closest('button'))).toBeNull();
@@ -244,34 +257,10 @@ test('Remove photo is an independent control and never opens the picker', async 
 
 test('Clear selected layer clears only its strokes and redo history and persists after reload', async ({ page }) => {
   const photo = await png(page, 'clear-layer-reference.png', 480, 320);
-  const stroke = (color: string, y: number) => ({
-    points: [{ x: 0.2, y }, { x: 0.7, y }],
-    color, size: 8, tool: 'pen',
-  });
+      for (let stroke = 0; stroke < 2; stroke++) {
   // Select the middle layer to catch implementations that clear the first,
   // last, or all layers. Every layer has artwork and redo history to protect.
-  const before = {
-    image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
-    width: 480,
-    height: 320,
-    title: 'Keep the rest of my sketch',
-    selectedLayerId: 'layer-clear-target',
-    layers: [
-      {
-        id: 'layer-keep-bottom', name: 'Background lines', visible: true, opacity: 0.65,
-        strokes: [stroke('#e53935', 0.25)], redo: [stroke('#ff9800', 0.3)],
-      },
-      {
-        id: 'layer-clear-target', name: 'Draft to clear', visible: true, opacity: 0.45,
-        strokes: [stroke('#1e88e5', 0.5), stroke('#8e24aa', 0.55)],
-        redo: [stroke('#00acc1', 0.6)],
-      },
-      {
-        id: 'layer-keep-top', name: 'Hidden details', visible: false, opacity: 0.8,
-        strokes: [stroke('#43a047', 0.75)], redo: [stroke('#3949ab', 0.8)],
-      },
-    ],
-  };
+    const before = await savedProject(page);
   // Seed before React mounts, after the previous page's unload save. Seed
   // only once so the final reload reads the app's actual persisted result.
   await page.addInitScript(({ key, project }) => {
@@ -323,7 +312,7 @@ for (const deleteSelected of [true, false]) {
     const ids: string[] = [];
     for (let index = 0; index < 3; index++) {
       if (index) await page.getByTestId('button-add-layer').click();
-      const surface = page.locator('canvas.draw-surface').last();
+  const surface = page.locator('canvas.draw-surface');
       const id = (await surface.getAttribute('data-testid'))!.replace('canvas-layer-', '');
       ids.push(id);
       const box = await surface.boundingBox();

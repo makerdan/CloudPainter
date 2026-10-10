@@ -23,9 +23,9 @@ export function DrawingColorControl({ color, tool, onChange }: Props) {
         <span className="selected-color-preview" style={{ background: color }} aria-hidden="true" />
         <span>{selected?.name ?? 'Custom'} <strong>{color.toUpperCase()}</strong></span>
       </div>
+      <div className="preset-color-grid" aria-label="Preset drawing colors">
       {COLOR_GROUPS.map((group, groupIndex) => (
         <div key={group.name} role="group" aria-label={`${group.name} drawing colors`}>
-          <div className="color-group-label">{group.name}</div>
           <div className="color-row">
             {group.colors.map((swatch, index) => (
               <TooltipButton
@@ -44,15 +44,8 @@ export function DrawingColorControl({ color, tool, onChange }: Props) {
           </div>
         </div>
       ))}
-      <div className="custom-color-picker">
-        <label htmlFor={`${fieldId}-picker`}>Custom picker</label>
-        <ActionTooltip description="Open the color picker to choose any drawing color.">
-          <input id={`${fieldId}-picker`} type="color" value={color}
-            onChange={event => onChange(event.target.value)}
-            data-testid="input-color-custom" />
-        </ActionTooltip>
       </div>
-      <form className="hex-color-form" onSubmit={event => {
+      <form className="custom-color-form" onSubmit={event => {
         event.preventDefault();
         const normalized = normalizeHexColor(hex);
         if (!normalized) {
@@ -63,19 +56,27 @@ export function DrawingColorControl({ color, tool, onChange }: Props) {
         setHex(normalized.toUpperCase());
         setError('');
       }} noValidate>
-        <label htmlFor={`${fieldId}-hex`}>Hex color</label>
-        <div className="hex-color-entry">
+        <label className="sr-only" htmlFor={`${fieldId}-picker`}>Custom picker</label>
+        <label className="sr-only" htmlFor={`${fieldId}-hex`}>Hex color</label>
+        <div className="custom-color-entry">
+          <ActionTooltip description="Open the color picker to choose any drawing color.">
+            <input id={`${fieldId}-picker`} type="color" value={color}
+              onChange={event => onChange(event.target.value)}
+              data-testid="input-color-custom" />
+          </ActionTooltip>
+          <ActionTooltip description="Enter 3 or 6 hex digits, with an optional #, then press Enter or Apply.">
           <input id={`${fieldId}-hex`} type="text" value={hex} spellCheck={false}
             autoComplete="off" placeholder="#A1B2C3" aria-invalid={!!error}
-            aria-describedby={`${fieldId}-feedback`}
+            aria-describedby={error ? `${fieldId}-feedback` : undefined}
             onChange={event => { setHex(event.target.value); setError(''); }}
             data-testid="input-color-hex" />
+          </ActionTooltip>
           <TooltipButton type="submit" className="button"
             description="Apply the hex color and switch to drawing; accepts 3 or 6 hex digits."
             data-testid="button-apply-color">Apply</TooltipButton>
         </div>
-        <p id={`${fieldId}-feedback`} className={`hex-color-feedback ${error ? 'invalid' : ''}`}
-          aria-live="polite">{error || '3 or 6 hex digits; # is optional.'}</p>
+        <p id={`${fieldId}-feedback`} className="hex-color-feedback invalid"
+          aria-live="polite" hidden={!error}>{error}</p>
       </form>
       <AccountPalette color={color} onChange={onChange} />
     </div>

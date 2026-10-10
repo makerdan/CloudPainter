@@ -148,8 +148,13 @@ h1 { font-family:var(--font-display); font-size:32px; line-height:1.1; font-weig
 .control-value { font:10px var(--font-mono); color:#78827a; }
 .range-input { width:100%; accent-color:var(--forest); height:4px; cursor:pointer; }
 .drawing-colors { min-width:0; }
-.color-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:3px; }
-.swatch { height:28px; width:28px; flex:none; border:1px solid #858b80; border-radius:50%; padding:0; display:grid; place-items:center; }
+.preset-color-grid { display:grid; gap:6px; margin:10px 0; padding:3px; }
+.color-row { display:grid; grid-template-columns:repeat(6,minmax(24px,1fr)); gap:6px; }
+.preset-color-grid > [role="group"] { display:contents; }
+.preset-color-grid .color-row { display:contents; }
+.preset-color-grid { grid-template-columns:repeat(6,minmax(24px,1fr)); }
+.swatch { height:28px; width:28px; flex:none; border:1px solid #858b80; border-radius:7px; padding:0; display:grid; place-items:center; }
+.preset-color-grid .swatch { width:100%; }
 .swatch.active { outline:2px solid #315d4d; outline-offset:2px; }
 .swatch:focus-visible { outline:3px solid #1d4ed8; outline-offset:3px; }
 .swatch-check { color:white; filter:drop-shadow(0 1px 1px #000) drop-shadow(0 -1px 1px #000); }
@@ -157,9 +162,27 @@ h1 { font-family:var(--font-display); font-size:32px; line-height:1.1; font-weig
 .selected-color { display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-size:11px; color:#526057; }
 .selected-color strong { font:11px var(--font-mono); display:inline-block; }
 .selected-color-preview { width:24px; height:24px; border:1px solid #858b80; border-radius:6px; flex:none; }
-.custom-color-picker { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin-top:12px; }
-.custom-color-picker label,.hex-color-form label { font-size:11px; color:#526057; }
-.custom-color-picker input { width:48px; height:32px; padding:2px; background:white; border:1px solid #aeb6a6; border-radius:6px; cursor:pointer; }
+.custom-color-entry { display:grid; grid-template-columns:30px minmax(0,1fr) auto; gap:6px; align-items:center; }
+.custom-color-entry input[type="color"] { width:30px; height:32px; padding:2px; background:white; border:1px solid #aeb6a6; border-radius:6px; cursor:pointer; }
+.custom-color-entry input[type="text"] { width:100%; min-width:0; height:32px; border:1px solid #aeb6a6; border-radius:6px; padding:4px 6px; font:11px var(--font-mono); background:white; color:#30473b; }
+.custom-color-entry input[aria-invalid="true"] { border-color:#b42318; }
+.custom-color-entry .button { min-width:0; min-height:32px; padding:4px 8px; font-size:11px; }
+.custom-color-entry input:focus-visible { outline:2px solid #1d4ed8; outline-offset:2px; }
+.brush-disclosure { width:100%; min-width:0; }
+.brush-disclosure h3 { margin:0; }
+.brush-disclosure-trigger { display:flex; align-items:center; gap:6px; width:100%; min-height:32px; text-align:left; padding:4px 0; border:0; background:transparent; border-radius:4px; font-size:11px; font-weight:700; color:var(--forest); cursor:pointer; }
+.brush-disclosure-title { flex:1; }
+.brush-disclosure-trigger .control-value { display:flex; align-items:center; gap:4px; font-size:9px; white-space:nowrap; }
+.header-color-preview { width:14px; height:14px; border:1px solid #858b80; border-radius:4px; }
+.brush-disclosure-trigger:focus-visible { outline:2px solid #1d4ed8; outline-offset:3px; }
+.brush-disclosure-trigger:hover { background:#315d4d08; }
+.disclosure-chevron { flex:none; transition:transform 150ms ease; }
+.brush-disclosure-trigger[aria-expanded="true"] .disclosure-chevron { transform:rotate(180deg); }
+.brush-disclosure-content { margin-top:8px; }
+.brush-disclosure-content[hidden], .hex-color-feedback[hidden] { display:none; }
+.brush-disclosure.control-block { padding-bottom:8px; }
+@media (prefers-reduced-motion:reduce) { .disclosure-chevron { transition:none; } }
+.hex-color-form label { font-size:11px; color:#526057; }
 .hex-color-form { margin-top:10px; }
 .hex-color-entry { display:flex; flex-wrap:wrap; gap:6px; margin-top:5px; }
 .hex-color-entry input { width:0; min-width:80px; flex:1; border:1px solid #aeb6a6; border-radius:7px; padding:7px 8px; font:11px var(--font-mono); background:white; color:#30473b; }

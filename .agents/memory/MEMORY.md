@@ -4,3 +4,5 @@
 - [Tooltip keyboard checks](tooltip-keyboard-checks.md) — wait for dismissed content to close and use real focus transitions when checking changed Radix descriptions.
 - [Linked secret visibility](linked-secret-visibility.md) — account-linked secrets may reach the runtime even when secret-status metadata reports them absent.
 - [Vite dependency cache](vite-dependency-cache.md) — after React upgrades, stale prebundled dependencies can cause a false version-mismatch overlay.
+- [Browser state baselines](browser-state-baselines.md) — settle initial autosave before snapshot comparisons; use keyboard modality for focus-ring assertions.
+- [Completion reconciliation](completion-reconciliation.md) — a rejected completion may still commit integrated changes; inspect current source when feedback differs from the earlier diff.

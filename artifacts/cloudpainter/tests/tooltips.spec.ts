@@ -12,7 +12,7 @@ async function focusAgain(page: Page, button: Locator) {
   await page.keyboard.press('Escape');
   await expect(page.getByRole('tooltip')).toHaveCount(0);
   const target = await trigger(button);
-  await page.getByTestId('input-brush-size').focus();
+   await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
   await target.focus();
 }
 
@@ -36,6 +36,10 @@ async function checkTooltip(page: Page, button: Locator, keyboard = false) {
 
 test('every workspace button explains its action by hover and focus, including disabled states', async ({ page }) => {
   await page.goto('./');
+  for (const id of ['color', 'size', 'opacity', 'reminder']) {
+    const header = page.getByTestId(`disclosure-${id}`);
+    if (await header.getAttribute('aria-expanded') === 'false') await header.click();
+  }
   const buttons = page.locator('main button');
   expect(await buttons.count()).toBeGreaterThan(15);
   for (const button of await buttons.all()) {
@@ -102,6 +106,7 @@ test('every workspace button explains its action by hover and focus, including d
 
 test('photo controls explain zoom limits and mode changes without panel clipping', async ({ page }) => {
   await page.goto('./');
+  await page.getByTestId('disclosure-size').click();
   const image = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 600;
@@ -145,5 +150,24 @@ test('touch taps perform actions without leaving hover tooltips over controls', 
     await expect(page.getByRole('tooltip')).toHaveCount(0);
   } finally {
     await context.close();
+  }
+});
+
+test('brush disclosures and all expanded color controls explain their actions', async ({ page }) => {
+  await page.goto('./');
+  for (const id of ['color', 'size', 'opacity', 'reminder']) {
+    const header = page.getByTestId(`disclosure-${id}`);
+    await checkTooltip(page, header);
+    await checkTooltip(page, header, true);
+    if (await header.getAttribute('aria-expanded') === 'false') await header.click();
+  }
+  for (const button of await page.locator('.right-panel button').all()) {
+    await checkTooltip(page, button);
+    await checkTooltip(page, button, true);
+  }
+  for (const id of ['input-color-custom', 'input-color-hex']) {
+    const input = page.getByTestId(id);
+    await checkTooltip(page, input);
+    await checkTooltip(page, input, true);
   }
 });

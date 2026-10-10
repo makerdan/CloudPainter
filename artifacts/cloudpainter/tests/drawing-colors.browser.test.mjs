@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFile, mkdir } from 'node:fs/promises';
 import { test } from 'node:test';
 import { chromium } from 'playwright-core';
+import { checkPaletteDisclosure } from './account-palette.browser-fixture.mjs';
 
 // Reuse the existing preview; never launch a separate application server.
 const url = process.env.CLOUDPAINTER_TEST_URL;
@@ -20,8 +21,86 @@ test('preset and custom colors survive drawing, undo/redo, reload and PNG export
     await page.goto(url);
     await page.getByTestId('selected-color').waitFor();
     assert.equal(await page.locator('.swatch').count(), 24);
+    const disclosure = id => page.getByTestId(`disclosure-${id}`);
+    const hexDraft = page.getByTestId('input-color-hex');
+    for (const id of ['color', 'size', 'opacity', 'reminder']) {
+      assert.equal(await disclosure(id).getAttribute('aria-expanded'), id === 'color' ? 'true' : 'false');
+    }
+    for (const id of ['input-brush-size', 'input-layer-opacity']) {
+      await page.getByTestId(id).evaluate(input => input.focus());
+      assert.equal(await page.getByTestId(id).evaluate(input => document.activeElement === input), false);
+    }
+    const toggle = async (id, key) => {
+      if (key) { await disclosure(id).focus(); await disclosure(id).press(key); }
+      else await disclosure(id).click();
+    };
+    await hexDraft.fill('unfinished draft');
+    await page.waitForFunction(() => localStorage.getItem('cloudpainter-project-v1') !== null);
+    const projectBeforeCollapse = await page.evaluate(() => localStorage.getItem('cloudpainter-project-v1'));
+    await toggle('color');
+    assert.equal(await disclosure('color').getAttribute('aria-expanded'), 'false');
+    await hexDraft.evaluate(input => input.focus());
+    assert.equal(await hexDraft.evaluate(input => document.activeElement === input), false, 'Hidden controls cannot focus');
+    await toggle('size', 'Enter');
+    assert.equal(await disclosure('size').getAttribute('aria-expanded'), 'true');
+    assert.equal(await disclosure('color').getAttribute('aria-expanded'), 'false');
+    await toggle('color', 'Space');
+    assert.equal(await hexDraft.inputValue(), 'unfinished draft');
+    assert.equal(await disclosure('size').getAttribute('aria-expanded'), 'true', 'Multiple sections stay open');
+    assert.equal(await page.evaluate(() => localStorage.getItem('cloudpainter-project-v1')), projectBeforeCollapse);
+    await hexDraft.press('Enter');
+    await toggle('color');
+    await toggle('color', 'Enter');
+    assert.equal(await hexDraft.inputValue(), 'unfinished draft');
+    assert.equal(await hexDraft.getAttribute('aria-invalid'), 'true');
+    assert.match(await page.locator('.hex-color-feedback').innerText(), /3 or 6 hex digits/);
+    await hexDraft.fill('AbC');
+    await page.getByTestId('button-apply-color').click();
+    assert.equal(await hexDraft.inputValue(), '#AABBCC');
+    assert.match(await disclosure('color').innerText(), /#AABBCC.*INK/);
+    await page.keyboard.press('Tab');
+    await disclosure('color').focus();
+    assert.equal(await disclosure('color').evaluate(button => getComputedStyle(button).outlineStyle), 'solid');
+    await toggle('reminder', 'Space');
+    assert.equal(await disclosure('reminder').getAttribute('aria-expanded'), 'true');
+    await toggle('reminder');
+    // Real keyboard navigation through the compact picker/hex/apply row.
+    await page.getByTestId('input-color-custom').focus();
+    await page.keyboard.press('Tab');
+    assert.equal(await hexDraft.evaluate(input => document.activeElement === input), true);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.getByTestId('button-apply-color').evaluate(button => document.activeElement === button), true);
+    // Every preset remains immediately available and has an identifiable selected state.
+    for (const swatch of await page.locator('.preset-color-grid .swatch').all()) {
+      await swatch.click();
+      assert.equal(await swatch.getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.locator('.preset-color-grid [aria-pressed="true"]').count(), 1);
+      const bounds = await swatch.boundingBox();
+      assert.ok(bounds.width >= 24 && bounds.height >= 24);
+    }
+    await page.getByTestId('input-brush-size').fill('17');
+    assert.match(await disclosure('size').innerText(), /17 px/);
+    await toggle('size');
+    await toggle('opacity', 'Enter');
+    await page.getByTestId('input-layer-opacity').fill('42');
+    assert.match(await disclosure('opacity').innerText(), /42%/);
+    await toggle('opacity');
+    await page.getByTestId('button-add-layer').click();
+    assert.match(await disclosure('opacity').innerText(), /100%/);
+    await page.locator('.layer-row').filter({ hasText: 'Layer 1' }).getByTestId(/button-select/).click();
+    assert.match(await disclosure('opacity').innerText(), /42%/);
+    await toggle('opacity');
+    assert.equal(await page.getByTestId('input-layer-opacity').inputValue(), '42');
+    await page.getByTestId('input-layer-opacity').fill('100');
+    await toggle('opacity');
+    // Return to one untouched layer for the original drawing/export assertions.
+    await page.locator('.layer-row').filter({ hasText: 'Layer 2' }).getByRole('button', { name: 'Delete layer', exact: true }).click();
+    await toggle('size');
+    await page.getByTestId('input-brush-size').fill('8');
+    await toggle('size');
 
     await page.getByTestId('button-tool-eraser').click();
+    assert.match(await disclosure('color').innerText(), /ERASER/);
     await page.getByRole('button', { name: 'Choose White (#FFFFFF)', exact: true }).click();
     assert.equal(await page.getByRole('button', { name: 'Choose White (#FFFFFF)', exact: true }).getAttribute('aria-pressed'), 'true');
     assert.match(await page.getByTestId('button-tool-pen').getAttribute('class'), /selected/);
@@ -70,6 +149,8 @@ test('preset and custom colors survive drawing, undo/redo, reload and PNG export
       return project.layers?.[0]?.strokes?.length === 4;
     });
     await page.reload();
+    assert.equal(await disclosure('color').getAttribute('aria-expanded'), 'true');
+    assert.equal(await disclosure('size').getAttribute('aria-expanded'), 'false');
     await page.locator('canvas.draw-surface').waitFor();
     await page.waitForFunction(() => document.querySelector('canvas.draw-surface')?.getContext('2d').getImageData(888, 360, 1, 1).data[3] === 255);
     for (let index = 0; index < points.length; index++) assert.deepEqual(await pixel(points[index]), expected[index]);
@@ -97,12 +178,23 @@ test('preset and custom colors survive drawing, undo/redo, reload and PNG export
     await page.locator('.drawing-colors').scrollIntoViewIfNeeded();
     assert.equal(await page.locator('.drawing-colors').evaluate(element => {
       const panel = element.getBoundingClientRect();
-      return [...element.querySelectorAll('button,input')].every(control => {
+      return [...element.querySelectorAll('button,input')].filter(control => control.getClientRects().length).every(control => {
         const bounds = control.getBoundingClientRect();
-        return bounds.left >= panel.left && bounds.right <= panel.right;
+        return bounds.left >= panel.left && bounds.right <= panel.right && bounds.width >= 24 && bounds.height >= 24;
       });
     }), true, 'Color controls fit on a narrow screen');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    // Touch disclosure toggles use the same independent state, without a menu.
+    const touch = await browser.newContext({ viewport: { width: 360, height: 800 }, hasTouch: true });
+    const touchPage = await touch.newPage();
+    await touchPage.goto(url);
+    await touchPage.getByTestId('disclosure-color').tap();
+    assert.equal(await touchPage.getByTestId('disclosure-color').getAttribute('aria-expanded'), 'false');
+    await touchPage.getByTestId('disclosure-size').tap();
+    assert.equal(await touchPage.getByTestId('disclosure-size').getAttribute('aria-expanded'), 'true');
+    await touch.close();
     await context.close();
+    await checkPaletteDisclosure(browser, url);
   } finally {
     await browser.close();
   }

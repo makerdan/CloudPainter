@@ -2,7 +2,6 @@ import { type ChangeEvent, type PointerEvent, useCallback, useEffect, useMemo, u
 import {
   ArrowDown,
   ArrowUp,
-  CircleHelp,
   Cloud,
   Eye,
   EyeOff,
@@ -28,6 +27,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ActionTooltip, TooltipButton } from '@/components/tooltip-button';
+import { BrushDisclosure } from '@/components/BrushDisclosure';
 import NotFound from '@/pages/not-found';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions } from '@/lib/imageDimensions';
@@ -675,24 +675,23 @@ function Home() {
 
           <aside className="panel right-panel">
             <div className="panel-title-row"><h2 className="panel-title">Brush & feel</h2><span className="panel-kicker">02</span></div>
-            <div className="control-block">
-              <div className="control-head"><span>Color</span><span className="control-value">{tool === 'eraser' ? 'ERASER' : 'INK'}</span></div>
+            <BrushDisclosure title="Color" id="color" defaultOpen summary={<>
+              <span className="header-color-preview" style={{ background: color }} aria-hidden="true" />
+              <span>{color.toUpperCase()} · {tool === 'eraser' ? 'ERASER' : 'INK'}</span>
+            </>}>
               <DrawingColorControl color={color} tool={tool} onChange={nextColor => { setColor(nextColor); setTool('pen'); }} />
-            </div>
-            <div className="control-block">
-              <div className="control-head"><span>Brush size</span><span className="control-value">{brushSize} px</span></div>
+            </BrushDisclosure>
+            <BrushDisclosure title="Brush size" id="size" summary={`${brushSize} px`}>
               <input className="range-input" type="range" min="1" max="48" value={brushSize} onChange={event => setBrushSize(Number(event.target.value))} aria-label="Brush size" data-testid="input-brush-size" />
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9aa097', fontSize: 9, marginTop: 7 }}><span>Fine</span><span>Bold</span></div>
-            </div>
-            <div className="control-block">
-              <div className="control-head"><span>Layer opacity</span><span className="control-value">{Math.round((selectedLayer?.opacity ?? 1) * 100)}%</span></div>
+            </BrushDisclosure>
+            <BrushDisclosure title="Layer opacity" id="opacity" summary={`${Math.round((selectedLayer?.opacity ?? 1) * 100)}%`}>
               <input className="range-input" type="range" min="0" max="100" value={Math.round((selectedLayer?.opacity ?? 1) * 100)} onChange={event => selectedLayer && changeLayer(selectedLayer.id, layer => ({ ...layer, opacity: Number(event.target.value) / 100 }))} aria-label="Layer opacity" data-testid="input-layer-opacity" />
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9aa097', fontSize: 9, marginTop: 7 }}><span>Ghostly</span><span>Full ink</span></div>
-            </div>
-            <div className="tool-tip-card">
-              <div className="tip-title"><CircleHelp size={14} /> A small reminder</div>
+            </BrushDisclosure>
+            <BrushDisclosure title="A small reminder" id="reminder" reminder>
               <p>Sketch a shape you notice. Keep the photo as your guide, then hide it when you want to see your drawing on its own.</p>
-            </div>
+            </BrushDisclosure>
           </aside>
         </div>
       </section>
