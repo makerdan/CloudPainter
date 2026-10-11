@@ -93,6 +93,29 @@ test('pen samples keep real stylus pressure and use the same stable fallback for
   );
 });
 
+test('pen pressure sensitivity is fixed on each new stroke and defaults to the existing response', { timeout: 1000 }, () => {
+  assert.deepEqual(
+    createInstrumentStroke('pen', point, '#315d4d', 12, 'round', 1, 0.18).pressure,
+    { version: 1, samples: [0.18] },
+  );
+  assert.deepEqual(
+    createInstrumentStroke('pen', point, '#315d4d', 12, 'round', 1, 0.18, 25).pressure,
+    { version: 1, samples: [0.18], sensitivity: 25 },
+  );
+  assert.deepEqual(
+    createInstrumentStroke('pen', point, '#315d4d', 12, 'round', 1, 0.18, 100).pressure,
+    { version: 1, samples: [0.18], sensitivity: 100 },
+  );
+  assert.deepEqual(
+    createInstrumentStroke('pen', point, '#315d4d', 12, 'round', 1, 0.18, 200).pressure,
+    { version: 1, samples: [0.18], sensitivity: 100 },
+  );
+  assert.equal(
+    createInstrumentStroke('brush', point, '#315d4d', 12, 'round', 1, 0.18, 25).pressure,
+    undefined,
+  );
+});
+
 test('color preserves each instrument and returns from eraser to the last drawing tool', { timeout: 1000 }, () => {
   for (const tool of ['brush', 'pencil', 'pen'] as const) {
     assert.equal(toolAfterColorSelection(tool, 'brush'), tool);

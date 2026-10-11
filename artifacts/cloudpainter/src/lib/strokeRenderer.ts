@@ -15,7 +15,8 @@ export type Stroke = {
     | { kind: 'pencil' | 'pen'; version: 1; seed: number }
     | { kind: 'pen'; version: 2; seed: number };
   // Version 1 is normalized pressure aligned one-to-one with points.
-  pressure?: { version: 1; samples: number[] };
+  // Sensitivity is stored per stroke so later control changes never alter saved marks.
+  pressure?: { version: 1; samples: number[]; sensitivity?: number };
 };
 
 export const BRUSH_STYLES: { style: BrushStyle; label: string; description: string }[] = [
@@ -47,13 +48,23 @@ function roundPath(ctx: CanvasRenderingContext2D, stroke: Stroke, width: number,
 }
 
 function pressurePath(ctx: CanvasRenderingContext2D, stroke: Stroke, width: number, height: number) {
-  const samples = stroke.pressure?.version === 1 && stroke.pressure.samples.length === stroke.points.length
-    ? stroke.pressure.samples
+  const pressure = stroke.pressure?.version === 1 && stroke.pressure.samples.length === stroke.points.length
+    ? stroke.pressure
+    : null;
+  const samples = pressure
+    ? pressure.samples
     : stroke.points.map(() => 0.5);
+  const requestedSensitivity = pressure?.sensitivity;
+  const sensitivity = Number.isFinite(requestedSensitivity)
+    ? Math.max(0, Math.min(100, requestedSensitivity!))
+    : 50;
+  const pressureGain = sensitivity / 50;
   const outline = getStroke(stroke.points.map((point, index) => [
     point.x * width,
     point.y * height,
-    Number.isFinite(samples[index]) ? Math.max(0, Math.min(1, samples[index])) : 0.5,
+    Math.max(0, Math.min(1, 0.5 + (
+      (Number.isFinite(samples[index]) ? Math.max(0, Math.min(1, samples[index])) : 0.5) - 0.5
+    ) * pressureGain)),
   ] as [number, number, number]), {
     size: stroke.size,
     thinning: 0.7,

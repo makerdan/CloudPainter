@@ -78,6 +78,29 @@ test('versioned pen pressure creates deterministic tapered outlines and changes 
   }));
 });
 
+test('pressure sensitivity changes the rendered width response while existing and fallback strokes keep their response', { timeout: 1000 }, () => {
+  const lightPressure: Stroke = {
+    ...fixture,
+    instrument: { kind: 'pen', version: 2, seed: 7 },
+    pressure: { version: 1, samples: [0.2, 0.2, 0.2] },
+  };
+  const original = replay(lightPressure);
+  const steady = replay({ ...lightPressure, pressure: { ...lightPressure.pressure!, sensitivity: 0 } });
+  const responsive = replay({ ...lightPressure, pressure: { ...lightPressure.pressure!, sensitivity: 100 } });
+  assert.notDeepEqual(steady, original);
+  assert.notDeepEqual(responsive, original);
+  assert.notDeepEqual(steady, responsive);
+  assert.deepEqual(replay(lightPressure), original);
+  assert.deepEqual(
+    replay({ ...lightPressure, pressure: { version: 1, samples: lightPressure.pressure!.samples, sensitivity: 50 } }),
+    original,
+  );
+  assert.deepEqual(
+    replay({ ...lightPressure, pressure: { ...lightPressure.pressure!, sensitivity: Number.NaN } }),
+    original,
+  );
+});
+
 test('versioned pressure pen taps render a filled mark and empty strokes do no work', { timeout: 1000 }, () => {
   const tap: Stroke = {
     ...fixture,

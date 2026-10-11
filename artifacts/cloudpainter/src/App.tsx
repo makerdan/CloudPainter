@@ -413,6 +413,7 @@ function Home() {
   const lastDrawingTool = useRef<DrawingInstrument>('brush');
   const [color, setColor] = useState('#315d4d');
   const [toolSizes, setToolSizes] = useState<Record<DrawingTool, number>>({ brush: 8, pencil: 3, pen: 3, eraser: 16 });
+  const [penPressureSensitivity, setPenPressureSensitivity] = useState(50);
   const brushSize = toolSizes[tool];
   const selectTool = (nextTool: DrawingTool) => {
     if (nextTool !== 'eraser') lastDrawingTool.current = nextTool;
@@ -744,6 +745,7 @@ function Home() {
       stroke: createInstrumentStroke(
         tool, point, color, brushSize * (project.width / stageSize.width), brushStyle,
         Math.floor(Math.random() * 4294967296), normalizePointerPressure(event.pointerType, event.pressure),
+        penPressureSensitivity,
       ),
     });
   };
@@ -1296,6 +1298,23 @@ function Home() {
             <BrushDisclosure title="Brush style" id="style" defaultOpen summary={BRUSH_STYLES.find(brush => brush.style === brushStyle)?.label}>
               <BrushStyleControl embedded value={brushStyle} color={color} onChange={setBrushStyle} />
             </BrushDisclosure>
+            </div>
+            <div hidden={tool !== 'pen'}>
+              <BrushDisclosure title="Pressure sensitivity" id="pressure-sensitivity" summary={`${penPressureSensitivity}%`}>
+                <p style={{ margin: '0 0 8px', color: '#747d73', fontSize: 10, lineHeight: 1.4 }}>Set how strongly pen pressure changes ink width. Lower values make pressure feel steadier; higher values make it more responsive.</p>
+                <input
+                  className="range-input"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={penPressureSensitivity}
+                  onChange={event => setPenPressureSensitivity(Number(event.target.value))}
+                  aria-label="Pen pressure sensitivity"
+                  data-testid="input-pen-pressure-sensitivity"
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9aa097', fontSize: 9, marginTop: 7 }}><span>Steady</span><span>Responsive</span></div>
+              </BrushDisclosure>
             </div>
             <BrushDisclosure title="Color" id="color" defaultOpen summary={<>
               <span className="header-color-preview" style={{ background: color }} aria-hidden="true" />

@@ -142,7 +142,18 @@ test('stylus pressure is saved with each pen point and rendered into the stroke'
   await page.goto('/');
   const canvas = page.locator('canvas.draw-surface');
   await canvas.scrollIntoViewIfNeeded();
+  await expect(page.getByTestId('disclosure-pressure-sensitivity')).toBeHidden();
   await page.getByTestId('button-tool-pen').click();
+  const sensitivityDisclosure = page.getByTestId('disclosure-pressure-sensitivity');
+  await expect(sensitivityDisclosure).toBeVisible();
+  await expect(sensitivityDisclosure).toHaveAttribute('aria-expanded', 'false');
+  await sensitivityDisclosure.click();
+  const sensitivitySlider = page.getByTestId('input-pen-pressure-sensitivity');
+  await sensitivitySlider.evaluate((input: HTMLInputElement, value: string) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }, '100');
+  await expect(sensitivitySlider).toHaveValue('100');
   const bounds = await canvas.evaluate((node: HTMLCanvasElement) => {
     const bounds = node.getBoundingClientRect();
     node.setPointerCapture = () => {};
@@ -168,6 +179,20 @@ test('stylus pressure is saved with each pen point and rendered into the stroke'
     const strokes = saved ? JSON.parse(saved).layers[0].strokes : [];
     return strokes.at(-1)?.pressure?.samples?.map((pressure: number) => Number(pressure.toFixed(2)));
   }, key)).toEqual([0.18, 0.82, 0.42]);
+  const savedFirstStroke = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes.at(-1), key);
+  expect(savedFirstStroke.pressure.sensitivity).toBe(100);
+
+  await sensitivitySlider.evaluate((input: HTMLInputElement) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '0');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(sensitivitySlider).toHaveValue('0');
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes[0], key)).toEqual(savedFirstStroke);
+  await dispatch('pointerdown', 0.2, 0.6, 0.18);
+  await dispatch('pointermove', 0.5, 0.6, 0.82);
+  await dispatch('pointerup', 0.5, 0.6, 0);
+  await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes.at(-1)?.pressure?.sensitivity, key)).toBe(0);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes[0], key)).toEqual(savedFirstStroke);
 });
 
 test('phone instrument buttons and tap marks remain usable without horizontal overflow', async ({ browser, baseURL }) => {
