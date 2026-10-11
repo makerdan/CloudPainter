@@ -54,6 +54,21 @@ stroke preservation during that outage was not separately exercised in the brows
 It is covered structurally by independent project state and palette-only payload tests.
 Mobile browser verification was not performed.
 
+## Account session journey verification blocked
+
+The follow-up manual check could not safely exercise sign-in, sign-out, or session
+restoration. The workspace reports a Replit-managed Clerk setup, but no owner-approved
+disposable test identity was provided. The earlier browser notes mention a host-provided
+programmatic Clerk login helper, but its instructions and invocation are not available
+in this project. Clerk management status alone does not establish approval to use an
+account.
+
+No account was created or used, and no authentication attempt was made. Therefore the
+earlier palette browser evidence does not establish the requested end-to-end session
+restoration flow or sketch retention across a new sign-in. This check can be resumed
+when an owner-approved disposable identity and the supported login-helper instructions
+are available. No credentials or account identifiers are recorded here.
+
 ## Full typecheck remains failed — unrelated committed test
 
 `pnpm run typecheck` was run, not skipped. Libraries, API server, mockup sandbox and
