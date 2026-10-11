@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -36,13 +36,73 @@ function portableCommand([, packageName, suite]) {
 
 // Read the real manifests, not scripts invented by the pnpm shell stub. These
 // fixed workspace paths are inspected only; no command or package hook is run.
-const portableManifests = [
+const portableManifestPaths = [
   'artifacts/api-server/package.json',
   'lib/integrations-openai-ai-server/package.json',
   'artifacts/cloudpainter/package.json',
-].map(path => JSON.parse(readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')));
+];
+const portableManifests = portableManifestPaths.map(path =>
+  JSON.parse(readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')));
+const portablePackageDirectories = new Map(portableManifests.map((manifest, index) =>
+  [manifest.name, portableManifestPaths[index].slice(0, -'/package.json'.length)]));
 
-function assertPortablePackageScripts(source, manifests) {
+function isRepositoryFile(path) {
+  try {
+    return statSync(new URL(`../../${path}`, import.meta.url)).isFile();
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return false;
+    throw error;
+  }
+}
+
+// Literal, unquoted package-relative filenames only. This is not shell
+// resolution, module resolution, glob expansion or Vitest test discovery.
+function literalScriptFiles(command, context) {
+  const unsupported = `${context}: unsupported portable package command shape: ${command}`;
+  assert.match(command, /^[A-Za-z0-9_./= -]+$/, unsupported);
+  const tokens = command.trim().split(/ +/);
+  const targets = [];
+  const filename = token => /^(?:\.\/)?(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:ts|tsx|js|jsx|mjs|cjs|json)$/.test(token);
+  if (tokens[0] === 'node' || tokens[0] === 'tsx') {
+    let hasTest = false;
+    let hasTargets = false;
+    const flags = new Set();
+    for (let index = 1; index < tokens.length; index++) {
+      const token = tokens[index];
+      if (filename(token)) {
+        hasTargets = true;
+        targets.push(token);
+        continue;
+      }
+      assert.ok(!hasTargets, unsupported); // Options must precede targets.
+      const flag = token.split('=')[0];
+      assert.ok(!flags.has(flag), unsupported);
+      flags.add(flag);
+      if (token === '--test') {
+        hasTest = true;
+      } else if (token === '--experimental-strip-types') {
+        assert.equal(tokens[0], 'node', unsupported);
+      } else if (token === '--import') {
+        assert.ok(tokens[0] === 'node' && tokens[++index] === 'tsx', unsupported);
+      } else {
+        assert.match(token, /^--test-timeout=[1-9][0-9]*$/, unsupported);
+        assert.ok(Number(token.slice('--test-timeout='.length)) <= 2147483647, unsupported);
+      }
+    }
+    assert.ok(hasTest && targets.length > 0, unsupported);
+  } else {
+    assert.ok(tokens[0] === 'vitest' && tokens[1] === 'run'
+      && tokens[2] === '--config' && filename(tokens[3]), unsupported);
+    targets.push(tokens[3]);
+    for (const token of tokens.slice(4)) {
+      assert.ok(filename(token), unsupported);
+      targets.push(token);
+    }
+  }
+  return targets;
+}
+
+function assertPortablePackageScripts(source, manifests, fileAvailable = isRepositoryFile) {
   const selected = [...portableScript(source).matchAll(
     /^run_check ([a-z0-9-]+) pnpm --filter (@workspace\/[a-z0-9-]+) run (test:[a-z0-9-]+)$/gm,
   )].map(match => match.slice(1));
@@ -54,6 +114,13 @@ function assertPortablePackageScripts(source, manifests) {
     assert.ok(scripts && Object.hasOwn(scripts, suite)
       && typeof scripts[suite] === 'string' && scripts[suite].trim().length > 0,
     `${label}: ${packageName} run ${suite} must have a nonempty package script`);
+    const context = `${label}: ${packageName} run ${suite}`;
+    const directory = portablePackageDirectories.get(packageName);
+    assert.ok(directory, `${context}: expected a fixed package directory`);
+    for (const target of literalScriptFiles(scripts[suite], context)) {
+      assert.ok(fileAvailable(`${directory}/${target}`),
+        `${context}: referenced file must exist: ${target}`);
+    }
   }
 }
 
@@ -560,6 +627,129 @@ test('the executable portable stage selects all unit and mocked-provider suites'
 test('every selected portable suite has a command in its real package manifest', { timeout: 10000 }, () => {
   assertPortablePackageScripts(workflow, portableManifests);
 });
+
+// Independent literal-reference expectations, not extracted from the scripts
+// under test. Config-only Vitest commands intentionally cover only their config.
+const portableTargetFiles = [
+  ['src/routes/outline.test.ts'],
+  ['tests/image-upscale.test.ts'],
+  ['tests/logo-images.test.ts'],
+  ['tests/poe-image.test.ts'],
+  ['src/lib/imageDimensions.test.ts'],
+  ['src/lib/outlinePrivacy.test.ts'],
+  ['vitest.outline.config.ts'],
+  ['src/lib/strokeRenderer.test.ts'],
+  ['src/lib/layerClipboard.test.ts'],
+  ['src/lib/drawingTools.test.ts'],
+  ['src/lib/drawingColors.test.ts'],
+  ['src/lib/palettePersistence.test.ts'],
+  ['vitest.logo.config.ts'],
+  ['vitest.logo.config.ts', 'src/components/PoeUpscaleExport.test.tsx'],
+];
+assert.equal(portableTargetFiles.length, portableChecks.length);
+const portableFileInventory = new Set(portableChecks.flatMap(([, packageName], index) =>
+  portableTargetFiles[index].map(target => `${portablePackageDirectories.get(packageName)}/${target}`)));
+
+test('literal references match the independent contract and resolve to regular files in their own packages',
+  { timeout: 10000 }, () => {
+    for (const [index, [label, packageName, suite]] of portableChecks.entries()) {
+      const manifest = portableManifests.find(entry => entry.name === packageName);
+      assert.deepEqual(literalScriptFiles(manifest.scripts[suite], label), portableTargetFiles[index]);
+    }
+    const inspected = [];
+    assertPortablePackageScripts(workflow, portableManifests, path => {
+      inspected.push(path);
+      return isRepositoryFile(path);
+    });
+    assert.deepEqual(inspected, portableChecks.flatMap(([, packageName], index) =>
+      portableTargetFiles[index].map(target => `${portablePackageDirectories.get(packageName)}/${target}`)));
+    assertPortablePackageScripts(workflow, portableManifests, path => portableFileInventory.has(path));
+  });
+
+for (const [index, [label, packageName, suite]] of portableChecks.entries()) {
+  for (const target of portableTargetFiles[index]) {
+    test(`${label} stale reference to ${target} is rejected; matching renamed file is accepted`,
+      { timeout: 10000 }, () => {
+        const manifests = structuredClone(portableManifests);
+        const manifest = manifests.find(entry => entry.name === packageName);
+        const renamed = target.replace(/(\.[^.]+)$/, '-renamed$1');
+        const original = manifest.scripts[suite];
+        assert.equal(original.split(target).length, 2, 'Fixture must target exactly one literal');
+        manifest.scripts[suite] = original.replace(target, renamed);
+        assert.notEqual(manifest.scripts[suite], original);
+        assert.throws(() => assertPortablePackageScripts(workflow, manifests,
+          path => portableFileInventory.has(path)), {
+          code: 'ERR_ASSERTION',
+          message: `${label}: ${packageName} run ${suite}: referenced file must exist: ${renamed}`,
+        });
+        const files = new Set(portableFileInventory);
+        files.add(`${portablePackageDirectories.get(packageName)}/${renamed}`);
+        assertPortablePackageScripts(workflow, manifests, path => files.has(path));
+      });
+  }
+}
+
+for (const path of portableFileInventory) {
+  for (const mutation of ['missing', 'renamed']) {
+    test(`${mutation} referenced file ${path} is rejected without filesystem writes`,
+      { timeout: 10000 }, () => {
+        const files = new Set(portableFileInventory);
+        files.delete(path);
+        if (mutation === 'renamed') files.add(path.replace(/(\.[^.]+)$/, '-renamed$1'));
+        // A shared config fails at its first selected user, not a later one.
+        const index = portableChecks.findIndex(([, packageName], index) =>
+          portableTargetFiles[index].some(target =>
+            `${portablePackageDirectories.get(packageName)}/${target}` === path));
+        const [label, packageName, suite] = portableChecks[index];
+        const target = path.slice(portablePackageDirectories.get(packageName).length + 1);
+        assert.throws(() => assertPortablePackageScripts(workflow, portableManifests,
+          candidate => files.has(candidate)), {
+          code: 'ERR_ASSERTION',
+          message: `${label}: ${packageName} run ${suite}: referenced file must exist: ${target}`,
+        });
+        files.add(path);
+        assertPortablePackageScripts(workflow, portableManifests, candidate => files.has(candidate));
+      });
+  }
+}
+
+for (const command of [
+  'node --test', 'tsx --test', 'node src/routes/outline.test.ts',
+  'pnpm run test:outline', 'FOO=1 tsx --test src/routes/outline.test.ts',
+  'tsx --test src/routes/*.test.ts', 'node --test "$TEST_FILE"',
+  'node --test tests/a.test.ts && node --test tests/b.test.ts',
+  'node --test tests/a.test.ts; echo ok', 'node --test tests/a.test.ts | cat',
+  'node --test tests/a.test.ts # comment', 'node --test ../outside.test.ts',
+  'node --test /tmp/outside.test.ts', 'node --test "tests/a.test.ts"',
+  'node --test --unknown tests/a.test.ts', 'node --import other --test tests/a.test.ts',
+  'node --test --test-timeout=0 tests/a.test.ts',
+  'node --test --test-timeout=2147483648 tests/a.test.ts',
+  'node --test tests/a.test.ts --experimental-strip-types',
+  'node --test --test tests/a.test.ts',
+  'vitest run', 'vitest run --config', 'vitest run --config missing',
+  'vitest run --config vitest.config.ts --watch',
+]) {
+  test(`unsupported package command fails closed: ${command}`, { timeout: 10000 }, () => {
+    const manifests = structuredClone(portableManifests);
+    manifests.find(entry => entry.name === portableChecks[0][1]).scripts[portableChecks[0][2]] = command;
+    assert.throws(() => assertPortablePackageScripts(workflow, manifests, () => {
+      assert.fail('Unsupported shape must be rejected before checking file availability');
+    }), {
+      code: 'ERR_ASSERTION',
+      message: /^api-outline: @workspace\/api-server run test:outline: unsupported portable package command shape:/,
+    });
+  });
+}
+
+test('supported literal commands retain multiple targets, config targets and package-relative dot prefixes',
+  { timeout: 10000 }, () => {
+    assert.deepEqual(literalScriptFiles('node --import tsx --test ./tests/a.test.ts tests/b.test.ts', 'fixture'),
+      ['./tests/a.test.ts', 'tests/b.test.ts']);
+    assert.deepEqual(literalScriptFiles('vitest run --config ./vitest.config.ts tests/a.test.tsx tests/b.test.tsx', 'fixture'),
+      ['./vitest.config.ts', 'tests/a.test.tsx', 'tests/b.test.tsx']);
+    assert.equal(isRepositoryFile('artifacts/cloudpainter/src'), false, 'Directories are not file targets');
+    assert.equal(isRepositoryFile('artifacts/cloudpainter/src/fixture-missing.test.ts'), false);
+  });
 
 for (const [label, packageName, suite] of portableChecks) {
   for (const [mutation, rewrite] of [

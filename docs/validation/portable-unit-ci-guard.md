@@ -1,5 +1,60 @@
 # Portable unit CI shell regression guard
 
+## Literal package-script file references
+
+The offline guard also checks the literal test-file and configuration-file
+arguments in the fourteen selected portable package commands. It reads the
+three existing manifests without modifying them or executing their scripts.
+Each reference resolves relative to its fixed package directory and must be a
+regular file; a directory does not satisfy the check. Missing targets report
+the selected label, package, suite and literal filename.
+
+Supported syntax is deliberately narrow: `node` or `tsx` with `--test`, the
+currently used Node strip-types flag or `--import tsx`, and an optional finite
+`--test-timeout`; or `vitest run --config <file>` with optional explicit test
+files. Targets are unquoted literal package-relative filenames, optionally
+prefixed by `./`. Multi-dot names such as `outline.test.ts` are supported.
+Unsupported runners, flags, shell operators, comments, environment assignments,
+expansion, globs, quoted paths, parent/absolute paths, missing targets and
+malformed commands fail explicitly. No shell, module or general test-discovery
+resolution is claimed. Config-only Vitest scripts establish config-file
+availability, not the availability of files discovered inside that config.
+
+Independent expected target lists cover every selected command, including the
+upscale command's config and explicit test file. In-memory inventory fixtures
+remove or rename every distinct referenced target; restoring the original
+inventory is a positive control. Per-command fixtures replace each literal
+argument with a missing renamed target, then supply that target as a positive
+control. Unsupported-shape fixtures reject before file lookup. All real
+manifests, referenced files and workflow configuration remain unchanged.
+
+The owner approved one bounded offline launch with Failure Gate inactive for
+this task only, then separately approved one corrected rerun. No checked
+project-local governance route was verified or activated. Both used:
+
+```sh
+node --test --test-timeout=10000 --test-concurrency=1 scripts/ci/api-test-coverage.test.mjs
+```
+
+An independent monotonic supervisor capped execution at 30 seconds, reserved
+10 seconds for owned-process cleanup and capped combined output at 1 MiB.
+The first attempt exited 1 because the new filename matcher rejected multi-dot
+names; this was a task-owned defect, not an ignored baseline. After correcting
+the matcher, the approved rerun exited **0: 214/214 tests passed**, with no
+failures, skips or cancellations, in approximately 1.38 seconds. Both attempts
+confirmed unchanged input hashes and owned-process-group termination. Logs,
+hashes, limits and the task-local supervisor are retained in ignored
+`generated-artifacts/ci-literal-file-guard/`, with the failed attempt preserved
+in `attempt-1/`.
+
+CI coverage is **direct** through the existing
+`node --test scripts/ci/api-test-coverage.test.mjs` guard step in `validation`
+on pull requests and pushes to `main`; no new command, discovery pass or
+workflow is needed. Remote activation, current remote results and required
+merge status remain **unknown**. No package suites, credentials, databases,
+providers, live services or CI workflow changes were used. This result proves
+literal file availability and fixture behavior, not actual package-suite passes.
+
 ## Scope and route
 
 The existing `scripts/ci/api-test-coverage.test.mjs` guard now also exercises
