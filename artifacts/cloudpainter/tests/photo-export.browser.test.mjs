@@ -319,6 +319,41 @@ test('exports only visible sketch layers and preserves their opacity', async () 
   }
 });
 
+test('reports PNG export failures without announcing a download', async () => {
+  for (const failure of ['canvas creation', '2D context', 'PNG encoding']) {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    try {
+      await page.goto(appUrl);
+      await page.evaluate(failure => {
+        window.__cloudPainterDownloadClicks = 0;
+        HTMLAnchorElement.prototype.click = function countDownloadClick() {
+          window.__cloudPainterDownloadClicks += 1;
+        };
+        if (failure === 'canvas creation') {
+          const createElement = document.createElement.bind(document);
+          document.createElement = tagName => {
+            if (tagName.toLowerCase() === 'canvas') throw new Error('Canvas creation failed');
+            return createElement(tagName);
+          };
+        } else if (failure === '2D context') {
+          HTMLCanvasElement.prototype.getContext = () => null;
+        } else {
+          HTMLCanvasElement.prototype.toDataURL = () => 'data:image/png;base64,';
+        }
+      }, failure);
+
+      await page.getByTestId('button-export').click();
+      const status = page.getByTestId('status-toast');
+      await status.waitFor({ state: 'visible' });
+      assert.match(await status.textContent(), /Could not create the PNG export/);
+      assert.doesNotMatch(await status.textContent(), /PNG exported/);
+      assert.equal(await page.evaluate(() => window.__cloudPainterDownloadClicks), 0);
+    } finally {
+      await page.close();
+    }
+  }
+});
+
 for (const photo of [
   { name: 'landscape photo', width: 960, height: 480 },
   { name: 'portrait photo', width: 480, height: 960 },

@@ -441,39 +441,61 @@ function Home() {
   };
 
   const exportPng = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = project.width;
-    canvas.height = project.height;
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    const finish = () => {
-      project.layers.forEach(layer => {
-        if (!layer.visible) return;
-        const source = canvasRefs.current[layer.id];
-        if (!source) return;
-        context.globalAlpha = layer.opacity;
-        context.drawImage(source, 0, 0);
-      });
-      context.globalAlpha = 1;
-      const link = document.createElement('a');
-      link.download = `${project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea'}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-      announce('PNG exported. Your browser saved the finished composition.');
-    };
-    if (project.image) {
-      const photo = new Image();
-      photo.onload = () => {
-        const imageSize = fitDimensionsWithinBounds(photo.naturalWidth, photo.naturalHeight, project.width, project.height);
-        const x = (project.width - imageSize.width) / 2;
-        const y = (project.height - imageSize.height) / 2;
-        context.drawImage(photo, x, y, imageSize.width, imageSize.height);
-        finish();
+    const exportFailed = () => announce('Could not create the PNG export. Try again or use a smaller canvas.');
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = project.width;
+      canvas.height = project.height;
+      const context = canvas.getContext('2d');
+      if (!context) {
+        exportFailed();
+        return;
+      }
+      const finish = () => {
+        try {
+          project.layers.forEach(layer => {
+            if (!layer.visible) return;
+            const source = canvasRefs.current[layer.id];
+            if (!source) return;
+            context.globalAlpha = layer.opacity;
+            context.drawImage(source, 0, 0);
+          });
+          context.globalAlpha = 1;
+          const png = canvas.toDataURL('image/png');
+          const pngDataUrlPrefix = 'data:image/png;base64,';
+          if (!png.startsWith(pngDataUrlPrefix) || png.length === pngDataUrlPrefix.length) {
+            exportFailed();
+            return;
+          }
+          const link = document.createElement('a');
+          link.download = `${project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea'}.png`;
+          link.href = png;
+          link.click();
+          announce('PNG exported. Your browser saved the finished composition.');
+        } catch {
+          exportFailed();
+        }
       };
-      photo.onerror = () => finish();
-      photo.src = project.image;
-    } else {
-      finish();
+      if (project.image) {
+        const photo = new Image();
+        photo.onload = () => {
+          try {
+            const imageSize = fitDimensionsWithinBounds(photo.naturalWidth, photo.naturalHeight, project.width, project.height);
+            const x = (project.width - imageSize.width) / 2;
+            const y = (project.height - imageSize.height) / 2;
+            context.drawImage(photo, x, y, imageSize.width, imageSize.height);
+            finish();
+          } catch {
+            exportFailed();
+          }
+        };
+        photo.onerror = () => finish();
+        photo.src = project.image;
+      } else {
+        finish();
+      }
+    } catch {
+      exportFailed();
     }
   };
 
