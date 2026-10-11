@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const STORE_KEY = 'cloudpainter-project-v1';
-const PREVIOUS_PROJECT_KEY = 'cloudpainter-previous-project-v1';
+const PROJECT_HISTORY_KEY = 'cloudpainter-project-history-v1';
 const models = ['Nano-Banana-Pro', 'Nano-Banana-2', 'GPT-Image-2.5-Sunburst', 'Flux-2-Turbo'];
 const saved = (page: Page) => page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), STORE_KEY);
 const approvedConfig = { configured: true, signedIn: true, allowed: true, dailyLimit: 2, remaining: 2, globalRemaining: 20 };
@@ -78,20 +78,78 @@ test('Poe picker offers exactly four models and preview requires explicit use', 
     const project = await saved(page);
     return { width: project.width, height: project.height, layers: project.layers.length };
   }).toEqual({ width: 640, height: 320, layers: 1 });
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PREVIOUS_PROJECT_KEY)).toEqual(before);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY)).toEqual([before]);
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', `data:image/png;base64,${base64}`);
-  await expect(page.getByTestId('button-switch-previous-project')).toBeVisible();
+  await expect(page.getByTestId('button-restore-project-0')).toHaveAccessibleName('Restore saved sketch: My careful sketch');
   await page.reload();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', `data:image/png;base64,${base64}`);
-  await page.getByTestId('button-switch-previous-project').click();
+  await page.getByTestId('button-restore-project-0').click();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', priorPhoto);
   await expect.poll(async () => saved(page)).toEqual(before);
-  await expect(page.getByTestId('button-switch-previous-project')).toHaveAccessibleName('Switch to saved sketch: Clouds over a blue sky');
+  await expect(page.getByTestId('button-restore-project-0')).toHaveAccessibleName('Restore saved sketch: Clouds over a blue sky');
+  await expect(page.getByTestId('button-restore-project-1')).toHaveAccessibleName('Restore saved sketch: My careful sketch');
   await expect(page.getByText('Outline', { exact: true })).toBeVisible();
   await expect(page.getByText('Details', { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', priorPhoto);
   expect((await saved(page)).layers[0].strokes).toEqual(before.layers[0].strokes);
+});
+
+test('applying another generated image keeps every earlier sketch available after reload', async ({ page }) => {
+  const initial = await saved(page);
+  const images = await Promise.all([
+    page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = 240;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = '#c75d42';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/png').split(',')[1];
+    }),
+    page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 400;
+      canvas.height = 200;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = '#3975a6';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/png').split(',')[1];
+    }),
+  ]);
+  await page.route('**/api/images/generate', async route => {
+    const prompt = route.request().postDataJSON().prompt as string;
+    const index = prompt === 'First generated idea' ? 0 : 1;
+    await route.fulfill({ json: { b64_json: images[index], mime: 'image/png' } });
+  });
+
+  for (const prompt of ['First generated idea', 'Second generated idea']) {
+    await page.getByTestId('button-generate-image').click();
+    await page.getByTestId('input-image-prompt').fill(prompt);
+    await page.getByTestId('button-submit-generation').click();
+    await expect(page.getByTestId('generated-image-preview')).toBeVisible();
+    await page.getByTestId('button-use-generated-image').click();
+    await expect.poll(async () => (await saved(page))?.title).toBe(prompt);
+  }
+
+  const history = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY);
+  expect(history).toHaveLength(2);
+  expect(history[0]).toMatchObject({
+    image: `data:image/png;base64,${images[0]}`, width: 320, height: 240, title: 'First generated idea',
+  });
+  expect(history[1]).toEqual(initial);
+  await page.reload();
+  await expect(page.getByTestId('button-restore-project-0')).toHaveAccessibleName('Restore saved sketch: First generated idea');
+  await expect(page.getByTestId('button-restore-project-1')).toHaveAccessibleName('Restore saved sketch: Untitled idea');
+
+  await page.getByTestId('button-restore-project-1').click();
+  await expect(page.getByTestId('img-reference')).toHaveCount(0);
+  await expect.poll(async () => (await saved(page))?.title).toBe('Untitled idea');
+  await page.reload();
+  await expect(page.getByTestId('button-restore-project-2')).toHaveAccessibleName('Restore saved sketch: Untitled idea');
+  await page.getByTestId('button-restore-project-1').click();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', `data:image/png;base64,${images[0]}`);
+  await expect.poll(async () => (await saved(page))?.title).toBe('First generated idea');
 });
 
 test('Poe failures preserve the sketch and never issue an alternate-model request', async ({ page }) => {
@@ -160,4 +218,35 @@ test('anonymous visitors can draw but must sign in before generation', async ({ 
   await expect(page.getByRole('dialog').getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
   await expect(page.getByTestId('button-submit-generation')).toBeDisabled();
   expect(calls).toBe(0);
+});
+
+test('saved sketches can be browsed and restored without signing in', async ({ page }) => {
+  const current = {
+    image: null, width: 1200, height: 800, selectedLayerId: 'current-layer', title: 'Current sketch',
+    layers: [{ id: 'current-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+  };
+  const earlier = {
+    image: null, width: 640, height: 480, selectedLayerId: 'earlier-layer', title: 'Earlier sketch',
+    layers: [{ id: 'earlier-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+  };
+  const oldest = {
+    image: null, width: 320, height: 240, selectedLayerId: 'oldest-layer', title: 'Oldest sketch',
+    layers: [{ id: 'oldest-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+  };
+  await page.addInitScript(({ project, history }) => {
+    if (sessionStorage.getItem('cloudpainter-history-test-seeded')) return;
+    localStorage.setItem('cloudpainter-project-v1', JSON.stringify(project));
+    localStorage.setItem('cloudpainter-project-history-v1', JSON.stringify(history));
+    sessionStorage.setItem('cloudpainter-history-test-seeded', 'true');
+  }, { project: current, history: [earlier, oldest] });
+  await page.goto('./');
+  await expect(page.getByTestId('button-restore-project-0')).toHaveAccessibleName('Restore saved sketch: Earlier sketch');
+  await expect(page.getByTestId('button-restore-project-1')).toHaveAccessibleName('Restore saved sketch: Oldest sketch');
+  await page.getByTestId('button-restore-project-1').click();
+  await expect.poll(async () => saved(page)).toEqual(oldest);
+  await expect(page.getByTestId('button-restore-project-0')).toHaveAccessibleName('Restore saved sketch: Current sketch');
+  await page.reload();
+  await expect(page.getByTestId('button-restore-project-1')).toHaveAccessibleName('Restore saved sketch: Earlier sketch');
+  await expect(page.getByTestId('button-restore-project-2')).toHaveAccessibleName('Restore saved sketch: Oldest sketch');
+  await expect.poll(async () => saved(page)).toEqual(oldest);
 });

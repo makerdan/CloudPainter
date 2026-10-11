@@ -60,6 +60,8 @@ type Project = {
 
 const STORE_KEY = 'cloudpainter-project-v1';
 const PREVIOUS_PROJECT_KEY = 'cloudpainter-previous-project-v1';
+
+const PROJECT_HISTORY_KEY = 'cloudpainter-project-history-v1';
 const id = () => `layer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const createLayer = (name: string): PaintLayer => ({
   id: id(), name, visible: true, opacity: 1, strokes: [], redo: [],
@@ -93,6 +95,24 @@ function readPreviousProject(): Project | null {
     // Ignore corrupt or unavailable recovery data without affecting the active project.
   }
   return null;
+}
+
+function readProjectHistory(): Project[] {
+  try {
+    const saved = localStorage.getItem(PROJECT_HISTORY_KEY);
+    if (saved) {
+      const history = JSON.parse(saved) as unknown;
+      if (Array.isArray(history)) {
+        return history.filter((project): project is Project =>
+          Boolean(project && Array.isArray(project.layers) && project.layers.length),
+        );
+      }
+    }
+  } catch {
+    // Fall back to the earlier single-project recovery slot.
+  }
+  const previousProject = readPreviousProject();
+  return previousProject ? [previousProject] : [];
 }
 
 type ExportSize = '1' | '2' | 'letter' | 'a4';
@@ -130,7 +150,7 @@ function getExportLayout(projectWidth: number, projectHeight: number, exportSize
 
 function Home() {
   const [project, setProject] = useState<Project>(readProject);
-  const [previousProject, setPreviousProject] = useState<Project | null>(readPreviousProject);
+  const [projectHistory, setProjectHistory] = useState<Project[]>(readProjectHistory);
   const latestProject = useRef(project);
   latestProject.current = project;
   const [tool, setTool] = useState<DrawingTool>('brush');
@@ -257,13 +277,14 @@ function Home() {
       const { width, height } = getScaledImageDimensions(image.naturalWidth, image.naturalHeight);
       const layer = createLayer('Sketch layer');
       const currentProject = latestProject.current;
+      const nextHistory = withSavedProject(projectHistory, currentProject);
       try {
-        localStorage.setItem(PREVIOUS_PROJECT_KEY, JSON.stringify(currentProject));
+        localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
       } catch {
         reject(new Error('Could not save a recovery copy of your current sketch. No changes were made.'));
         return;
       }
-      setPreviousProject(currentProject);
+      setProjectHistory(nextHistory);
       setPhotoZoom(1);
       setPhotoPan({ x: 0, y: 0 });
       setPanMode(false);
@@ -277,21 +298,21 @@ function Home() {
     image.onerror = () => reject(new Error('Generated image could not be opened.'));
     image.src = source;
   });
-  const switchToPreviousProject = () => {
-    if (!previousProject) return;
+  const restoreProject = (savedProject: Project) => {
     const currentProject = latestProject.current;
+    const nextHistory = withSavedProject(projectHistory, currentProject);
     try {
-      localStorage.setItem(PREVIOUS_PROJECT_KEY, JSON.stringify(currentProject));
+      localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
     } catch {
-      announce('Could not save the current sketch for switching. Nothing changed.');
+      announce('Could not save the current sketch before restoring. Nothing changed.');
       return;
     }
-    setPreviousProject(currentProject);
+    setProjectHistory(nextHistory);
     setPhotoZoom(1);
     setPhotoPan({ x: 0, y: 0 });
     setPanMode(false);
-    setProject(previousProject);
-    announce(`Opened “${previousProject.title}”. Switch back anytime.`);
+    setProject(savedProject);
+    announce(`Restored “${savedProject.title}”.`);
   };
   const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -682,16 +703,24 @@ function Home() {
               <TooltipButton description="Start a fresh transparent canvas, replacing the current photo and all drawing layers." className="button" onClick={startBlank} data-testid="button-blank"><Plus size={13} /> Blank canvas</TooltipButton>
               <input ref={fileInput} hidden type="file" accept="image/*" onChange={handleFile} data-testid="input-photo" />
             </div>
-            {previousProject && (
-              <TooltipButton
-                description={`Switch between this project and “${previousProject.title}”. Your current project is saved before switching.`}
-                className="button"
-                onClick={switchToPreviousProject}
-                aria-label={`Switch to saved sketch: ${previousProject.title}`}
-                data-testid="button-switch-previous-project"
-              >
-                Switch to saved sketch
-              </TooltipButton>
+            {projectHistory.length > 0 && (
+              <section className="saved-sketches" aria-label="Saved sketches">
+                <p className="section-label">Saved sketches · {projectHistory.length}</p>
+                <div className="saved-sketch-list">
+                  {projectHistory.map((savedProject, index) => (
+                    <TooltipButton
+                      key={`${savedProject.title}-${index}`}
+                      description={`Restore “${savedProject.title}”. Your current sketch is saved first.`}
+                      className="button saved-sketch-button"
+                      onClick={() => restoreProject(savedProject)}
+                      aria-label={`Restore saved sketch: ${savedProject.title}`}
+                      data-testid={`button-restore-project-${index}`}
+                    >
+                      {savedProject.title}
+                    </TooltipButton>
+                  ))}
+                </div>
+              </section>
             )}
             <ImageGenerator onUse={useGeneratedReference} />
 
@@ -967,3 +996,8 @@ function App() {
 }
 
 export default App;
+
+function withSavedProject(history: Project[], project: Project): Project[] {
+  const serializedProject = JSON.stringify(project);
+  return [project, ...history.filter(saved => JSON.stringify(saved) !== serializedProject)];
+}
