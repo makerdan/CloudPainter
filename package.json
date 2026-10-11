@@ -5,8 +5,11 @@
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
-    "typecheck:libs": "tsc --build",
+    "typecheck:libs": "node scripts/workspace-typecheck.mjs --libs",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "typecheck:cloudpainter": "node scripts/workspace-typecheck.mjs artifacts/cloudpainter",
+    "typecheck:api-server": "node scripts/workspace-typecheck.mjs artifacts/api-server",
+    "test:workspace-typecheck": "node --test --test-timeout=240000 scripts/tests/workspace-typecheck.test.mjs",
     "validate:task-plans": "node scripts/validate-task-plans.mjs",
     "test:regression-guard": "node --test scripts/tests/check-regression-guard.test.mjs",
     "test:readme-sync": "node --test scripts/tests/daily-readme-sync.test.mjs"
