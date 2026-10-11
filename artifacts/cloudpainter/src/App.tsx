@@ -51,7 +51,7 @@ import { AccountSettingsProvider, useAccountSettings } from '@/components/Accoun
 import SettingsPage from '@/components/SettingsPage';
 import { OutlinePanel } from '@/components/OutlinePanel';
 import { viewportToProject } from '@/lib/outlineGeometry';
-import { copyDrawing, pasteIntoLayers, renderDrawing, undoDrawing, redoDrawing, type DrawingClipboard, type DrawingEntry } from '@/lib/layerClipboard';
+import { clearDrawing, copyDrawing, hasDrawing, pasteIntoLayers, renderDrawing, undoDrawing, redoDrawing, type DrawingClipboard, type DrawingEntry } from '@/lib/layerClipboard';
 import { editorDefaultsFromSettings } from '@/lib/settingsPersistence';
 import AdminAccountsPage from '@/pages/AdminAccountsPage';
 
@@ -1092,6 +1092,7 @@ function Home() {
     changeLayer(selectedLayer.id, redoDrawing);
   };
   const clipboardLayer = project.layers.find(layer => layer.id === project.selectedLayerId);
+  const canCopyLayerDrawing = hasDrawing(clipboardLayer);
   const copyLayerDrawing = () => {
     const snapshot = copyDrawing(clipboardLayer);
     if (!snapshot) { setToast('Nothing to copy: select a layer with drawings.'); return; }
@@ -1496,7 +1497,7 @@ function Home() {
             </div>
             <TooltipButton description="Add and select a new transparent drawing layer above the others." className="add-layer" onClick={addLayer} data-testid="button-add-layer"><Plus size={14} /> Add a drawing layer</TooltipButton>
             <div className="layer-clipboard-controls">
-              <TooltipButton className="add-layer" description={clipboardLayer?.strokes.length ? 'Copy this layer’s complete drawing, including erasing, to the app clipboard. The original stays unchanged; layer settings and the photo are not copied.' : 'Nothing to copy: select a layer with drawing content. An earlier copy stays available.'} onClick={copyLayerDrawing} disabled={!clipboardLayer?.strokes.length || !!draft} data-testid="button-copy-drawing"><Copy size={14} /> Copy drawing</TooltipButton>
+              <TooltipButton className="add-layer" description={canCopyLayerDrawing ? 'Copy this layer’s complete drawing, including erasing, to the app clipboard. The original stays unchanged; layer settings and the photo are not copied.' : 'Nothing to copy: select a layer with drawing content. An earlier copy stays available.'} onClick={copyLayerDrawing} disabled={!canCopyLayerDrawing || !!draft} data-testid="button-copy-drawing"><Copy size={14} /> Copy drawing</TooltipButton>
               <TooltipButton className="add-layer" description={!drawingClipboard?.length ? 'Copy a layer drawing first. The drawing clipboard is local to this open app and clears on reload.' : !clipboardLayer ? 'Select an existing destination layer before pasting.' : 'Append the copied drawing to this layer without changing existing content. Copied erasers affect only the copy; one Undo removes the paste.'} onClick={pasteLayerDrawing} disabled={!drawingClipboard?.length || !clipboardLayer || !!draft} data-testid="button-paste-drawing"><ClipboardPaste size={14} /> Paste drawing</TooltipButton>
             </div>
             <p className="layer-footnote">Your photograph stays safely underneath, unchanged. Drawings live on their own layers.</p>
@@ -1525,12 +1526,12 @@ function Home() {
                 </TooltipButton>
                 <span className="tool-divider" />
                 <TooltipButton description={project.image ? 'Preview contours from the visible photo with local detection, hosted AI, or edge tracing. Nothing is drawn until you accept.' : 'Import a reference photo before outlining a subject.'} className="tool-button" aria-label="Outline" onClick={openOutline} disabled={!project.image || !selectedLayer.visible || outlineOpening} data-testid="button-outline"><Sparkles size={17} /></TooltipButton>
-                <TooltipButton description={selectedLayer?.strokes.length ? 'Undo the most recent stroke or whole paste on the selected layer.' : 'Nothing to undo: the selected layer has no drawing actions.'} className="tool-button" aria-label="Undo" onClick={undo} disabled={!selectedLayer?.strokes.length} data-testid="button-undo"><Undo2 size={17} /></TooltipButton>
-                <TooltipButton description={selectedLayer?.redo.length ? 'Restore the last undone stroke or whole paste on the selected layer.' : 'Nothing to redo: undo a drawing action on the selected layer first.'} className="tool-button" aria-label="Redo" onClick={redo} disabled={!selectedLayer?.redo.length} data-testid="button-redo"><Redo2 size={17} /></TooltipButton>
+                <TooltipButton description={selectedLayer?.strokes.length ? 'Undo the most recent stroke, paste, or layer clear on the selected layer.' : 'Nothing to undo: the selected layer has no drawing actions.'} className="tool-button" aria-label="Undo" onClick={undo} disabled={!selectedLayer?.strokes.length} data-testid="button-undo"><Undo2 size={17} /></TooltipButton>
+                <TooltipButton description={selectedLayer?.redo.length ? 'Restore the last undone stroke, paste, or layer clear on the selected layer.' : 'Nothing to redo: undo a drawing action on the selected layer first.'} className="tool-button" aria-label="Redo" onClick={redo} disabled={!selectedLayer?.redo.length} data-testid="button-redo"><Redo2 size={17} /></TooltipButton>
               </div>
               <div className="tool-group">
                 <span className="canvas-meta">{project.width} × {project.height}</span>
-                <TooltipButton description="Remove all drawings and undo/redo history from the selected layer; keep the photo and other layers." className="tool-button" aria-label="Clear selected layer" onClick={() => { if (selectedLayer) changeLayer(selectedLayer.id, layer => ({ ...layer, strokes: [], redo: [] })); }} data-testid="button-clear-layer"><RotateCcw size={15} /></TooltipButton>
+                <TooltipButton description="Clear drawings from the selected layer as one undoable action; the photo and other layers stay unchanged." className="tool-button" aria-label="Clear selected layer" onClick={() => { if (selectedLayer) changeLayer(selectedLayer.id, clearDrawing); }} data-testid="button-clear-layer"><RotateCcw size={15} /></TooltipButton>
               </div>
             </div>
 

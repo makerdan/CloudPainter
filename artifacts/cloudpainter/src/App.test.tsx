@@ -29,6 +29,13 @@ async function savedProjectHistory(page: Page) {
   return page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY);
 }
 
+async function canvasPixel(page: Page, testId: string, x: number, y: number) {
+  return page.getByTestId(testId).evaluate((element, point) => {
+    const canvas = element as HTMLCanvasElement;
+    return Array.from(canvas.getContext('2d')!.getImageData(point.x, point.y, 1, 1).data);
+  }, { x, y });
+}
+
 async function openSyntheticProjectTabs(browser: Browser, project: object) {
   const baseURL = process.env.CLOUDPAINTER_TEST_URL;
   if (!baseURL) throw new Error('Set CLOUDPAINTER_TEST_URL to the running CloudPainter preview URL.');
@@ -1524,7 +1531,9 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
 }
 
 for (const redoOnly of [false, true]) {
-test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, remains safe when already empty,' : 'strokes and redo history'} and persists after reload`, async ({ page }) => {
+test(redoOnly
+  ? 'clearing a redo-only layer remains a safe no-op for undo and preserves neighboring artwork'
+  : 'clearing a hidden selected layer is undoable and preserves neighboring rendered artwork', async ({ page }) => {
   const photo = await png(page, 'clear-layer-reference.png', 480, 320);
   const stroke = (color: string, y: number) => ({
     points: [{ x: 0.2, y }, { x: 0.7, y }],
@@ -1534,12 +1543,13 @@ test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, rema
   const before = {
     photoZoom: 1, photoPan: { x: 0, y: 0 },
     image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
+    referencePhotoVisible: true, referencePhotoOpacity: 100,
     width: 480, height: 320, title: 'Keep the rest of my sketch',
     selectedLayerId: 'layer-clear-target',
     layers: [
       { id: 'layer-keep-bottom', name: 'Background lines', visible: true, opacity: 0.65,
         strokes: [stroke('#e53935', 0.25)], redo: [stroke('#ff9800', 0.3)] },
-      { id: 'layer-clear-target', name: 'Draft to clear', visible: true, opacity: 0.45,
+      { id: 'layer-clear-target', name: 'Draft to clear', visible: redoOnly, opacity: 0.45,
         strokes: redoOnly ? [] : [stroke('#1e88e5', 0.5), stroke('#8e24aa', 0.55)], redo: [stroke('#00acc1', 0.6)] },
       { id: 'layer-keep-top', name: 'Hidden details', visible: false, opacity: 0.8,
         strokes: [stroke('#43a047', 0.75)], redo: [stroke('#3949ab', 0.8)] },
@@ -1560,30 +1570,71 @@ test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, rema
   else await expect(page.getByTestId('button-undo')).toBeEnabled();
   await expect(page.getByTestId('button-redo')).toBeEnabled();
   await expect.poll(() => savedProject(page)).toEqual(before);
+  await expect.poll(async () => (await canvasPixel(page, 'canvas-layer-layer-keep-bottom', 240, 80))[3])
+    .toBeGreaterThan(0);
+  const neighborPixel = await canvasPixel(page, 'canvas-layer-layer-keep-bottom', 240, 80);
+  const targetPixel = redoOnly ? null : await canvasPixel(page, 'canvas-layer-layer-clear-target', 240, 160);
+  if (!redoOnly) {
+    await expect.poll(async () => (await canvasPixel(page, 'canvas-layer-layer-clear-target', 240, 160))[3])
+      .toBeGreaterThan(0);
+    expect(targetPixel![3]).toBeGreaterThan(0);
+  }
+  if (!redoOnly) {
+    await expect(page.getByTestId('button-visibility-layer-clear-target')).toHaveAttribute('aria-label', 'Show layer');
+  }
 
   const after = {
     ...before,
     layers: before.layers.map(layer => layer.id === before.selectedLayerId
-      ? { ...layer, strokes: [], redo: [] }
+      ? redoOnly
+        ? { ...layer, strokes: [], redo: [] }
+        : { ...layer, strokes: [...layer.strokes, { kind: 'clear' }], redo: [] }
       : layer),
   };
   await page.getByRole('button', { name: 'Clear selected layer', exact: true }).click();
   // Full equality guards all untouched layer properties and histories, the
   // photo bytes, dimensions, title, layer ordering, and selected layer ID.
   await expect.poll(() => savedProject(page)).toEqual(after);
-  await expect(page.getByTestId('button-undo')).toBeDisabled();
+  await expect(page.getByTestId('button-undo')).toBeEnabled({ enabled: !redoOnly });
   await expect(page.getByTestId('button-redo')).toBeDisabled();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
   await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
+  expect(await canvasPixel(page, 'canvas-layer-layer-keep-bottom', 240, 80)).toEqual(neighborPixel);
+  if (!redoOnly) {
+    await expect.poll(() => canvasPixel(page, 'canvas-layer-layer-clear-target', 240, 160))
+      .toEqual([0, 0, 0, 0]);
+  }
 
   await page.reload();
   await expect(page.getByTestId('img-reference')).toBeVisible();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
   await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
-  await expect(page.getByTestId('button-undo')).toBeDisabled();
+  await expect(page.getByTestId('button-undo')).toBeEnabled({ enabled: !redoOnly });
   await expect(page.getByTestId('button-redo')).toBeDisabled();
   await expect(page.getByTestId('button-visibility-layer-keep-top')).toHaveAttribute('aria-label', 'Show layer');
   await expect.poll(() => savedProject(page)).toEqual(after);
+
+  if (!redoOnly) {
+    const undone = {
+      ...before,
+      layers: before.layers.map(layer => layer.id === before.selectedLayerId
+        ? { ...layer, redo: [{ kind: 'clear' }] }
+        : layer),
+    };
+    await page.getByTestId('button-undo').click();
+    await expect.poll(() => savedProject(page)).toEqual(undone);
+    await expect(page.getByTestId('button-undo')).toBeEnabled();
+    await expect(page.getByTestId('button-redo')).toBeEnabled();
+    await expect.poll(() => canvasPixel(page, 'canvas-layer-layer-clear-target', 240, 160))
+      .toEqual(targetPixel);
+    expect(await canvasPixel(page, 'canvas-layer-layer-keep-bottom', 240, 80)).toEqual(neighborPixel);
+
+    await page.getByTestId('button-redo').click();
+    await expect.poll(() => savedProject(page)).toEqual(after);
+    await expect.poll(() => canvasPixel(page, 'canvas-layer-layer-clear-target', 240, 160))
+      .toEqual([0, 0, 0, 0]);
+    expect(await canvasPixel(page, 'canvas-layer-layer-keep-bottom', 240, 80)).toEqual(neighborPixel);
+  }
 
   if (redoOnly) {
     // Clear again after rehydrating the now completely empty target. Neither
@@ -1601,6 +1652,97 @@ test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, rema
   }
 });
 }
+
+test('the only layer can be cleared, undone, redone, and drawn on without losing the right history', async ({ page }) => {
+  const photo = await png(page, 'single-layer-clear.png', 480, 320);
+  const originalStroke = {
+    points: [{ x: 0.2, y: 0.4 }, { x: 0.7, y: 0.4 }],
+    color: '#e53935', size: 8, tool: 'pen',
+  };
+  const obsoleteRedo = {
+    points: [{ x: 0.2, y: 0.7 }, { x: 0.7, y: 0.7 }],
+    color: '#ff9800', size: 8, tool: 'pen',
+  };
+  const before = {
+    photoZoom: 1, photoPan: { x: 0, y: 0 },
+    image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
+    referencePhotoVisible: true, referencePhotoOpacity: 100,
+    width: 480, height: 320, title: 'One layer remains usable',
+    selectedLayerId: 'only-layer',
+    layers: [{
+      id: 'only-layer', name: 'Layer 1', visible: true, opacity: 1,
+      strokes: [originalStroke], redo: [obsoleteRedo],
+    }],
+  };
+  await page.addInitScript(({ key, project }) => {
+    const marker = `${key}-single-layer-clear-seeded`;
+    if (sessionStorage.getItem(marker)) return;
+    localStorage.setItem(key, JSON.stringify(project));
+    sessionStorage.setItem(marker, 'true');
+  }, { key: STORE_KEY, project: before });
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toBeVisible();
+  await expect.poll(() => savedProject(page)).toEqual(before);
+  await expect.poll(async () => (await canvasPixel(page, 'canvas-layer-only-layer', 240, 128))[3])
+    .toBeGreaterThan(0);
+  const originalPixel = await canvasPixel(page, 'canvas-layer-only-layer', 240, 128);
+
+  const cleared = {
+    ...before,
+    layers: [{ ...before.layers[0], strokes: [...before.layers[0].strokes, { kind: 'clear' }], redo: [] }],
+  };
+  await page.getByTestId('button-clear-layer').click();
+  await expect.poll(() => savedProject(page)).toEqual(cleared);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+  await expect.poll(() => canvasPixel(page, 'canvas-layer-only-layer', 240, 128)).toEqual([0, 0, 0, 0]);
+
+  await page.getByTestId('button-undo').click();
+  const clearUndone = {
+    ...before,
+    layers: [{ ...before.layers[0], redo: [{ kind: 'clear' }] }],
+  };
+  await expect.poll(() => savedProject(page)).toEqual(clearUndone);
+  await expect.poll(() => canvasPixel(page, 'canvas-layer-only-layer', 240, 128)).toEqual(originalPixel);
+  await expect(page.getByTestId('button-redo')).toBeEnabled();
+
+  await page.getByTestId('button-redo').click();
+  await expect.poll(() => savedProject(page)).toEqual(cleared);
+  await expect.poll(() => canvasPixel(page, 'canvas-layer-only-layer', 240, 128)).toEqual([0, 0, 0, 0]);
+
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(3);
+  const afterDrawing = await savedProject(page);
+  expect(afterDrawing.layers[0].strokes.slice(0, 2)).toEqual(cleared.layers[0].strokes);
+  expect(afterDrawing.layers[0].redo).toEqual([]);
+
+  await page.getByTestId('button-undo').click();
+  const drawingUndone = {
+    ...cleared,
+    layers: [{ ...cleared.layers[0], redo: [afterDrawing.layers[0].strokes[2]] }],
+  };
+  await expect.poll(() => savedProject(page)).toEqual(drawingUndone);
+  await expect(page.getByTestId('button-redo')).toBeEnabled();
+
+  await page.getByTestId('button-undo').click();
+  const clearAndDrawingUndone = {
+    ...before,
+    layers: [{
+      ...before.layers[0],
+      redo: [afterDrawing.layers[0].strokes[2], { kind: 'clear' }],
+    }],
+  };
+  await expect.poll(() => savedProject(page)).toEqual(clearAndDrawingUndone);
+  await expect.poll(() => canvasPixel(page, 'canvas-layer-only-layer', 240, 128)).toEqual(originalPixel);
+
+  await page.getByTestId('button-redo').click();
+  await expect.poll(() => savedProject(page)).toEqual(drawingUndone);
+  await expect.poll(() => canvasPixel(page, 'canvas-layer-only-layer', 240, 128)).toEqual([0, 0, 0, 0]);
+  await page.getByTestId('button-redo').click();
+  await expect.poll(() => savedProject(page)).toEqual(afterDrawing);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+});
 
 for (const deleteSelected of [true, false]) {
   test(`deleting ${deleteSelected ? 'a selected' : 'an unselected'} layer preserves the other artwork and survives reload`, async ({ page }) => {

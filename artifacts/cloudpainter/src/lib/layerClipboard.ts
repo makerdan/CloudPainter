@@ -2,7 +2,8 @@ import { renderStroke, type Stroke } from './strokeRenderer.ts';
 
 // Each entry is one history action. Legacy strokes remain unchanged.
 export type BackgroundFill = { kind: 'background-fill'; color: string };
-export type DrawingEntry = Stroke | BackgroundFill | { kind: 'paste'; entries: DrawingEntry[] };
+export type ClearDrawing = { kind: 'clear' };
+export type DrawingEntry = Stroke | BackgroundFill | ClearDrawing | { kind: 'paste'; entries: DrawingEntry[] };
 export type DrawingHistory = { strokes: DrawingEntry[]; redo: DrawingEntry[] };
 export type DrawingClipboard = readonly DrawingEntry[];
 
@@ -14,10 +15,25 @@ export function isBackgroundFill(entry: DrawingEntry): entry is BackgroundFill {
   return 'kind' in entry && entry.kind === 'background-fill';
 }
 
+export function isClear(entry: DrawingEntry): entry is ClearDrawing {
+  return 'kind' in entry && entry.kind === 'clear';
+}
+
+function currentDrawingEntries(entries: readonly DrawingEntry[]): DrawingEntry[] {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    if (isClear(entries[index])) return entries.slice(index + 1);
+  }
+  return [...entries];
+}
+
+export function hasDrawing(source: DrawingHistory | undefined): boolean {
+  return Boolean(source && currentDrawingEntries(source.strokes).length);
+}
+
 function freezeSnapshot(entries: DrawingEntry[]): DrawingClipboard {
   for (const entry of entries) {
     if (isPaste(entry)) freezeSnapshot(entry.entries);
-    else if (!isBackgroundFill(entry)) {
+    else if (!isBackgroundFill(entry) && !isClear(entry)) {
       entry.points.forEach(Object.freeze);
       Object.freeze(entry.points);
       if (entry.brush) Object.freeze(entry.brush);
@@ -33,8 +49,10 @@ function freezeSnapshot(entries: DrawingEntry[]): DrawingClipboard {
 }
 
 export function copyDrawing(source: DrawingHistory | undefined): DrawingClipboard | null {
-  if (!source?.strokes.length) return null;
-  return freezeSnapshot(structuredClone(source.strokes));
+  if (!source) return null;
+  const entries = currentDrawingEntries(source.strokes);
+  if (!entries.length) return null;
+  return freezeSnapshot(structuredClone(entries));
 }
 
 export function pasteDrawing<T extends DrawingHistory>(destination: T, clipboard: DrawingClipboard | null): T {
@@ -53,6 +71,13 @@ export function pasteIntoLayers<T extends DrawingHistory & { id: string }>(
   return layers.map(layer => layer.id === destinationId ? pasteDrawing(layer, clipboard) : layer);
 }
 
+export function clearDrawing<T extends DrawingHistory>(layer: T): T {
+  if (!layer.strokes.length || isClear(layer.strokes.at(-1)!)) {
+    return layer.redo.length ? { ...layer, redo: [] } : layer;
+  }
+  return { ...layer, strokes: [...layer.strokes, { kind: 'clear' }], redo: [] };
+}
+
 export function undoDrawing<T extends DrawingHistory>(layer: T): T {
   if (!layer.strokes.length) return layer;
   return { ...layer, strokes: layer.strokes.slice(0, -1), redo: [...layer.redo, layer.strokes.at(-1)!] };
@@ -68,6 +93,10 @@ export function renderDrawing(
   createCanvas: () => HTMLCanvasElement = () => document.createElement('canvas'),
 ): void {
   for (const entry of entries) {
+    if (isClear(entry)) {
+      context.clearRect(0, 0, width, height);
+      continue;
+    }
     if (!isPaste(entry)) {
       if (isBackgroundFill(entry)) {
         context.save();

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { copyDrawing, isBackgroundFill, isPaste, pasteDrawing, pasteIntoLayers, redoDrawing, renderDrawing, undoDrawing, type DrawingEntry } from './layerClipboard.ts';
+import { clearDrawing, copyDrawing, hasDrawing, isBackgroundFill, isClear, isPaste, pasteDrawing, pasteIntoLayers, redoDrawing, renderDrawing, undoDrawing, type DrawingEntry } from './layerClipboard.ts';
 import { renderStroke, type Stroke } from './strokeRenderer.ts';
 
 const stroke: Stroke = { tool: 'brush', color: '#336699', size: 14, points: [{ x: 0.2, y: 0.3 }, { x: 0.7, y: 0.3 }], brush: { style: 'dry', version: 1, seed: 42 } };
@@ -47,6 +47,47 @@ test('background fills copy, paste, undo, redo and replay as one full-layer acti
   const restoredPaste = restored.strokes.at(-1)!;
   assert.ok(isPaste(restoredPaste));
   assert.ok(isBackgroundFill(restoredPaste.entries[0]));
+});
+
+test('clearing a layer is one undoable and redoable action that branches past older redo entries', options, () => {
+  const fill = { kind: 'background-fill', color: '#cc2200' } as const;
+  const original = { ...source(), strokes: [structuredClone(stroke), structuredClone(fill)] as DrawingEntry[], redo: [structuredClone(eraser)] };
+  const cleared = clearDrawing(original);
+  assert.deepEqual(cleared.strokes, [...original.strokes, { kind: 'clear' }]);
+  assert.deepEqual(cleared.redo, []);
+  assert.deepEqual(original.redo, [eraser]);
+  assert.deepEqual(original.strokes, [stroke, fill]);
+  assert.ok(isClear(cleared.strokes.at(-1)!));
+  assert.equal(hasDrawing(cleared), false);
+
+  const undone = undoDrawing(cleared);
+  assert.deepEqual(undone.strokes, original.strokes);
+  assert.deepEqual(undone.redo, [{ kind: 'clear' }]);
+  const redone = redoDrawing(undone);
+  assert.deepEqual(redone, cleared);
+
+  const log = recorder();
+  renderDrawing(log.context, redone.strokes, 1200, 800, log.createCanvas);
+  assert.ok(log.events.some(event => event[1] === 'clearRect' && event[2] === 0 && event[3] === 0 && event[4] === 1200 && event[5] === 800));
+  const nested = copyDrawing({
+    strokes: [{ kind: 'paste', entries: [stroke, { kind: 'clear' }] }],
+    redo: [],
+  })!;
+  assert.ok(Object.isFrozen((nested[0] as { entries: DrawingEntry[] }).entries[1]));
+});
+
+test('copying after a clear includes only the current drawing and an empty cleared layer cannot be copied', options, () => {
+  const afterClear = { strokes: [stroke, { kind: 'clear' }, eraser] as DrawingEntry[], redo: [] };
+  assert.equal(hasDrawing({ strokes: [stroke, { kind: 'clear' }], redo: [] }), false);
+  assert.deepEqual(copyDrawing(afterClear), [eraser]);
+  assert.equal(copyDrawing({ strokes: [stroke, { kind: 'clear' }], redo: [] }), null);
+});
+
+test('clearing an already empty layer adds no undo action and drops only unusable redo history', options, () => {
+  const empty = { strokes: [] as DrawingEntry[], redo: [structuredClone(stroke)] };
+  assert.deepEqual(clearDrawing(empty), { strokes: [], redo: [] });
+  const alreadyClear = { strokes: [{ kind: 'clear' }] as DrawingEntry[], redo: [] };
+  assert.equal(clearDrawing(alreadyClear), alreadyClear);
 });
 
 test('pressure-aware pen samples survive layer copy, paste, undo/redo and JSON replay', options, () => {
