@@ -579,7 +579,7 @@ export const getGenerateLogoImageUrl = () => {
 }
 
 /**
- * @summary Generate one exploratory logo PNG from text only
+ * @summary Generate one account-budgeted exploratory logo PNG from text only
  */
 export const generateLogoImage = async (logoImageRequest: LogoImageRequest, options?: Parameters<typeof customFetch>[1]): Promise<LogoImageResult> => {
 
@@ -612,7 +612,7 @@ return customFetch<LogoImageResult>(getGenerateLogoImageUrl(),
 
 export const getGenerateLogoImageMutationKey = () => ['generateLogoImage'] as const;
 
-export const getGenerateLogoImageMutationOptions = <TError = ErrorType<LogoImageErrorResponse>,
+export const getGenerateLogoImageMutationOptions = <TError = ErrorType<LogoImageErrorResponse | void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateLogoImage>>, TError,GenerateLogoImageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof generateLogoImage>>, TError,GenerateLogoImageMutationVariables, TContext> => {
 
@@ -641,13 +641,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type GenerateLogoImageMutationResult = NonNullable<Awaited<ReturnType<typeof generateLogoImage>>>
     export type GenerateLogoImageMutationBody = BodyType<LogoImageRequest>
-    export type GenerateLogoImageMutationError = ErrorType<LogoImageErrorResponse>
+    export type GenerateLogoImageMutationError = ErrorType<LogoImageErrorResponse | void>
     export type GenerateLogoImageMutationVariables = {data: BodyType<LogoImageRequest>}
 
     /**
- * @summary Generate one exploratory logo PNG from text only
+ * @summary Generate one account-budgeted exploratory logo PNG from text only
  */
-export const useGenerateLogoImage = <TError = ErrorType<LogoImageErrorResponse>,
+export const useGenerateLogoImage = <TError = ErrorType<LogoImageErrorResponse | void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateLogoImage>>, TError,GenerateLogoImageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof generateLogoImage>>,

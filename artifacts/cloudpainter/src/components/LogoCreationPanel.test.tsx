@@ -1,10 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import { LogoCreationPanel, MAX_CONCEPTS, PROMPT_MAX, TIMEOUT_MS, type LogoDirectionOption } from './LogoCreationPanel';
 
-const generate = vi.fn();
-vi.mock('@workspace/api-client-react', () => ({ generateLogoImage: (...a: unknown[]) => generate(...a) }));
+const { generate, account, configuration } = vi.hoisted(() => ({
+  generate: vi.fn(),
+  account: { isLoaded: true, userId: 'account-1' as string | null, sessionId: 'session-1' as string | null },
+  configuration: { current: null as null | {
+    data: { configured: boolean; signedIn: boolean; allowed: boolean; dailyLimit: number; remaining: number; globalRemaining: number };
+    isError: boolean;
+    isLoading: boolean;
+  } },
+}));
+vi.mock('@workspace/api-client-react', () => ({
+  generateLogoImage: (...a: unknown[]) => generate(...a),
+  getGetImageGenerationConfigQueryKey: () => ['getImageGenerationConfig'],
+  useGetImageGenerationConfig: () => configuration.current,
+}));
+vi.mock('./Account', () => ({ usePaletteAccount: () => account }));
+vi.mock('@clerk/react', () => ({ SignInButton: ({ children }: { children: ReactNode }) => children }));
 
 const directions: LogoDirectionOption[] = [
   { id: 'cloudline', number: '01', name: 'Cloudline', description: 'A quiet sky shape.' },
@@ -22,6 +37,14 @@ let revoke: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   generate.mockReset();
+  account.isLoaded = true;
+  account.userId = 'account-1';
+  account.sessionId = 'session-1';
+  configuration.current = {
+    data: { configured: true, signedIn: true, allowed: true, dailyLimit: 2, remaining: 2, globalRemaining: 20 },
+    isError: false,
+    isLoading: false,
+  };
   n = 0;
   create = vi.fn(() => `blob:test-${++n}`);
   revoke = vi.fn();
@@ -54,11 +77,46 @@ describe('LogoCreationPanel', () => {
     const [req, opts] = generate.mock.calls[0];
     expect(req).toEqual({ prompt: 'a cloud', direction: 'cloudline' });
     expect(opts.signal).toBeInstanceOf(AbortSignal);
+    expect(opts.headers).toEqual({ 'X-Logo-Session': 'session-1' });
     let name = '';
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { name = this.download; });
     fireEvent.click(screen.getByTestId('button-download-logo-1'));
     expect(name).toBe('cloudpainter-logo-concept-1.png');
     click.mockRestore();
+  });
+
+  it('gates logo requests for signed-out accounts', () => {
+    account.userId = null;
+    account.sessionId = null;
+    setup();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
+    expect((screen.getByTestId('button-generate-logo') as HTMLButtonElement).disabled).toBe(true);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('aborts and clears logo work when the signed-in account changes', async () => {
+    let resolve!: (value: unknown) => void;
+    generate.mockResolvedValueOnce(ok).mockReturnValueOnce(new Promise(r => { resolve = r; }));
+    const view = setup();
+    type('a cloud');
+    submit();
+    await screen.findByTestId('img-logo-result-1');
+    submit();
+    const signal = generate.mock.calls[1][1].signal as AbortSignal;
+
+    act(() => {
+      account.userId = 'account-2';
+      account.sessionId = 'session-2';
+      view.rerender(<LogoCreationPanel logoDirections={directions} />);
+    });
+    expect(signal.aborted).toBe(true);
+    expect(screen.queryByRole('img')).toBeNull();
+    expect((screen.getByTestId('input-logo-prompt') as HTMLTextAreaElement).value).toBe('');
+    expect(revoke.mock.calls).toEqual([['blob:test-1']]);
+
+    await act(async () => { resolve(ok); });
+    expect(screen.queryByRole('img')).toBeNull();
+    expect(create).toHaveBeenCalledTimes(1);
   });
 
   it('shows only safe messages and keeps the previous result on error', async () => {
@@ -147,6 +205,8 @@ describe('LogoCreationPanel', () => {
       code: 'REFUSED', message: 'raw internal text', retryable: false,
     }, { status: 422 })).mockResolvedValueOnce(Response.json({
       code: 'UNAVAILABLE', message: 'raw private configuration', retryable: true,
+    }, { status: 503 })).mockResolvedValueOnce(Response.json({
+      code: 'budget_unavailable', message: 'database internals', retryable: true,
     }, { status: 503 }));
     vi.stubGlobal('fetch', fetchMock);
     generate.mockImplementation(actual.generateLogoImage);
@@ -158,6 +218,8 @@ describe('LogoCreationPanel', () => {
     submit();
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/Poe image generation is unavailable/));
     expect(screen.getByTestId('button-retry-logo')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('button-retry-logo'));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/no logo request was sent/));
     expect(document.body.textContent).not.toMatch(/raw internal|raw private/);
     const [url, request] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/logo-images');
@@ -254,7 +316,7 @@ describe('LogoCreationPanel', () => {
     await user.keyboard('{Enter}');
     expect(screen.queryByRole('img')).toBeNull();
     expect(screen.getByTestId('button-generate-logo').textContent).toBe('Generate image');
-    expect(screen.getByRole('status').textContent).toBe('');
+    expect(screen.getByTestId('status-logo-generation').textContent).toBe('');
     expect(revoke.mock.calls).toEqual([['blob:test-1']]);
   });
 

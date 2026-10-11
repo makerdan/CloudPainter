@@ -14,7 +14,7 @@ export class ImageAccessError extends Error {
 
 export function dailyLimit(role: string): number {
   if (role !== "normal" && role !== "admin") {
-    throw new ImageAccessError("authorization_denied", "This account is not approved to generate images.", 403);
+    throw new ImageAccessError("authorization_denied", "This account does not have a supported Poe access role.", 403);
   }
   return IMAGE_LIMITS[role];
 }
@@ -32,7 +32,17 @@ export function checkBudget(counts: { account: number; total: number; burst: num
 }
 
 export function createImageBudget(database = pool) {
+  async function ensureDefaultAccount(userId: string) {
+    // A verified Clerk identity gets the ordinary allowance on first use.
+    // ON CONFLICT DO NOTHING deliberately preserves admin roles and revocations.
+    await database.query(
+      "INSERT INTO image_generation_accounts (user_id, role, enabled) VALUES ($1, 'normal', true) ON CONFLICT (user_id) DO NOTHING",
+      [userId],
+    );
+  }
+
   async function status(userId: string) {
+    await ensureDefaultAccount(userId);
     const result = await database.query<{ role: string; used: string; total: string }>(`
       SELECT a.role, count(r.id)::text AS used,
         (SELECT count(*)::text FROM image_generation_attempts
@@ -42,7 +52,7 @@ export function createImageBudget(database = pool) {
         AND r.started_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
       WHERE a.user_id = $1 AND a.enabled = true GROUP BY a.role`, [userId]);
     const account = result.rows[0];
-    if (!account) throw new ImageAccessError("authorization_denied", "This account is not approved to generate images.", 403);
+    if (!account) throw new ImageAccessError("authorization_denied", "Poe image access is disabled for this account.", 403);
     const limit = dailyLimit(account.role);
     return { dailyLimit: limit, remaining: Math.max(0, limit - Number(account.used)),
       globalRemaining: Math.max(0, IMAGE_LIMITS.globalDaily - Number(account.total)) };
@@ -55,9 +65,15 @@ export function createImageBudget(database = pool) {
       await client.query("SET LOCAL statement_timeout = '5s'");
       // One database-wide lock serializes all workers' budget checks + inserts.
       await client.query("SELECT pg_advisory_xact_lock(7062026)");
+      // Keep provisioning inside the reservation transaction so a concurrent
+      // revoke or role change cannot be overwritten by a stale status request.
+      await client.query(
+        "INSERT INTO image_generation_accounts (user_id, role, enabled) VALUES ($1, 'normal', true) ON CONFLICT (user_id) DO NOTHING",
+        [userId],
+      );
       const account = await client.query<{ role: string }>(
         "SELECT role FROM image_generation_accounts WHERE user_id = $1 AND enabled = true FOR SHARE", [userId]);
-      if (!account.rows[0]) throw new ImageAccessError("authorization_denied", "This account is not approved to generate images.", 403);
+      if (!account.rows[0]) throw new ImageAccessError("authorization_denied", "Poe image access is disabled for this account.", 403);
       const limit = dailyLimit(account.rows[0].role);
       const counts = await client.query<{ account: string; total: string; burst: string; active: string; reset: number }>(`
         SELECT

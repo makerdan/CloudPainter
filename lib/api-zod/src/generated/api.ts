@@ -14,13 +14,11 @@ import * as zod from 'zod';
 export const getAdminOverviewHeaderXAdminSessionMax = 256;
 
 
-
 export const GetAdminOverviewHeader = zod.object({
   "X-Admin-Session": zod.string().max(getAdminOverviewHeaderXAdminSessionMax)
 })
 
 export const getAdminOverviewResponseTotalAccountsMin = 0;
-
 
 
 export const GetAdminOverviewResponse = zod.object({
@@ -41,7 +39,6 @@ export const listAdminAccountsQueryOffsetMax = 10000;
 export const listAdminAccountsQueryQueryMax = 100;
 
 
-
 export const ListAdminAccountsQueryParams = zod.object({
   "limit": zod.coerce.number().int().min(1).max(listAdminAccountsQueryLimitMax).default(listAdminAccountsQueryLimitDefault),
   "offset": zod.coerce.number().int().min(listAdminAccountsQueryOffsetMin).max(listAdminAccountsQueryOffsetMax).default(listAdminAccountsQueryOffsetDefault),
@@ -49,7 +46,6 @@ export const ListAdminAccountsQueryParams = zod.object({
 })
 
 export const listAdminAccountsHeaderXAdminSessionMax = 256;
-
 
 
 export const ListAdminAccountsHeader = zod.object({
@@ -64,7 +60,6 @@ export const listAdminAccountsResponseLimitMax = 50;
 
 export const listAdminAccountsResponseOffsetMin = 0;
 export const listAdminAccountsResponseOffsetMax = 10000;
-
 
 
 export const ListAdminAccountsResponse = zod.object({
@@ -90,7 +85,6 @@ export const listAdminAuditEventsQueryLimitMax = 50;
 export const listAdminAuditEventsQueryCursorMax = 512;
 
 
-
 export const ListAdminAuditEventsQueryParams = zod.object({
   "limit": zod.coerce.number().int().min(1).max(listAdminAuditEventsQueryLimitMax).default(listAdminAuditEventsQueryLimitDefault),
   "cursor": zod.coerce.string().max(listAdminAuditEventsQueryCursorMax).optional(),
@@ -99,7 +93,6 @@ export const ListAdminAuditEventsQueryParams = zod.object({
 })
 
 export const listAdminAuditEventsHeaderXAdminSessionMax = 256;
-
 
 
 export const ListAdminAuditEventsHeader = zod.object({
@@ -113,7 +106,6 @@ export const listAdminAuditEventsResponseTotalCountMin = 0;
 export const listAdminAuditEventsResponseLimitMax = 50;
 
 export const listAdminAuditEventsResponseNextCursorMax = 512;
-
 
 
 export const ListAdminAuditEventsResponse = zod.object({
@@ -141,7 +133,6 @@ export const SetAdminAccountStatusParams = zod.object({
 })
 
 export const setAdminAccountStatusHeaderXAdminSessionMax = 256;
-
 
 
 export const SetAdminAccountStatusHeader = zod.object({
@@ -176,7 +167,6 @@ export const GetOutlineConfigResponse = zod.object({
 export const generateOutlineHeaderXOutlineSessionMax = 256;
 
 
-
 export const GenerateOutlineHeader = zod.object({
   "X-Outline-Session": zod.string().max(generateOutlineHeaderXOutlineSessionMax)
 })
@@ -188,7 +178,6 @@ export const generateOutlineBodySubjectMax = 160;
 
 export const generateOutlineBodySensitivityMin = 0.1;
 export const generateOutlineBodySensitivityMax = 0.9;
-
 
 
 export const GenerateOutlineBody = zod.object({
@@ -212,7 +201,6 @@ export const generateOutlineResponseCandidatesItemPointsMax = 1024;
 export const generateOutlineResponseCandidatesMax = 8;
 
 
-
 export const GenerateOutlineResponse = zod.object({
   "candidates": zod.array(zod.object({
   "label": zod.string().max(generateOutlineResponseCandidatesItemLabelMax),
@@ -224,12 +212,11 @@ export const GenerateOutlineResponse = zod.object({
   "model": zod.enum(['GPT-Image-2'])
 })
 
-
 /**
- * @summary Generate one exploratory logo PNG from text only
+ * @summary Generate one account-budgeted exploratory logo PNG from text only
  */
+export const generateLogoImageHeaderXLogoSessionMax = 256;
 export const generateLogoImageBodyPromptMax = 1200;
-
 
 
 export const GenerateLogoImageBody = zod.object({
@@ -238,7 +225,6 @@ export const GenerateLogoImageBody = zod.object({
 })
 
 export const generateLogoImageResponsePngBase64Max = 11184812;
-
 
 
 export const GenerateLogoImageResponse = zod.object({
@@ -260,7 +246,6 @@ export const getPaletteResponseColorsItemNameMax = 40;
 
 export const getPaletteResponseColorsItemHexRegExp = new RegExp('^#[0-9a-fA-F]{6}$');
 export const getPaletteResponseColorsMax = 64;
-
 
 
 export const GetPaletteResponse = zod.object({
@@ -287,7 +272,6 @@ export const savePaletteBodyColorsItemHexRegExp = new RegExp('^#[0-9a-fA-F]{6}$'
 export const savePaletteBodyColorsMax = 64;
 
 
-
 export const SavePaletteBody = zod.object({
   "revision": zod.number().int().min(savePaletteBodyRevisionMin).max(savePaletteBodyRevisionMax),
   "colors": zod.array(zod.object({
@@ -305,7 +289,6 @@ export const savePaletteResponseColorsItemNameMax = 40;
 
 export const savePaletteResponseColorsItemHexRegExp = new RegExp('^#[0-9a-fA-F]{6}$');
 export const savePaletteResponseColorsMax = 64;
-
 
 
 export const SavePaletteResponse = zod.object({
@@ -329,7 +312,6 @@ export const getSettingsResponseTextSizeMultipleOf = 10;
 export const getSettingsResponseBrushSizeMax = 48;
 
 
-
 export const GetSettingsResponse = zod.object({
   "textSize": zod.number().int().min(getSettingsResponseTextSizeMin).max(getSettingsResponseTextSizeMax).multipleOf(getSettingsResponseTextSizeMultipleOf),
   "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
@@ -349,7 +331,6 @@ export const saveSettingsBodyTextSizeMultipleOf = 10;
 export const saveSettingsBodyBrushSizeMax = 48;
 
 
-
 export const SaveSettingsBody = zod.object({
   "textSize": zod.number().int().min(saveSettingsBodyTextSizeMin).max(saveSettingsBodyTextSizeMax).multipleOf(saveSettingsBodyTextSizeMultipleOf),
   "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
@@ -362,7 +343,6 @@ export const saveSettingsResponseTextSizeMax = 140;
 export const saveSettingsResponseTextSizeMultipleOf = 10;
 
 export const saveSettingsResponseBrushSizeMax = 48;
-
 
 
 export const SaveSettingsResponse = zod.object({
@@ -401,13 +381,10 @@ export const GetImageGenerationConfigResponse = zod.object({
 export const generatePoeImageBodyPromptMax = 1000;
 
 
-
 export const GeneratePoeImageBody = zod.object({
   "prompt": zod.string().min(1).max(generatePoeImageBodyPromptMax),
   "model": zod.enum(['Nano-Banana-Pro', 'Nano-Banana-2', 'GPT-Image-2.5-Sunburst', 'Flux-2-Turbo'])
 })
-
-
 
 
 export const GeneratePoeImageResponse = zod.object({
@@ -423,7 +400,6 @@ export const GeneratePoeImageResponse = zod.object({
 export const upscalePoeImageBodyPngBase64Max = 11184812;
 
 
-
 export const UpscalePoeImageBody = zod.object({
   "pngBase64": zod.string().min(1).max(upscalePoeImageBodyPngBase64Max),
   "scale": zod.union([zod.literal(4),zod.literal(8)])
@@ -436,7 +412,6 @@ export const upscalePoeImageResponseWidthMax = 8192;
 export const upscalePoeImageResponseHeightMax = 8192;
 
 
-
 export const UpscalePoeImageResponse = zod.object({
   "b64_json": zod.string().min(1).max(upscalePoeImageResponseB64JsonMax),
   "mime": zod.enum(['image/png']),
@@ -445,3 +420,6 @@ export const UpscalePoeImageResponse = zod.object({
 })
 
 
+export const GenerateLogoImageHeader = zod.object({
+  "X-Logo-Session": zod.string().max(generateLogoImageHeaderXLogoSessionMax).describe('Must match the verified current Clerk session to prevent delayed requests crossing accounts.')
+})

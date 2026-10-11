@@ -83,11 +83,11 @@ describe("Poe Assistant upscale export", () => {
     expect(within(panel).queryByRole("link", { name: "Sign in" })).toBeNull();
   });
 
-  it("keeps unapproved accounts gated with an actionable status", () => {
+  it("keeps disabled accounts gated with an actionable status", () => {
     mocks.configuration.data = { ...mocks.configuration.data, allowed: false };
     renderExport();
     const panel = screen.getByRole("region", { name: "Poe Assistant upscale export" });
-    expect(within(panel).getByText("This account is not approved for Poe image requests. Ask the project owner for access.")).toBeTruthy();
+    expect(within(panel).getByText("Poe image access is disabled for this account. Ask the project owner for help.")).toBeTruthy();
     expect((within(panel).getByRole("button", { name: "Review 4× export" }) as HTMLButtonElement).disabled).toBe(true);
   });
 

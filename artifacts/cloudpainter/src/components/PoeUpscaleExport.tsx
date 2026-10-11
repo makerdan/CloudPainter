@@ -157,7 +157,7 @@ export function PoeUpscaleExport({ composeImage, title, width, height }: Props) 
           {error && <p role="alert" className="upscale-error" data-testid="upscale-error">{error}</p>}
           {!sizeSupported && <p role="status">This composition is too large for {scale}× export. Output is limited to 8192 pixels per side and 20 megapixels; input is limited to 2048 pixels per side. Choose a smaller composition or scale.</p>}
           {!isLoaded && <p role="status">Checking account…</p>}
-          {signedIn && configuration.data && !configuration.data.allowed && <p role="status">This account is not approved for Poe image requests. Ask the project owner for access.</p>}
+          {signedIn && configuration.data && !configuration.data.allowed && <p role="status">Poe image access is disabled for this account. Ask the project owner for help.</p>}
           {signedIn && configuration.data?.allowed && <p className="upscale-budget">
             {configuration.data.remaining} of {configuration.data.dailyLimit} account attempts and {configuration.data.globalRemaining} shared attempts remain today. These are request caps, not point estimates.
           </p>}

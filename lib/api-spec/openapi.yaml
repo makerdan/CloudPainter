@@ -181,7 +181,13 @@ paths:
     post:
       operationId: generateLogoImage
       tags: [logos]
-      summary: Generate one exploratory logo PNG from text only
+      summary: Generate one account-budgeted exploratory logo PNG from text only
+      parameters:
+        - in: header
+          name: X-Logo-Session
+          required: true
+          schema: { type: string, maxLength: 256 }
+          description: Must match the verified current Clerk session to prevent delayed requests crossing accounts.
       requestBody:
         required: true
         content:
@@ -197,6 +203,10 @@ paths:
                 $ref: "#/components/schemas/LogoImageResult"
         "400":
           $ref: "#/components/responses/LogoImageError"
+        "401":
+          description: Sign in required or session changed
+        "403":
+          description: Account disabled or request origin denied
         "413":
           $ref: "#/components/responses/LogoImageError"
         "422":
@@ -608,7 +618,7 @@ components:
       properties:
         code:
           type: string
-          enum: [INVALID_INPUT, BODY_TOO_LARGE, REFUSED, RATE_LIMITED, BUSY, UNAVAILABLE, PROVIDER_FAILED, INVALID_IMAGE, TIMEOUT]
+          enum: [INVALID_INPUT, BODY_TOO_LARGE, REFUSED, RATE_LIMITED, BUSY, UNAVAILABLE, PROVIDER_FAILED, INVALID_IMAGE, TIMEOUT, unauthorized, authorization_denied, quota_exhausted, rate_limited, budget_unavailable]
         message:
           type: string
         retryable:

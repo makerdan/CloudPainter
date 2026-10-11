@@ -191,7 +191,7 @@ export function OutlinePanel({ image, contextKey, onAccept, onClose }: Props) {
       )}
 
       <div className="outline-actions">
-        <TooltipButton description={blocked ? 'Hosted outlining requires account approval, configuration, a subject and explicit consent.' : 'Find outlines in the selected region. Hosted Run spends a Poe request.'}
+        <TooltipButton description={blocked ? 'Hosted outlining requires sign-in, configured Poe access, a subject and explicit consent. Disabled accounts cannot make Poe requests.' : 'Find outlines in the selected region. Hosted Run spends a Poe request.'}
           className="button button-primary" disabled={blocked || status === 'loading'} onClick={run} data-testid="button-outline-run">
           {status === 'error' || status === 'empty' ? 'Retry' : 'Run'}
         </TooltipButton>

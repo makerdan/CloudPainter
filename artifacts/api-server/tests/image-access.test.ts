@@ -6,6 +6,7 @@ import pg from "pg";
 import { pool } from "@workspace/db";
 import { createImageBudget, dailyLimit, checkBudget, ImageAccessError } from "../src/lib/image-budget";
 import { createImagesRouter } from "../src/routes/images";
+import { createLogoImagesRouter } from "../src/routes/logo-images";
 import { PoeImageError } from "@workspace/integrations-openai-ai-server/poe";
 
 // A private schema isolates test usage/membership from real accounts and budgets.
@@ -44,9 +45,43 @@ test("only application-owned normal and admin roles have spending limits", () =>
   assert.throws(() => dailyLimit("superadmin"), ImageAccessError);
 });
 
-test("unapproved users are denied by both status and reservation", async () => {
-  await assert.rejects(budget.status("unapproved"), { code: "authorization_denied" });
-  await assert.rejects(budget.reserve("unapproved"), { code: "authorization_denied" });
+test("explicitly revoked identities are denied by both status and reservation", async () => {
+  await database.query("INSERT INTO image_generation_accounts (user_id, role, enabled) VALUES ('revoked', 'normal', false)");
+  await assert.rejects(budget.status("revoked"), { code: "authorization_denied" });
+  await assert.rejects(budget.reserve("revoked"), { code: "authorization_denied" });
+});
+
+test("a first verified identity gets only the normal allowance and existing elevated history is preserved", async () => {
+  const status = await budget.status("newly-signed-in");
+  assert.equal(status.dailyLimit, 2);
+  assert.equal(status.remaining, 2);
+  const provisioned = await database.query(
+    "SELECT role, enabled FROM image_generation_accounts WHERE user_id = 'newly-signed-in'",
+  );
+  assert.deepEqual(provisioned.rows, [{ role: "normal", enabled: true }]);
+
+  await seed("admin", 1);
+  await budget.status("admin");
+  const elevated = await database.query(
+    "SELECT role, enabled FROM image_generation_accounts WHERE user_id = 'admin'",
+  );
+  assert.deepEqual(elevated.rows, [{ role: "admin", enabled: true }]);
+  assert.equal(Number((await database.query(
+    "SELECT count(*) FROM image_generation_attempts WHERE user_id = 'admin'",
+  )).rows[0].count), 1);
+  assert.equal((await budget.status("admin")).remaining, 14);
+});
+
+test("automatic provisioning never re-enables an explicitly disabled account", async () => {
+  await database.query(
+    "INSERT INTO image_generation_accounts (user_id, role, enabled) VALUES ('disabled-first-use', 'normal', false)",
+  );
+  await assert.rejects(budget.status("disabled-first-use"), { code: "authorization_denied" });
+  await assert.rejects(budget.reserve("disabled-first-use"), { code: "authorization_denied" });
+  const account = await database.query(
+    "SELECT role, enabled FROM image_generation_accounts WHERE user_id = 'disabled-first-use'",
+  );
+  assert.deepEqual(account.rows, [{ role: "normal", enabled: false }]);
 });
 
 test("normal daily limit is shared across newly constructed worker instances", async () => {
@@ -157,12 +192,71 @@ async function routeRequest(userId: string | null, options: {
   }
 }
 
-test("anonymous and unapproved route requests never contact the provider", async () => {
-  for (const [user, status] of [[null, 401], ["intruder", 403]] as const) {
+async function logoRouteRequest(userId: string) {
+  let transports = 0;
+  const app = express().use("/api", createLogoImagesRouter({
+    auth: () => ({ userId, sessionId: "logo-test-session" }),
+    configured: () => true,
+    budget,
+    provider: async () => {
+      transports++;
+      throw new Error("Provider should not run when shared account budget is exhausted");
+    },
+  }));
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const base = `http://127.0.0.1:${address.port}`;
+  try {
+    const response = await fetch(`${base}/api/logo-images`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: base,
+        "X-Logo-Session": "logo-test-session",
+      },
+      body: JSON.stringify({ prompt: "cloud" }),
+    });
+    return { status: response.status, data: await response.json(), transports };
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+}
+
+test("anonymous and explicitly revoked route requests never contact the provider", async () => {
+  await database.query("INSERT INTO image_generation_accounts (user_id, role, enabled) VALUES ('revoked-route', 'normal', false)");
+  for (const [user, status] of [[null, 401], ["revoked-route", 403]] as const) {
     const result = await routeRequest(user);
     assert.equal(result.status, status);
     assert.equal(result.transports, 0);
   }
+});
+
+test("a first authenticated generation request creates and uses only normal access", async () => {
+  const result = await routeRequest("new-route-user");
+  assert.equal(result.status, 200);
+  assert.equal(result.transports, 1);
+  assert.deepEqual(
+    (await database.query("SELECT role, enabled FROM image_generation_accounts WHERE user_id = 'new-route-user'")).rows,
+    [{ role: "normal", enabled: true }],
+  );
+  assert.equal(Number((await database.query(
+    "SELECT count(*) FROM image_generation_attempts WHERE user_id = 'new-route-user'",
+  )).rows[0].count), 1);
+});
+
+test("logo generation shares the same durable account quota as image generation", async () => {
+  await seed("normal", 1);
+  const image = await routeRequest("normal");
+  assert.equal(image.status, 200);
+  assert.equal(image.transports, 1);
+  const logo = await logoRouteRequest("normal");
+  assert.equal(logo.status, 429);
+  assert.equal(logo.data.code, "quota_exhausted");
+  assert.equal(logo.transports, 0);
+  assert.equal((await budget.status("normal")).remaining, 0);
 });
 
 test("account, global, burst, and concurrency exhaustion happen before provider transport", async () => {
@@ -219,12 +313,21 @@ test("successful stub generation consumes one durable attempt", async () => {
   assert.equal((await budget.status("normal")).remaining, 1);
 });
 
-test("config distinguishes anonymous, unapproved, and approved access without provider calls", async () => {
-  for (const user of [null, "intruder", "normal"]) {
+test("config provisions signed-in users and distinguishes anonymous from revoked access", async () => {
+  await database.query("INSERT INTO image_generation_accounts (user_id, role, enabled) VALUES ('revoked-config', 'normal', false)");
+  for (const user of [null, "revoked-config", "new-config-user", "normal"]) {
     const result = await routeRequest(user, { method: "GET", path: "/api/images/config" });
     assert.equal(result.status, 200);
-    assert.equal(result.data.allowed, user === "normal");
+    assert.equal(result.data.allowed, user === "normal" || user === "new-config-user");
     assert.equal(result.data.signedIn, Boolean(user));
     assert.equal(result.transports, 0);
   }
+  assert.deepEqual(
+    (await database.query("SELECT role, enabled FROM image_generation_accounts WHERE user_id = 'new-config-user'")).rows,
+    [{ role: "normal", enabled: true }],
+  );
+  assert.deepEqual(
+    (await database.query("SELECT role, enabled FROM image_generation_accounts WHERE user_id = 'revoked-config'")).rows,
+    [{ role: "normal", enabled: false }],
+  );
 });

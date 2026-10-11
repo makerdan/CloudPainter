@@ -7,6 +7,7 @@ import {
   createPoeProvider, extractPoeImageUrl, generateLogo, normalizeProviderError, parseLogoInput, validateProviderImage,
 } from "../src/lib/logo-images.ts";
 import { createLogoImagesRouter } from "../src/routes/logo-images.ts";
+import { ImageAccessError } from "../src/lib/image-budget.ts";
 
 const png = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: "#315d4d" } }).png().toBuffer();
 const success = { data: [{ b64_json: png.toString("base64") }] };
@@ -194,7 +195,17 @@ test("HTTP response is bounded even without a content-length header", async () =
 });
 
 async function serve(t: Parameters<Parameters<typeof test>[1]>[0], options: Parameters<typeof createLogoImagesRouter>[0]) {
-  const app = express().use("/api", createLogoImagesRouter(options));
+  const budget = {
+    status: async () => ({ dailyLimit: 2, remaining: 2, globalRemaining: 20 }),
+    reserve: async () => "logo-test-lease",
+    release: async () => {},
+  };
+  const app = express().use("/api", createLogoImagesRouter({
+    ...options,
+    auth: options.auth ?? (() => ({ userId: "logo-test-user", sessionId: "logo-test-session" })),
+    budget: options.budget ?? budget,
+    configured: options.configured ?? (() => true),
+  }));
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>(resolve => server.once("listening", resolve));
   t.after(() => new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }));
@@ -203,7 +214,12 @@ async function serve(t: Parameters<Parameters<typeof test>[1]>[0], options: Para
   return `http://127.0.0.1:${address.port}/api/logo-images`;
 }
 const post = (url: string, body: unknown = { prompt: "cloud" }, headers: Record<string, string> = {}) =>
-  fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+  fetch(url, { method: "POST", headers: {
+    "Content-Type": "application/json",
+    Origin: new URL(url).origin,
+    "X-Logo-Session": "logo-test-session",
+    ...headers,
+  }, body: JSON.stringify(body) });
 
 test("API success validates image and cache/privacy headers, without accepting extra payloads", async t => {
   const requests: string[] = [];
@@ -225,7 +241,11 @@ test("API rejects empty, oversized and invalid JSON before any provider request"
   assert.equal((await post(url, { prompt: "" })).status, 400);
   assert.equal((await post(url, { prompt: "x".repeat(1201) })).status, 400);
   assert.equal((await post(url, { prompt: "x".repeat(9000) })).status, 413);
-  const broken = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{private broken" });
+  const broken = await fetch(url, { method: "POST", headers: {
+    "Content-Type": "application/json",
+    Origin: new URL(url).origin,
+    "X-Logo-Session": "logo-test-session",
+  }, body: "{private broken" });
   assert.equal(broken.status, 400);
   assert.doesNotMatch(await broken.text(), /private|SyntaxError/);
   assert.equal(calls, 0);
@@ -242,6 +262,68 @@ test("API refusal and missing configuration remain safe retryable messages", asy
   }
   const url = await serve(t, { provider: async () => { throw new Error("PRIVATE provider internals"); } });
   assert.doesNotMatch(await (await post(url)).text(), /PRIVATE/);
+});
+
+test("logo requests require the verified account session and same-origin app request", async t => {
+  let calls = 0;
+  const url = await serve(t, { provider: async () => { calls++; return success; } });
+  assert.equal((await post(url, { prompt: "cloud" }, { "X-Logo-Session": "another-session" })).status, 401);
+  assert.equal((await post(url, { prompt: "cloud" }, { Origin: "https://attacker.example" })).status, 403);
+  assert.equal(calls, 0);
+});
+
+test("logo generation reserves and releases the common durable account budget", async t => {
+  const events: string[] = [];
+  const url = await serve(t, {
+    provider: async () => { events.push("provider"); return success; },
+    budget: {
+      status: async userId => {
+        events.push(`status:${userId}`);
+        return { dailyLimit: 2, remaining: 2, globalRemaining: 20 };
+      },
+      reserve: async userId => { events.push(`reserve:${userId}`); return "logo-shared-lease"; },
+      release: async lease => { events.push(`release:${lease}`); },
+    },
+  });
+  assert.equal((await post(url)).status, 200);
+  assert.deepEqual(events, [
+    "status:logo-test-user",
+    "reserve:logo-test-user",
+    "provider",
+    "release:logo-shared-lease",
+  ]);
+});
+
+test("denied accounts and unavailable limits never reach the logo provider", async t => {
+  let calls = 0;
+  const denied = await serve(t, {
+    provider: async () => { calls++; return success; },
+    budget: {
+      status: async () => { throw new ImageAccessError("authorization_denied", "disabled", 403); },
+      reserve: async () => { throw new Error("should not reserve"); },
+      release: async () => {},
+    },
+  });
+  assert.equal((await post(denied)).status, 403);
+  const unavailable = await serve(t, {
+    provider: async () => { calls++; return success; },
+    configured: () => false,
+  });
+  assert.equal((await post(unavailable)).status, 503);
+  assert.equal(calls, 0);
+
+  const reservationUnavailable = await serve(t, {
+    provider: async () => { calls++; return success; },
+    budget: {
+      status: async () => ({ dailyLimit: 2, remaining: 2, globalRemaining: 20 }),
+      reserve: async () => { throw new Error("database unavailable"); },
+      release: async () => {},
+    },
+  });
+  const failure = await post(reservationUnavailable);
+  assert.equal(failure.status, 503);
+  assert.equal((await failure.json()).code, "budget_unavailable");
+  assert.equal(calls, 0);
 });
 
 test("rate limits reset and concurrency blocks duplicate calls", async t => {
@@ -296,7 +378,16 @@ test("disconnect aborts provider without sending a late image", async t => {
     return new Promise((_resolve, reject) => signal.addEventListener("abort", () => { stopped(); reject(new Error("cancelled")); }));
   } });
   const controller = new AbortController();
-  const request = fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: "cloud" }), signal: controller.signal }).catch(() => {});
+  const request = fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: new URL(url).origin,
+      "X-Logo-Session": "logo-test-session",
+    },
+    body: JSON.stringify({ prompt: "cloud" }),
+    signal: controller.signal,
+  }).catch(() => {});
   await began;
   controller.abort();
   await ended;

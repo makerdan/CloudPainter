@@ -309,12 +309,12 @@ for (const scope of ['account', 'global'] as const) {
   });
 }
 
-test('unapproved accounts cannot submit a prompt', async ({ page }) => {
+test('disabled accounts cannot submit a prompt', async ({ page }) => {
   let calls = 0;
   await page.route('**/api/images/config', route => route.fulfill({ json: { ...approvedConfig, allowed: false } }));
   await page.route('**/api/images/generate', route => { calls++; return route.abort(); });
   await page.getByTestId('button-generate-image').click();
-  await expect(page.getByText('This account is not approved to generate images. Ask the project owner for access.')).toBeVisible();
+  await expect(page.getByText('Poe image access is disabled for this account. Ask the project owner for help.')).toBeVisible();
   await expect(page.getByTestId('button-submit-generation')).toBeDisabled();
   expect(calls).toBe(0);
 });
