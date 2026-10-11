@@ -1613,7 +1613,11 @@ function Home() {
               </div>
             </div>
             <div className="statusbar">
-              <span className="hint"><span className="keyboard-key">⌘ Z</span> undo <span className="keyboard-key">⇧ ⌘ Z</span> redo</span>
+              <span className="hint">
+                <span className="keyboard-key">⌘/Ctrl Z</span> undo
+                <span className="keyboard-key">⌘/Ctrl Y</span> or
+                <span className="keyboard-key">⇧⌘/Ctrl Z</span> redo
+              </span>
               <span>{panMode ? 'Drag the photo to reposition it; your drawing stays unchanged.' : backgroundMode ? BACKGROUND_TOOL_GUIDANCE : TOOL_GUIDANCE[tool]}</span>
             </div>
           </section>

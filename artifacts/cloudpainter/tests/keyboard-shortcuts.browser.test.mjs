@@ -23,6 +23,28 @@ test('undo and redo shortcuts stay native in editable text controls and work on 
     const redo = page.getByTestId('button-redo');
     await waitForStoredHistory(page, 0, 0);
 
+    const shortcutHint = page.locator('.statusbar .hint');
+    const shortcutHintText = await shortcutHint.innerText();
+    assert.match(shortcutHintText, /⌘\/Ctrl Z/);
+    assert.match(shortcutHintText, /⌘\/Ctrl Y/);
+    assert.match(shortcutHintText, /⇧⌘\/Ctrl Z/);
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      const hintBounds = await shortcutHint.boundingBox();
+      assert.ok(hintBounds && hintBounds.x >= 0 && hintBounds.x + hintBounds.width <= width);
+      assert.equal(
+        await shortcutHint.evaluate(element => element.scrollWidth <= element.clientWidth),
+        true,
+        `shortcut guidance should wrap without horizontal overflow at ${width}px`,
+      );
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+        true,
+        `the page should not overflow horizontally at ${width}px`,
+      );
+    }
+    await page.setViewportSize({ width: 1440, height: 1000 });
+
     const bounds = await canvas.boundingBox();
     assert.ok(bounds);
     const x = bounds.x + bounds.width * 0.25;
@@ -184,6 +206,89 @@ test('undo and redo shortcuts stay native in editable text controls and work on 
     assert.equal(await undo.isEnabled(), true);
     assert.equal(await redo.isDisabled(), true);
 
+    // Build two layers with independent histories, then alternate real keyboard
+    // shortcuts across them. Each action must stay with the selected layer.
+    await addSyntheticStroke(page);
+    await waitForStoredHistory(page, 2, 0);
+    const firstLayerId = await page.evaluate(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') || '{}');
+      return project.selectedLayerId;
+    });
+    assert.ok(firstLayerId);
+    await page.getByTestId('button-add-layer').click();
+    await page.waitForFunction(firstId => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') || '{}');
+      return project.layers?.length === 2 && project.selectedLayerId !== firstId;
+    }, firstLayerId);
+    const secondLayerId = await page.evaluate(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') || '{}');
+      return project.selectedLayerId;
+    });
+    assert.ok(secondLayerId);
+    await addSyntheticStroke(page);
+    await waitForStoredHistory(page, 1, 0);
+
+    const historyBaseline = await page.evaluate(() => JSON.parse(localStorage.getItem('cloudpainter-project-v1') || '{}'));
+    const expectedProject = JSON.parse(JSON.stringify(historyBaseline));
+    const findExpectedLayer = id => expectedProject.layers.find(layer => layer.id === id);
+    const firstExpected = findExpectedLayer(firstLayerId);
+    const secondExpected = findExpectedLayer(secondLayerId);
+    assert.ok(firstExpected && secondExpected);
+    assert.equal(firstExpected.strokes.length, 2);
+    assert.equal(secondExpected.strokes.length, 1);
+
+    const waitForExpectedHistories = async selectedLayerId => {
+      expectedProject.selectedLayerId = selectedLayerId;
+      await page.waitForFunction(expected => {
+        const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') || '{}');
+        return JSON.stringify(project) === JSON.stringify(expected);
+      }, expectedProject);
+      const project = await page.evaluate(() => JSON.parse(localStorage.getItem('cloudpainter-project-v1') || '{}'));
+      assert.deepEqual(project, expectedProject);
+    };
+
+    // Undo the second layer, switch layers, then undo the first layer.
+    await page.getByTestId(`button-select-layer-${secondLayerId}`).click();
+    await page.keyboard.press('Control+z');
+    secondExpected.redo.push(secondExpected.strokes.pop());
+    await waitForExpectedHistories(secondLayerId);
+
+    await page.getByTestId(`button-select-layer-${firstLayerId}`).click();
+    await page.keyboard.press('Meta+z');
+    firstExpected.redo.push(firstExpected.strokes.pop());
+    await waitForExpectedHistories(firstLayerId);
+
+    // Redo each layer after switching selection; Y and Shift+Z must restore
+    // each stroke only to the layer whose redo stack owns it.
+    await page.getByTestId(`button-select-layer-${secondLayerId}`).click();
+    await page.keyboard.press('Control+y');
+    secondExpected.strokes.push(secondExpected.redo.pop());
+    await waitForExpectedHistories(secondLayerId);
+
+    await page.getByTestId(`button-select-layer-${firstLayerId}`).click();
+    await page.keyboard.press('Meta+Shift+z');
+    firstExpected.strokes.push(firstExpected.redo.pop());
+    await waitForExpectedHistories(firstLayerId);
+
+    // Confirm Cmd+Y also follows the selected layer after another layer switch.
+    await page.keyboard.press('Meta+z');
+    firstExpected.redo.push(firstExpected.strokes.pop());
+    await waitForExpectedHistories(firstLayerId);
+
+    await page.getByTestId(`button-select-layer-${secondLayerId}`).click();
+    await page.keyboard.press('Control+z');
+    secondExpected.redo.push(secondExpected.strokes.pop());
+    await waitForExpectedHistories(secondLayerId);
+    await page.keyboard.press('Meta+y');
+    secondExpected.strokes.push(secondExpected.redo.pop());
+    await waitForExpectedHistories(secondLayerId);
+
+    await page.getByTestId(`button-select-layer-${firstLayerId}`).click();
+    await waitForExpectedHistories(firstLayerId);
+    await page.reload();
+    await canvas.waitFor();
+    await waitForExpectedHistories(firstLayerId);
+
     await context.close();
   } finally {
     await browser.close();
@@ -196,6 +301,16 @@ async function storedHistory(page) {
     const layer = project.layers?.find(item => item.id === project.selectedLayerId);
     return { strokes: layer?.strokes?.length ?? 0, redo: layer?.redo?.length ?? 0 };
   });
+}
+
+async function addSyntheticStroke(page) {
+  const canvas = page.locator('canvas.draw-surface');
+  const bounds = await canvas.boundingBox();
+  assert.ok(bounds);
+  await page.mouse.move(bounds.x + bounds.width * 0.25, bounds.y + bounds.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width * 0.75, bounds.y + bounds.height * 0.55, { steps: 6 });
+  await page.mouse.up();
 }
 
 async function waitForStoredHistory(page, expectedStrokes, expectedRedo) {

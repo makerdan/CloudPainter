@@ -42,6 +42,16 @@ making a storage-denial regression fail before reaching its assertions.
 **How to apply:** Freeze time only when deterministic timer control is needed,
 and derive the pause point from the current browser clock.
 
+After changing selection in an autosaved editor, wait for the selected ID to
+persist before using it to identify the next layer or history target.
+
+**Why:** The UI updates before debounced local storage, so an immediate storage
+read can return the previous selection and make a valid layer-history test target
+the wrong layer.
+
+**How to apply:** Wait for the expected selected ID and layer count in the saved
+project before drawing on, switching to, or asserting history for the new layer.
+
 In multi-tab Chromium checks, background-page autosave timers may fire much later
 than their configured debounce interval; a 500 ms timer took about 10 seconds in
 the headless test context.

@@ -206,8 +206,8 @@ h1 { font-family:var(--font-display); font-size:33px; line-height:1.1; font-weig
 .empty-stage-inner strong { display:block; font:500 22px var(--font-display); color:#425c4c; margin-bottom:5px; }
 .empty-stage-inner p { font-size:12px; line-height:1.6; margin:0; }
 .statusbar { display:flex; align-items:center; justify-content:space-between; color:#838b82; font-size:11px; min-height:20px; padding:0 3px; }
-.statusbar .hint { display:flex; align-items:center; gap:6px; }
-.keyboard-key { font:10px var(--font-mono); padding:2px 5px; background:#e8e6de; border-radius:4px; color:#70786f; }
+.statusbar .hint { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.keyboard-key { font:10px var(--font-mono); padding:2px 5px; background:#e8e6de; border-radius:4px; color:#70786f; white-space:nowrap; }
 .right-panel { padding:17px 15px; display:flex; flex-direction:column; gap:14px; }
 .control-block { border-bottom:1px solid var(--nested-border); padding-bottom:14px; }
 .control-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:11px; font-size:12px; font-weight:700; }
