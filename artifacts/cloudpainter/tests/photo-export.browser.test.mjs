@@ -1128,6 +1128,45 @@ test('does not download a partial PNG when a visible layer canvas is unavailable
   }
 });
 
+test('Background fills cover the complete drawing layer in PNG and PDF exports', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await page.goto(appUrl);
+    await chooseDrawingColor(page, '#2367cd');
+    await page.getByTestId('disclosure-opacity').click();
+    await page.getByTestId('input-layer-opacity').evaluate(input => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '65');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await page.getByTestId('button-tool-background').click();
+    await page.getByTestId('canvas-stage').click({ position: { x: 100, y: 100 } });
+    await waitForStrokeCount(page, 0, 1);
+    assert.deepEqual(await page.evaluate(() => {
+      const fill = JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null').layers[0].strokes[0];
+      const canvas = document.querySelector('canvas.draw-surface');
+      const sample = canvas.getContext('2d').getImageData(canvas.width - 2, canvas.height - 2, 1, 1).data;
+      return { fill, pixel: [...sample] };
+    }), {
+      fill: { kind: 'background-fill', color: '#2367cd' },
+      pixel: [35, 103, 205, 255],
+    });
+
+    const png = await inspectExportedPixels(page, [[0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]]);
+    assert.deepEqual([png.width, png.height], [1200, 800]);
+    for (const pixel of png.pixels) assert.deepEqual(pixel, [35, 103, 205, 166]);
+
+    const pdf = await inspectPdfArtwork(page, [[0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]]);
+    for (const pixel of pdf.pixels) {
+      assert.ok(Math.abs(pixel[0] - 112) < 12, `PDF fill red channel should stay near 112, received ${pixel[0]}`);
+      assert.ok(Math.abs(pixel[1] - 156) < 12, `PDF fill green channel should stay near 156, received ${pixel[1]}`);
+      assert.ok(Math.abs(pixel[2] - 223) < 12, `PDF fill blue channel should stay near 223, received ${pixel[2]}`);
+    }
+  } finally {
+    await page.close();
+  }
+});
+
 test('does not download a sketch-only PNG when the photo fails to decode during export', async () => {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   try {

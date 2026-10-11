@@ -138,6 +138,130 @@ test('all instruments preserve pixels, settings, layer isolation, reload, histor
   }, png)).toBe(true);
 });
 
+test('Background fills one selected layer, survive history/reload/copy-paste, and leave legacy marks and photo unchanged', async ({ page }) => {
+  await page.addInitScript(key => {
+    const photo = document.createElement('canvas');
+    photo.width = 1200;
+    photo.height = 800;
+    const photoContext = photo.getContext('2d')!;
+    photoContext.fillStyle = '#e0e8dd';
+    photoContext.fillRect(0, 0, photo.width, photo.height);
+    localStorage.setItem(key, JSON.stringify({
+      image: photo.toDataURL(), width: 1200, height: 800, selectedLayerId: 'target', title: 'Background fill',
+      photoZoom: 1, photoPan: { x: 0, y: 0 },
+      layers: [
+        {
+          id: 'legacy', name: 'Legacy', visible: true, opacity: 1, redo: [],
+          strokes: [
+            { tool: 'brush', color: '#ee806b', size: 18, points: [{ x: 0.1, y: 0.12 }, { x: 0.8, y: 0.12 }] },
+            { tool: 'pencil', color: '#315d4d', size: 16, points: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.2 }] },
+            { tool: 'pen', color: '#4466bb', size: 14, points: [{ x: 0.1, y: 0.28 }, { x: 0.8, y: 0.28 }] },
+            { tool: 'eraser', color: '#000000', size: 20, points: [{ x: 0.45, y: 0.12 }] },
+          ],
+        },
+        {
+          id: 'target', name: 'Target', visible: true, opacity: 0.65, redo: [],
+          strokes: [{ tool: 'brush', color: '#315d4d', size: 18, points: [{ x: 0.1, y: 0.5 }, { x: 0.8, y: 0.5 }] }],
+        },
+      ],
+    }));
+  }, key);
+  await page.goto('/');
+  const legacyPixels = await pixels(page, '[data-testid="canvas-layer-legacy"]');
+  const beforeFill = await pixels(page);
+  const photo = await page.locator('.base-photo').getAttribute('src');
+
+  await page.getByTestId('input-color-hex').fill('#CC2200');
+  await page.getByTestId('button-apply-color').click();
+  await page.getByTestId('button-tool-background').click();
+  await expect(page.getByTestId('button-tool-background')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('button-tool-brush')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByTestId('status-toast')).toHaveCount(0);
+  await expect(page.locator('.statusbar')).toContainText('click the canvas to fill the selected layer');
+  await page.getByTestId('canvas-layer-target').click({ position: { x: 10, y: 10 } });
+
+  const filled = await page.getByTestId('canvas-layer-target').evaluate((canvas: HTMLCanvasElement) => {
+    const ctx = canvas.getContext('2d')!;
+    const legacy = document.querySelector<HTMLCanvasElement>('[data-testid="canvas-layer-legacy"]')!;
+    const samples = [
+      [1, 1], [canvas.width - 2, 1], [1, canvas.height - 2], [canvas.width - 2, canvas.height - 2],
+      [Math.floor(canvas.width / 2), Math.floor(canvas.height / 2)],
+    ].map(([x, y]) => Array.from(ctx.getImageData(x, y, 1, 1).data));
+    return {
+      samples,
+      opacity: canvas.style.opacity,
+      aboveLegacyLayer: Number(canvas.style.zIndex) > Number(legacy.style.zIndex),
+    };
+  });
+  expect(filled.samples).toEqual(Array.from({ length: 5 }, () => [204, 34, 0, 255]));
+  expect(filled.opacity).toBe('0.65');
+  expect(filled.aboveLegacyLayer).toBe(true);
+  expect(await pixels(page, '[data-testid="canvas-layer-legacy"]')).toBe(legacyPixels);
+  expect(await page.locator('.base-photo').getAttribute('src')).toBe(photo);
+  await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[1].strokes.at(-1), key))
+    .toEqual({ kind: 'background-fill', color: '#cc2200' });
+
+  await page.getByTestId('button-undo').click();
+  await expect.poll(() => pixels(page)).toBe(beforeFill);
+  await page.getByTestId('button-redo').click();
+  await expect.poll(() => pixels(page)).not.toBe(beforeFill);
+  const redone = await pixels(page);
+  await page.reload();
+  await expect.poll(() => pixels(page)).toBe(redone);
+  expect(await pixels(page, '[data-testid="canvas-layer-legacy"]')).toBe(legacyPixels);
+  expect(await page.locator('.base-photo').getAttribute('src')).toBe(photo);
+
+  await page.getByTestId('button-tool-background').click();
+  await page.getByTestId('button-copy-drawing').click();
+  await page.getByTestId('button-add-layer').click();
+  await page.getByTestId('button-paste-drawing').click();
+  const pastedLayerId = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers.at(-1).id, key);
+  await expect.poll(() => page.getByTestId(`canvas-layer-${pastedLayerId}`).evaluate((canvas: HTMLCanvasElement) => {
+    const data = canvas.getContext('2d')!.getImageData(1, 1, 1, 1).data;
+    return Array.from(data);
+  })).toEqual([204, 34, 0, 255]);
+  await expect.poll(() => page.evaluate(key => {
+    const entry = JSON.parse(localStorage.getItem(key)!).layers.at(-1).strokes.at(-1);
+    return entry.kind === 'paste' && entry.entries.some((child: { kind?: string }) => child.kind === 'background-fill');
+  }, key)).toBe(true);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByTestId('button-export').click();
+  const download = await downloadPromise;
+  const stream = (await download.createReadStream())!;
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const png = `data:image/png;base64,${Buffer.concat(chunks).toString('base64')}`;
+  const exportedSamples = await page.evaluate(async png => {
+    const image = new Image();
+    image.src = png;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext('2d')!;
+    context.drawImage(image, 0, 0);
+    return [[1, 1], [image.width - 2, 1], [1, image.height - 2], [image.width - 2, image.height - 2]]
+      .map(([x, y]) => Array.from(context.getImageData(x, y, 1, 1).data));
+  }, png);
+  expect(exportedSamples).toEqual(Array.from({ length: 4 }, () => [204, 34, 0, 255]));
+
+  for (let zoom = 0; zoom < 4; zoom += 1) await page.getByTestId('button-zoom-in').click();
+  await page.getByTestId('button-pan-mode').click();
+  const beforePanFillCount = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers.at(-1).strokes.length, key);
+  const pastedPixelsBeforePan = await pixels(page, `[data-testid="canvas-layer-${pastedLayerId}"]`);
+  await page.getByTestId(`canvas-layer-${pastedLayerId}`).click({ position: { x: 20, y: 20 } });
+  await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers.at(-1).strokes.length, key))
+    .toBe(beforePanFillCount);
+  expect(await pixels(page, `[data-testid="canvas-layer-${pastedLayerId}"]`)).toBe(pastedPixelsBeforePan);
+
+  await page.getByTestId('button-pan-mode').click();
+  await page.getByTestId(`button-visibility-${pastedLayerId}`).click();
+  await page.locator('[data-testid="canvas-stage"]').click({ position: { x: 30, y: 30 } });
+  await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers.at(-1).strokes.length, key))
+    .toBe(beforePanFillCount);
+});
+
 test('stylus pressure is saved with each pen point and rendered into the stroke', async ({ page }) => {
   await page.goto('/');
   const canvas = page.locator('canvas.draw-surface');

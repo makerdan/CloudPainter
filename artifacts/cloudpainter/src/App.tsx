@@ -18,6 +18,7 @@ import {
   PenTool,
   Minus,
   Plus,
+  PaintBucket,
   Redo2,
   RotateCcw,
   Save,
@@ -44,7 +45,7 @@ import { PoeUpscaleExport } from '@/components/PoeUpscaleExport';
 import { DrawingColorControl } from '@/components/DrawingColorControl';
 import { BrushStyleControl } from '@/components/BrushStyleControl';
 import { BRUSH_STYLES, renderStroke, type BrushStyle, type DrawingTool, type Point, type Stroke } from '@/lib/strokeRenderer';
-import { createInstrumentStroke, normalizePointerPressure, toolAfterColorSelection, TOOL_GUIDANCE, type DrawingInstrument } from '@/lib/drawingTools';
+import { BACKGROUND_TOOL_GUIDANCE, createInstrumentStroke, normalizePointerPressure, toolAfterColorSelection, TOOL_GUIDANCE, type DrawingInstrument } from '@/lib/drawingTools';
 import { AccountProvider, AccountControls, SignInPage, SignUpPage } from '@/components/Account';
 import { AccountSettingsProvider, useAccountSettings } from '@/components/AccountSettings';
 import SettingsPage from '@/components/SettingsPage';
@@ -453,6 +454,7 @@ function Home() {
   const latestProject = useRef(project);
   latestProject.current = project;
   const [tool, setTool] = useState<DrawingTool>('brush');
+  const [backgroundMode, setBackgroundMode] = useState(false);
   const lastDrawingTool = useRef<DrawingInstrument>('brush');
   const editorDefaultsApplied = useRef(false);
   const drawingDefaultsTouched = useRef(false);
@@ -463,7 +465,12 @@ function Home() {
   const selectTool = (nextTool: DrawingTool) => {
     drawingDefaultsTouched.current = true;
     if (nextTool !== 'eraser') lastDrawingTool.current = nextTool;
+    setBackgroundMode(false);
     setTool(nextTool);
+  };
+  const selectBackgroundTool = () => {
+    drawingDefaultsTouched.current = true;
+    setBackgroundMode(true);
   };
   const [brushStyle, setBrushStyle] = useState<BrushStyle>('round');
   useEffect(() => {
@@ -876,6 +883,13 @@ function Home() {
   };
   const beginStroke = (event: PointerEvent<HTMLCanvasElement>, layer: PaintLayer) => {
     if (event.button !== 0 || !layer.visible) return;
+    if (backgroundMode) {
+      if (panMode || layer.id !== project.selectedLayerId) return;
+      changeLayer(layer.id, current => current.visible
+        ? { ...current, strokes: [...current.strokes, { kind: 'background-fill', color }], redo: [] }
+        : current);
+      return;
+    }
     event.currentTarget.setPointerCapture(event.pointerId);
     drawingRef.current = true;
     const point = pointFromEvent(event);
@@ -1428,10 +1442,20 @@ function Home() {
                   ['brush', 'Brush', Paintbrush], ['pencil', 'Pencil', Pencil],
                   ['pen', 'Pen', PenTool], ['eraser', 'Eraser', Eraser],
                 ] as const).map(([instrument, label, Icon]) => (
-                  <TooltipButton key={instrument} description={TOOL_GUIDANCE[instrument]} className={`tool-button instrument-button ${tool === instrument ? 'selected' : ''}`} aria-label={`${label} tool`} aria-pressed={tool === instrument} onClick={() => selectTool(instrument)} data-testid={`button-tool-${instrument}`}>
+                  <TooltipButton key={instrument} description={TOOL_GUIDANCE[instrument]} className={`tool-button instrument-button ${!backgroundMode && tool === instrument ? 'selected' : ''}`} aria-label={`${label} tool`} aria-pressed={!backgroundMode && tool === instrument} onClick={() => selectTool(instrument)} data-testid={`button-tool-${instrument}`}>
                     <Icon size={17} /><span>{label}</span>
                   </TooltipButton>
                 ))}
+                <TooltipButton
+                  description={BACKGROUND_TOOL_GUIDANCE}
+                  className={`tool-button instrument-button background-tool-button ${backgroundMode ? 'selected' : ''}`}
+                  aria-label="Background tool"
+                  aria-pressed={backgroundMode}
+                  onClick={selectBackgroundTool}
+                  data-testid="button-tool-background"
+                >
+                  <PaintBucket size={17} /><span>Background</span>
+                </TooltipButton>
                 <span className="tool-divider" />
                 <TooltipButton description={project.image ? 'Preview contours from the visible photo with local detection, hosted AI, or edge tracing. Nothing is drawn until you accept.' : 'Import a reference photo before outlining a subject.'} className="tool-button" aria-label="Outline" onClick={openOutline} disabled={!project.image || !selectedLayer.visible || outlineOpening} data-testid="button-outline"><Sparkles size={17} /></TooltipButton>
                 <TooltipButton description={selectedLayer?.strokes.length ? 'Undo the most recent stroke or whole paste on the selected layer.' : 'Nothing to undo: the selected layer has no drawing actions.'} className="tool-button" aria-label="Undo" onClick={undo} disabled={!selectedLayer?.strokes.length} data-testid="button-undo"><Undo2 size={17} /></TooltipButton>
@@ -1522,7 +1546,7 @@ function Home() {
             </div>
             <div className="statusbar">
               <span className="hint"><span className="keyboard-key">⌘ Z</span> undo <span className="keyboard-key">⇧ ⌘ Z</span> redo</span>
-              <span>{panMode ? 'Drag the photo to reposition it; your drawing stays unchanged.' : TOOL_GUIDANCE[tool]}</span>
+              <span>{panMode ? 'Drag the photo to reposition it; your drawing stays unchanged.' : backgroundMode ? BACKGROUND_TOOL_GUIDANCE : TOOL_GUIDANCE[tool]}</span>
             </div>
           </section>
 
@@ -1552,9 +1576,9 @@ function Home() {
             </div>
             <BrushDisclosure title="Color" id="color" defaultOpen summary={<>
               <span className="header-color-preview" style={{ background: color }} aria-hidden="true" />
-              <span>{color.toUpperCase()} · {tool.toUpperCase()}</span>
+              <span>{color.toUpperCase()} · {backgroundMode ? 'BACKGROUND' : tool.toUpperCase()}</span>
             </>}>
-              <DrawingColorControl color={color} tool={tool} onChange={nextColor => { setColor(nextColor); selectTool(toolAfterColorSelection(tool, lastDrawingTool.current)); }} />
+              <DrawingColorControl color={color} tool={tool} onChange={nextColor => { setColor(nextColor); if (!backgroundMode) selectTool(toolAfterColorSelection(tool, lastDrawingTool.current)); }} />
             </BrushDisclosure>
             <BrushDisclosure title={`${tool[0].toUpperCase()}${tool.slice(1)} size`} id="size" summary={`${brushSize} px`}>
               <input className="range-input" type="range" min="1" max="48" value={brushSize} onChange={event => { drawingDefaultsTouched.current = true; setToolSizes(current => ({ ...current, [tool]: Number(event.target.value) })); }} aria-label={`${tool[0].toUpperCase()}${tool.slice(1)} size`} data-testid="input-brush-size" />

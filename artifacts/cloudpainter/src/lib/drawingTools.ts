@@ -9,6 +9,8 @@ export const TOOL_GUIDANCE: Record<DrawingTool, string> = {
   eraser: 'Eraser: remove marks only from the selected layer; the photo stays untouched.',
 };
 
+export const BACKGROUND_TOOL_GUIDANCE = 'Background: click the canvas to fill the selected layer with your current color.';
+
 export const DEFAULT_PEN_PRESSURE = 0.5;
 
 export function normalizePointerPressure(pointerType: string, pressure: number): number {

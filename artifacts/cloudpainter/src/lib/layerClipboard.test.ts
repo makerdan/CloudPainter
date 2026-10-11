@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { copyDrawing, isPaste, pasteDrawing, pasteIntoLayers, redoDrawing, renderDrawing, undoDrawing, type DrawingEntry } from './layerClipboard.ts';
+import { copyDrawing, isBackgroundFill, isPaste, pasteDrawing, pasteIntoLayers, redoDrawing, renderDrawing, undoDrawing, type DrawingEntry } from './layerClipboard.ts';
 import { renderStroke, type Stroke } from './strokeRenderer.ts';
 
 const stroke: Stroke = { tool: 'brush', color: '#336699', size: 14, points: [{ x: 0.2, y: 0.3 }, { x: 0.7, y: 0.3 }], brush: { style: 'dry', version: 1, seed: 42 } };
@@ -23,6 +23,30 @@ test('clipboard is an immutable independent snapshot; deleting or editing source
   assert.ok(Object.isFrozen(clipboard));
   assert.ok(Object.isFrozen((clipboard[0] as Stroke).points[0]));
   assert.ok(Object.isFrozen((clipboard[0] as Stroke).brush));
+});
+
+test('background fills copy, paste, undo, redo and replay as one full-layer action', options, () => {
+  const fill = { kind: 'background-fill', color: '#cc2200' } as const;
+  const original = { ...source(), strokes: [structuredClone(fill)] as DrawingEntry[] };
+  const clipboard = copyDrawing(original)!;
+  assert.ok(Object.isFrozen(clipboard));
+  assert.ok(isBackgroundFill(clipboard[0]));
+  assert.ok(Object.isFrozen(clipboard[0]));
+  const pasted = pasteDrawing(destination(), clipboard);
+  assert.ok(isPaste(pasted.strokes.at(-1)!));
+
+  const log = recorder();
+  renderDrawing(log.context, pasted.strokes, 1200, 800, log.createCanvas);
+  assert.ok(log.events.some(event => event[1] === 'fillRect' && event[2] === 0 && event[3] === 0 && event[4] === 1200 && event[5] === 800));
+  assert.ok(log.events.some(event => event[1] === 'fillStyle' && event[2] === fill.color));
+
+  const undone = undoDrawing(pasted);
+  assert.deepEqual(undone.strokes, destination().strokes);
+  const restored = redoDrawing(JSON.parse(JSON.stringify(undone)));
+  assert.deepEqual(restored, JSON.parse(JSON.stringify(pasted)));
+  const restoredPaste = restored.strokes.at(-1)!;
+  assert.ok(isPaste(restoredPaste));
+  assert.ok(isBackgroundFill(restoredPaste.entries[0]));
 });
 
 test('pressure-aware pen samples survive layer copy, paste, undo/redo and JSON replay', options, () => {
