@@ -119,15 +119,30 @@ function normalizeProjectView(project: Project): Project {
   return { ...project, photoZoom, photoPan, referencePhotoVisible, referencePhotoOpacity };
 }
 
-function readProject(): Project {
+function readProjectSnapshot(): { project: Project; snapshot: string | null } {
+  let snapshot: string | null = null;
   try {
-    const saved = localStorage.getItem(STORE_KEY);
-    if (saved) {
-      const project = JSON.parse(saved) as Project;
-      if (project && Array.isArray(project.layers) && project.layers.length) return normalizeProjectView(project);
+    snapshot = localStorage.getItem(STORE_KEY);
+    if (snapshot) {
+      const project = JSON.parse(snapshot) as Project;
+      if (project && Array.isArray(project.layers) && project.layers.length) {
+        return { project: normalizeProjectView(project), snapshot };
+      }
     }
   } catch {
     // Corrupt or unavailable browser storage starts a fresh local project.
+  }
+  return { project: freshProject(), snapshot };
+}
+
+function projectFromSnapshot(snapshot: string | null): Project {
+  if (snapshot) {
+    try {
+      const project = JSON.parse(snapshot) as Project;
+      if (project && Array.isArray(project.layers) && project.layers.length) return normalizeProjectView(project);
+    } catch {
+      // A cleared or unreadable shared snapshot is treated as a fresh project.
+    }
   }
   return freshProject();
 }
@@ -429,15 +444,11 @@ function getPdfEffectivePpi(
 }
 function Home() {
   const accountSettings = useAccountSettings();
-  const [project, setProject] = useState<Project>(readProject);
-  const persistedProjectSnapshot = useRef<string | null>(null);
-  const persistenceInitialized = useRef(false);
-  if (!persistenceInitialized.current) {
-    try { persistedProjectSnapshot.current = localStorage.getItem(STORE_KEY); }
-    catch { /* The existing save path reports unavailable storage to the user. */ }
-    persistenceInitialized.current = true;
-  }
+  const [initialProject] = useState(readProjectSnapshot);
+  const [project, setProject] = useState<Project>(initialProject.project);
+  const persistedProjectSnapshot = useRef<string | null>(initialProject.snapshot);
   const projectConflict = useRef(false);
+  const [storageConflict, setStorageConflict] = useState(false);
   const [projectHistory, setProjectHistory] = useState<Project[]>(readProjectHistory);
   const latestProject = useRef(project);
   latestProject.current = project;
@@ -618,7 +629,8 @@ function Home() {
 
   const reportProjectConflict = useCallback(() => {
     projectConflict.current = true;
-    setSavedStatus('Changed in another tab. Reload to use the saved sketch.');
+    setStorageConflict(true);
+    setSavedStatus('Changes from another tab need attention');
   }, []);
 
   useEffect(() => {
@@ -627,8 +639,18 @@ function Home() {
 
   useEffect(() => {
     const detectProjectChange = (event: StorageEvent) => {
-      if (event.key === STORE_KEY && event.newValue !== persistedProjectSnapshot.current) {
+      if (event.key !== STORE_KEY && event.key !== null) return;
+      try {
+        const currentSnapshot = localStorage.getItem(STORE_KEY);
+        if (currentSnapshot === persistedProjectSnapshot.current) return;
+        if (currentSnapshot === JSON.stringify(latestProject.current)) {
+          persistedProjectSnapshot.current = currentSnapshot;
+          setSavedStatus('Saved in this browser');
+          return;
+        }
         reportProjectConflict();
+      } catch {
+        setSavedStatus('Could not check changes from another tab');
       }
     };
     window.addEventListener('storage', detectProjectChange);
@@ -638,11 +660,17 @@ function Home() {
   const persistProjectIfCurrent = useCallback((snapshot: Project) => {
     if (projectConflict.current) return;
     try {
-      if (localStorage.getItem(STORE_KEY) !== persistedProjectSnapshot.current) {
+      const currentSnapshot = localStorage.getItem(STORE_KEY);
+      const serialized = JSON.stringify(snapshot);
+      if (currentSnapshot !== persistedProjectSnapshot.current) {
+        if (currentSnapshot === serialized) {
+          persistedProjectSnapshot.current = currentSnapshot;
+          setSavedStatus('Saved in this browser');
+          return;
+        }
         reportProjectConflict();
         return;
       }
-      const serialized = JSON.stringify(snapshot);
       localStorage.setItem(STORE_KEY, serialized);
       persistedProjectSnapshot.current = serialized;
       setSavedStatus('Saved in this browser');
@@ -651,6 +679,42 @@ function Home() {
       setSavedStatus('Storage is full');
     }
   }, [refreshStorageEstimate, reportProjectConflict]);
+
+  const reloadSharedProject = () => {
+    try {
+      const snapshot = localStorage.getItem(STORE_KEY);
+      persistedProjectSnapshot.current = snapshot;
+      projectConflict.current = false;
+      setStorageConflict(false);
+      setProject(projectFromSnapshot(snapshot));
+      announce('Loaded the newer shared sketch.');
+    } catch {
+      announce('Could not reload the shared sketch. Your current version is unchanged.');
+    }
+  };
+
+  const preserveLocalProject = () => {
+    try {
+      const snapshot = localStorage.getItem(STORE_KEY);
+      const currentProject = latestProject.current;
+      const preservedProject = {
+        ...currentProject,
+        title: currentProject.title.endsWith(' (your version)')
+          ? currentProject.title
+          : `${currentProject.title} (your version)`,
+      };
+      const nextHistory = withSavedProject(readProjectHistory(), preservedProject);
+      localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
+      persistedProjectSnapshot.current = snapshot;
+      projectConflict.current = false;
+      setStorageConflict(false);
+      setProjectHistory(nextHistory);
+      setProject(projectFromSnapshot(snapshot));
+      announce('Your version was saved separately in Saved sketches. The newer shared sketch is now open.');
+    } catch {
+      announce('Could not save your version separately. Your sketch and the newer shared version are unchanged.');
+    }
+  };
 
   useEffect(() => {
     if (projectConflict.current) return;
@@ -1167,6 +1231,23 @@ function Home() {
           </div>
         </div>
       </header>
+
+      {storageConflict && (
+        <section className="storage-conflict" role="alert" data-testid="storage-conflict">
+          <div>
+            <strong>This sketch changed in another tab.</strong>
+            <p>Your version has not been saved over it. Load the newer sketch, or keep your version as a separate saved sketch.</p>
+          </div>
+          <div className="storage-conflict-actions">
+            <button type="button" className="button button-quiet" onClick={reloadSharedProject} data-testid="button-conflict-reload">
+              Reload newer sketch
+            </button>
+            <button type="button" className="button button-primary" onClick={preserveLocalProject} data-testid="button-conflict-preserve">
+              Save my version separately
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="workspace">
         <p

@@ -119,6 +119,11 @@ button:focus-visible, input:focus-visible { outline: 3px solid #b9d66a; outline-
 h1 { font-family:var(--font-display); font-size:33px; line-height:1.1; font-weight:500; letter-spacing:-.8px; margin:0; color:#30473b; }
 .intro-copy { color:#778179; margin:8px 0 0; font-size:14px; }
 .workspace-grid { display:grid; grid-template-columns:234px minmax(340px,1fr) 238px; gap:16px; align-items:stretch; min-height:calc(100dvh - 197px); }
+.storage-conflict { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:12px 0; padding:14px 16px; border:1px solid #c78c55; border-radius:12px; background:#fff5e9; color:#57371f; }
+.storage-conflict strong { font-size:13px; }
+.storage-conflict p { margin:4px 0 0; font-size:12px; line-height:1.45; }
+.storage-conflict-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
+@media (max-width:720px) { .storage-conflict { align-items:stretch; flex-direction:column; } .storage-conflict-actions { justify-content:flex-start; } }
 .panel { background:var(--paper); border:1px solid var(--container-border); border-radius:16px; box-shadow:0 5px 20px rgba(53,59,45,.035); }
 .side-panel { padding:17px 15px; display:flex; flex-direction:column; min-height:530px; }
 .panel-title-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
