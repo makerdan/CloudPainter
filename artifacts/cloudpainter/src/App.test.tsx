@@ -1339,6 +1339,79 @@ test('undo and redo preserve the zoomed and panned photo while moving the exact 
   await assertViewUnchanged();
 });
 
+test('undo and redo preserve hidden reference photo settings and unrelated drawing data across reloads', async ({ page }) => {
+  const photo = await png(page, 'undo-redo-photo-settings.png', 480, 320);
+  const stroke = (color: string, y: number) => ({
+    points: [{ x: 0.2, y }, { x: 0.7, y }],
+    color, size: 8, tool: 'pen',
+  });
+  const before = {
+    image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
+    width: 480, height: 320, title: 'Photo settings and drawing history',
+    selectedLayerId: 'settings-main',
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    layers: [
+      { id: 'settings-main', name: 'Main drawing', visible: true, opacity: 0.65,
+        strokes: [stroke('#1e88e5', 0.3), stroke('#8e24aa', 0.5)],
+        redo: [stroke('#00acc1', 0.7)] },
+      { id: 'settings-unrelated', name: 'Unrelated details', visible: false, opacity: 0.4,
+        strokes: [stroke('#43a047', 0.2)], redo: [stroke('#3949ab', 0.8)] },
+    ],
+  };
+  // Seed after the outgoing page's pagehide flush, and only once. Reloads below
+  // must read the application's actual saved state rather than this fixture.
+  await page.addInitScript(({ key, project }) => {
+    const marker = `${key}-photo-settings-history-seeded`;
+    if (sessionStorage.getItem(marker)) return;
+    localStorage.setItem(key, JSON.stringify(project));
+    sessionStorage.setItem(marker, 'true');
+  }, { key: STORE_KEY, project: before });
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+  await expect.poll(() => savedProject(page)).toEqual(before);
+
+  await page.getByTestId('input-reference-photo-opacity').fill('37');
+  await page.getByTestId('button-reference-photo-visibility').click();
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0');
+
+  const settingsProject = {
+    ...before,
+    referencePhotoVisible: false,
+    referencePhotoOpacity: 37,
+  };
+  await expect.poll(() => savedProject(page)).toEqual(settingsProject);
+
+  const afterUndo = {
+    ...settingsProject,
+    layers: settingsProject.layers.map((layer, index) => index === 0
+      ? { ...layer, strokes: layer.strokes.slice(0, -1), redo: [...layer.redo, layer.strokes.at(-1)] }
+      : layer),
+  };
+  const assertCurrentProject = async (expected: typeof before) => {
+    await expect.poll(() => savedProject(page)).toEqual(expected);
+    await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+    await expect(page.locator('.stage img.base-photo')).toHaveAttribute('src', before.image);
+    await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
+    await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0');
+  };
+
+  await page.getByTestId('button-undo').click();
+  await assertCurrentProject(afterUndo);
+  await page.reload();
+  await assertCurrentProject(afterUndo);
+
+  await page.getByTestId('button-redo').click();
+  await assertCurrentProject(settingsProject);
+  await page.reload();
+  await assertCurrentProject(settingsProject);
+});
+
 test('reference photo display defaults, legacy projects, replacements, and saved-sketch restoration', async ({ page }) => {
   const original = await png(page, 'photo-display-legacy.png', 600, 400);
   await page.getByTestId('input-photo').setInputFiles(original);
