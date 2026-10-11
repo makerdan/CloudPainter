@@ -226,6 +226,207 @@ test("--stubs-only ignores missing sections but rejects placeholders in existing
   assert.equal(complete.status, 0, complete.stderr);
 });
 
+test("strict mode rejects duplicate, mixed, missing, misplaced, and case-mismatched declarations", (t) => {
+  const validReason = VALID_NA_REASONS[0];
+  const fixtures = {
+    "duplicate-normal.md": `## Regression Guard
+**Covers:** The saved sketch is restored after a resize.
+**Covers:** The saved sketch is restored after a resize.
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "duplicate-location.md": `## Regression Guard
+**Covers:** The saved sketch is restored after a resize.
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "duplicate-assertion.md": `## Regression Guard
+**Covers:** The saved sketch is restored after a resize.
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "duplicate-na-reason.md": `## Regression Guard
+**N/A**
+**Why N/A:** ${validReason}
+**Why N/A:** ${validReason}
+`,
+    "duplicate-na-declaration.md": `## Regression Guard
+**N/A**
+**N/A**
+**Why N/A:** ${validReason}
+`,
+    "duplicate-self-declaration.md": `## Regression Guard
+**Self-satisfying** — this task's deliverable is the regression checker and tests.
+**Self-satisfying** — this task's deliverable is the regression checker and tests.
+`,
+    "mixed-na-self.md": `## Regression Guard
+**N/A**
+**Why N/A:** ${validReason}
+**Self-satisfying** — this task's deliverable is the regression checker and tests.
+`,
+    "mixed-na-normal.md": `## Regression Guard
+**N/A**
+**Why N/A:** ${validReason}
+**Covers:** The saved sketch is restored after a resize.
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "mixed-self-normal.md": `## Regression Guard
+**Self-satisfying** — this task's deliverable is the regression checker and tests.
+**Covers:** The saved sketch is restored after a resize.
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "mixed-all-declarations.md": `## Regression Guard
+**N/A**
+**Why N/A:** ${validReason}
+**Self-satisfying** — this task's deliverable is the regression checker and tests.
+**Covers:** The saved sketch is restored after a resize.
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "missing-na-reason.md": `## Regression Guard
+**N/A**
+`,
+    "case-mismatched-na-reason.md": `## Regression Guard
+**N/A**
+**why N/A:** ${validReason}
+`,
+    "case-mismatched-normal-field.md": `## Regression Guard
+**covers:** The saved sketch is restored after a resize.
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "misplaced-normal-field.md": `**Covers:** The saved sketch is restored after a resize.
+
+## Regression Guard
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "misplaced-na-reason.md": `## Regression Guard
+**N/A**
+
+## Relevant files
+**Why N/A:** ${validReason}
+`,
+  };
+  const directory = fixture(t);
+  for (const [name, guard] of Object.entries(fixtures)) {
+    const file = path.join(directory, name);
+    fs.writeFileSync(file, `# Fix a broken saved sketch flow\n\n${guard}\n`);
+    const result = runChecker([], { TASK_PLAN_FILE: file });
+    assert.equal(result.status, 1, `${name}: ${result.stderr}`);
+  }
+});
+
+test("--stubs-only catches placeholders in every declaration form, including mixed forms", (t) => {
+  const fixtures = {
+    "normal-covers.md": `## Regression Guard
+**Covers:** <FILL IN>
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "normal-location.md": `## Regression Guard
+**Covers:** The saved sketch is restored after a resize.
+**Test location:** TBD
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "normal-assertion.md": `## Regression Guard
+**Covers:** The saved sketch is restored after a resize.
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** TODO
+`,
+    "na-declaration.md": `## Regression Guard
+**N/A** <FILL IN>
+**Why N/A:** ${VALID_NA_REASONS[0]}
+`,
+    "na-reason.md": `## Regression Guard
+**N/A**
+**Why N/A:** <FILL IN>
+`,
+    "self-satisfying.md": `## Regression Guard
+**Self-satisfying** — TODO
+`,
+    "mixed-na-self.md": `## Regression Guard
+**N/A**
+**Why N/A:** ${VALID_NA_REASONS[0]}
+**Self-satisfying** — <FILL IN: name the test or script>
+`,
+    "mixed-na-normal.md": `## Regression Guard
+**N/A**
+**Why N/A:** ${VALID_NA_REASONS[0]}
+**Covers:** TBD
+`,
+    "mixed-self-normal.md": `## Regression Guard
+**Self-satisfying** — this task's deliverable is the regression checker and tests.
+**Covers:** TODO
+`,
+    "missing-na-reason.md": `## Regression Guard
+**N/A**
+`,
+    "case-mismatched-na-reason.md": `## Regression Guard
+**N/A**
+**why N/A:** ${VALID_NA_REASONS[0]}
+`,
+    "case-mismatched-normal-field.md": `## Regression Guard
+**covers:** The saved sketch is restored after a resize.
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "misplaced-normal-field.md": `**Covers:** The saved sketch is restored after a resize.
+
+## Regression Guard
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "misplaced-na-reason.md": `## Regression Guard
+**N/A**
+
+## Relevant files
+**Why N/A:** ${VALID_NA_REASONS[0]}
+`,
+  };
+  const directory = fixture(t);
+  for (const [name, guard] of Object.entries(fixtures)) {
+    const file = path.join(directory, name);
+    fs.writeFileSync(file, `# Fix a broken saved sketch flow\n\n${guard}\n`);
+    const result = runChecker(["--stubs-only"], { TASK_PLAN_FILE: file });
+    assert.equal(result.status, 1, `${name}: ${result.stderr}`);
+  }
+});
+
+test("--stubs-only allows filled structural errors for strict mode to report", (t) => {
+  const fixtures = {
+    "duplicate-normal.md": `## Regression Guard
+**Covers:** The saved sketch is restored after a resize.
+**Covers:** The saved sketch is restored after a resize.
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "duplicate-na-reason.md": `## Regression Guard
+**N/A**
+**Why N/A:** ${VALID_NA_REASONS[0]}
+**Why N/A:** ${VALID_NA_REASONS[0]}
+`,
+    "mixed-na-normal.md": `## Regression Guard
+**N/A**
+**Why N/A:** ${VALID_NA_REASONS[0]}
+**Covers:** The saved sketch is restored after a resize.
+`,
+  };
+  const directory = fixture(t);
+  for (const [name, guard] of Object.entries(fixtures)) {
+    const file = path.join(directory, name);
+    fs.writeFileSync(file, `# Fix a broken saved sketch flow\n\n${guard}\n`);
+    const strict = runChecker([], { TASK_PLAN_FILE: file });
+    assert.equal(strict.status, 1, `${name} strict: ${strict.stderr}`);
+    const stubsOnly = runChecker(["--stubs-only"], { TASK_PLAN_FILE: file });
+    assert.equal(stubsOnly.status, 0, `${name} stubs-only: ${stubsOnly.stderr}`);
+  }
+});
+
 test("TASK_PLAN_FILE rejects non-Markdown, missing, empty, and directory targets before scanning", (t) => {
   const directory = fixture(t, { "notes.txt": "not markdown\n" });
   fs.mkdirSync(path.join(directory, "folder.md"));

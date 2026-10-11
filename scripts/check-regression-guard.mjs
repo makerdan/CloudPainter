@@ -188,6 +188,10 @@ function checkSection(section, planPath, sectionIndex, mode, classification) {
   const problem = (message, placeholder = false) =>
     (placeholder ? placeholderProblems : structuralProblems).push(message);
 
+  if (PLACEHOLDER.test(text)) {
+    problem("section contains an unfilled placeholder", true);
+  }
+
   if (naLines.length) {
     if (naLines.length !== 1 || selfLines.length || presentNormal) {
       problem("N/A declaration must be the only declaration in its section");
@@ -196,7 +200,9 @@ function checkSection(section, planPath, sectionIndex, mode, classification) {
       problem("N/A section contains an unexpected field");
     }
     const why = fieldValues(text, "Why N/A");
-    if (why.length !== 1) {
+    if (why.length === 0) {
+      problem("requires exactly one **Why N/A:** field", true);
+    } else if (why.length > 1) {
       problem("requires exactly one **Why N/A:** field");
     } else if (isPlaceholder(why[0])) {
       problem("**Why N/A:** contains an unfilled placeholder", true);
@@ -226,8 +232,13 @@ function checkSection(section, planPath, sectionIndex, mode, classification) {
   } else {
     for (const label of normalFields) {
       const values = fieldValues(text, label);
-      if (values.length !== 1) {
+      if (values.length === 0) {
         problem(`requires exactly one **${label}:** field`, true);
+      } else if (values.length > 1) {
+        problem(`requires exactly one **${label}:** field`);
+        if (values.some(isPlaceholder)) {
+          problem(`**${label}:** contains an unfilled placeholder`, true);
+        }
       } else if (isPlaceholder(values[0])) {
         problem(`**${label}:** is empty or contains an unfilled placeholder`, true);
       }
