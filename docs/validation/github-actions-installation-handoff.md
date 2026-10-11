@@ -85,6 +85,7 @@ a 45-minute timeout. The aggregate job has a five-minute timeout.
 | `pnpm --filter @workspace/api-spec run codegen` | Included before compilation. Then `git diff --exit-code -- lib/api-client-react/src/generated lib/api-zod/src/generated` and an untracked-file check fail if generated outputs are stale or newly emitted. |
 | `pnpm run build` with `PORT=4173 BASE_PATH=/` | Included; this root command runs `pnpm run typecheck` and all package builds. Covers `artifacts/api-server`, `artifacts/cloudpainter`, and `artifacts/mockup-sandbox` build/typecheck scripts, plus the workspace TypeScript project build. |
 | `node --test scripts/ci/check-required-results.test.mjs` | Included; directly tests the aggregator contract. |
+| `node --test scripts/ci/api-test-coverage.test.mjs` | Included in the existing validation job; runs the database step with local command stubs to check effective image-access/palettes/settings selection, reject a comment-only settings mention, and preserve nonzero suite results. No database, live auth, provider, or real package command is used by this guard. |
 | `pnpm run test:regression-guard` | Included; tests the regression-guard checker and local task-plan runner using temporary fixtures. |
 | `pnpm --filter @workspace/api-server run test:outline` | Included; local Express tests use fixtures and stubbed provider dependencies. |
 | `pnpm --filter @workspace/api-server run test:image-upscale` | Included; provider transport is stubbed; no paid request. |
@@ -102,6 +103,7 @@ a 45-minute timeout. The aggregate job has a five-minute timeout.
 | `pnpm --filter @workspace/cloudpainter run test:upscale-ui` | Included; Vitest/jsdom with mocked provider responses. |
 | `pnpm --filter @workspace/api-server run test:image-access` | Included with disposable PostgreSQL 16.10 service and a test-only `DATABASE_URL`; service health uses `pg_isready`. Test creates and removes a unique schema. |
 | `pnpm --filter @workspace/api-server run test:palettes` | Included with the same disposable PostgreSQL service; the test creates a unique schema inside a transaction and rolls it back. |
+| `pnpm --filter @workspace/api-server run test:settings` | Included with the same disposable PostgreSQL 16.10 service and step-scoped test-only `DATABASE_URL`. The suite creates a unique schema and fixture table inside a transaction, rolls it back, and closes its local HTTP server and database pool. Synthetic subjects and locally generated offline Clerk signing keys verify auth without genuine Clerk identities, linked/shared databases, provider credentials, paid inference, or schema migrations. |
 | `pnpm --filter @workspace/cloudpainter run test:instruments-browser` | Included against the CI-started Vite server and installed Chromium. This config includes both `DrawingTools.test.tsx` and `BrushStyles.test.tsx`. |
 | `pnpm --filter @workspace/cloudpainter run test:brushes-browser` | Consolidated duplicate: its `BrushStyles.test.tsx` selector is already covered by `test:instruments-browser`; it is not run a second time. |
 | `pnpm --filter @workspace/cloudpainter run test:drawing-colors-browser` | Included against the same local server with isolated browser fixture/account transport. |
@@ -131,6 +133,53 @@ test, docs generation, and deploy/release checks have no canonical workspace
 script/configuration found in the inspected package manifests and validation
 documents. They are recorded as **not configured**, not as passing. The current
 browser suites do not establish full accessibility coverage.
+
+## Settings API coverage update
+
+The executable database loop now selects `test:image-access`, `test:palettes`,
+and `test:settings` in the existing `validation` job. All three receive the
+same disposable service URL; no shared connection or setup/migration command
+was added. A failing suite still sets the existing accumulated failure flag,
+and the step exits nonzero after running its siblings. The unchanged
+`ci-required` job rejects a non-successful `validation` result.
+
+The frontend SettingsPage tests already run indirectly through
+`pnpm --filter @workspace/cloudpainter run test:logo-ui`; this update does not
+duplicate that coverage. It adds the previously omitted server-side persistence
+suite and a portable executable-selection guard, not a new workflow or a
+generic test-discovery framework.
+
+Local checks on 2026-10-11:
+
+| Exact executed command | Raw result |
+| --- | --- |
+| `node --test scripts/ci/api-test-coverage.test.mjs` | Exit 0; 7/7 passed. The actual database shell block ran with a stubbed `pnpm`, recording all three exact API commands. Injecting exit 23 from settings produced stage exit 1; removing settings despite a shell comment, and replacing the database exit with success, were both rejected. Image-access and palette failures also produced stage exit 1 without omitting siblings. |
+| `node --test --test-timeout=10000 scripts/ci/check-required-results.test.mjs` | Exit 0; 8/8 passed. The timeout is a task-local supervision narrowing; the canonical local and CI aggregate command is unchanged. |
+| `pnpm --filter @workspace/api-server run test:settings` | Exit 0; 1/1 passed against a freshly initialized disposable PostgreSQL 16.10 cluster, with TCP disabled and a private temporary Unix socket. Used only synthetic subjects and the suite's offline signing keys. PostgreSQL shutdown succeeded, the fixture directory was removed, and no owned descendant remained. |
+| `python3 generated-artifacts/settings-ci-validation/structure.py` | Exit 0. The available `yq -o=json` parsed the workflow; structural comparison against the pre-edit source proved only the guard step and settings selection changed. All shell `run` blocks passed `bash -n`, both new matrix rows were present, and `git diff --check` passed. |
+
+The owner explicitly authorized these task-scoped checks with Failure Gate
+inactive for this operation only. An independent Python monotonic supervisor
+bounded each launch, including startup and cleanup, below five minutes and
+enforced a shared fifteen-minute deadline. Effective execution caps were
+30 seconds for each guard/structural check and 180 seconds for the settings
+fixture, with at most 20 seconds of owned-process cleanup and bounded log
+capture. Guard tests have explicit ten-second limits and five-second child-shell
+limits; the aggregate used a ten-second runner limit; the existing settings
+test has a sixty-second limit and no separate hooks. Logs were capped at
+1 MB per command. Total supervised elapsed time was about five seconds;
+all four raw statuses were zero and owned-process termination was verified.
+These are cooperative local results, not Failure Gate activation or evidence
+of a passing full CI pipeline. No full build, root typecheck or browser sweep
+was required or run, and no scoped check remains incomplete.
+
+Current read-only repository visibility evidence confirms a public repository
+with default branch `main`. **Current GitHub workflow activation, passing runs,
+and required-check/branch-policy status remain unknown.** No Actions run or
+policy was inspected or changed for this update; there was no remote trigger,
+dispatch, rerun, push, deployment, secret/environment change, or branch-rule
+change. The earlier installation/run observations below are historical and
+must not be read as current remote evidence.
 
 ## Event scopes and security
 
