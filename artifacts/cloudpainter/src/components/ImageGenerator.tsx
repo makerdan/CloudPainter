@@ -56,8 +56,8 @@ export function ImageGenerator({ onUse }: Props) {
     try {
       await onUse(result.image, result.prompt);
       setOpen(false);
-    } catch {
-      setApplyError('This image could not be opened. Your current sketch has not changed.');
+    } catch (error) {
+      setApplyError(error instanceof Error ? error.message : 'This image could not be opened. Your current sketch has not changed.');
     } finally {
       setApplying(false);
     }
@@ -98,7 +98,7 @@ export function ImageGenerator({ onUse }: Props) {
             <section className="generated-preview" aria-label="Generated image preview">
               <p>Generated with {result.model} through Poe.</p>
               <img src={result.image} alt={result.prompt} data-testid="generated-image-preview" />
-              <p>Using this image starts a new sketch and replaces the current photo and drawing layers. Your current project stays unchanged until you choose it.</p>
+              <p>Using this image starts a new sketch. Your current sketch is saved in this browser, and you can switch back anytime.</p>
               <button type="button" className="button button-primary" onClick={useImage} disabled={busy} data-testid="button-use-generated-image">{applying ? 'Opening image…' : 'Use image as reference'}</button>
             </section>
           )}

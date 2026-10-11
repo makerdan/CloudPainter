@@ -59,6 +59,7 @@ type Project = {
 };
 
 const STORE_KEY = 'cloudpainter-project-v1';
+const PREVIOUS_PROJECT_KEY = 'cloudpainter-previous-project-v1';
 const id = () => `layer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const createLayer = (name: string): PaintLayer => ({
   id: id(), name, visible: true, opacity: 1, strokes: [], redo: [],
@@ -81,8 +82,22 @@ function readProject(): Project {
   return freshProject();
 }
 
+function readPreviousProject(): Project | null {
+  try {
+    const saved = localStorage.getItem(PREVIOUS_PROJECT_KEY);
+    if (saved) {
+      const project = JSON.parse(saved) as Project;
+      if (project && Array.isArray(project.layers) && project.layers.length) return project;
+    }
+  } catch {
+    // Ignore corrupt or unavailable recovery data without affecting the active project.
+  }
+  return null;
+}
+
 function Home() {
   const [project, setProject] = useState<Project>(readProject);
+  const [previousProject, setPreviousProject] = useState<Project | null>(readPreviousProject);
   const latestProject = useRef(project);
   latestProject.current = project;
   const [tool, setTool] = useState<DrawingTool>('brush');
@@ -207,6 +222,14 @@ function Home() {
     image.onload = () => {
       const { width, height } = getScaledImageDimensions(image.naturalWidth, image.naturalHeight);
       const layer = createLayer('Sketch layer');
+      const currentProject = latestProject.current;
+      try {
+        localStorage.setItem(PREVIOUS_PROJECT_KEY, JSON.stringify(currentProject));
+      } catch {
+        reject(new Error('Could not save a recovery copy of your current sketch. No changes were made.'));
+        return;
+      }
+      setPreviousProject(currentProject);
       setPhotoZoom(1);
       setPhotoPan({ x: 0, y: 0 });
       setPanMode(false);
@@ -220,6 +243,22 @@ function Home() {
     image.onerror = () => reject(new Error('Generated image could not be opened.'));
     image.src = source;
   });
+  const switchToPreviousProject = () => {
+    if (!previousProject) return;
+    const currentProject = latestProject.current;
+    try {
+      localStorage.setItem(PREVIOUS_PROJECT_KEY, JSON.stringify(currentProject));
+    } catch {
+      announce('Could not save the current sketch for switching. Nothing changed.');
+      return;
+    }
+    setPreviousProject(currentProject);
+    setPhotoZoom(1);
+    setPhotoPan({ x: 0, y: 0 });
+    setPanMode(false);
+    setProject(previousProject);
+    announce(`Opened “${previousProject.title}”. Switch back anytime.`);
+  };
   const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -582,6 +621,17 @@ function Home() {
               <TooltipButton description="Start a fresh transparent canvas, replacing the current photo and all drawing layers." className="button" onClick={startBlank} data-testid="button-blank"><Plus size={13} /> Blank canvas</TooltipButton>
               <input ref={fileInput} hidden type="file" accept="image/*" onChange={handleFile} data-testid="input-photo" />
             </div>
+            {previousProject && (
+              <TooltipButton
+                description={`Switch between this project and “${previousProject.title}”. Your current project is saved before switching.`}
+                className="button"
+                onClick={switchToPreviousProject}
+                aria-label={`Switch to saved sketch: ${previousProject.title}`}
+                data-testid="button-switch-previous-project"
+              >
+                Switch to saved sketch
+              </TooltipButton>
+            )}
             <ImageGenerator onUse={useGeneratedReference} />
 
             <p className="section-label">Drawing layers <span className="panel-kicker"> · {project.layers.length}</span></p>

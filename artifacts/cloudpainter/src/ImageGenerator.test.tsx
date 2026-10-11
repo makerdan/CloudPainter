@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const STORE_KEY = 'cloudpainter-project-v1';
+const PREVIOUS_PROJECT_KEY = 'cloudpainter-previous-project-v1';
 const models = ['Nano-Banana-Pro', 'Nano-Banana-2', 'GPT-Image-2.5-Sunburst', 'Flux-2-Turbo'];
 const saved = (page: Page) => page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), STORE_KEY);
 const approvedConfig = { configured: true, signedIn: true, allowed: true, dailyLimit: 2, remaining: 2, globalRemaining: 20 };
@@ -17,6 +18,37 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('Poe picker offers exactly four models and preview requires explicit use', async ({ page }) => {
+  const initial = await saved(page);
+  const priorPhoto = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 240;
+    const context = canvas.getContext('2d')!;
+    context.fillStyle = '#b7c8d8';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/png');
+  });
+  const priorProject = {
+    ...initial,
+    image: priorPhoto,
+    width: 320,
+    height: 240,
+    title: 'My careful sketch',
+    layers: initial.layers.map((layer: any, index: number) => ({
+      ...layer,
+      name: index === 0 ? 'Outline' : 'Details',
+      strokes: index === 0 ? [{
+        points: [{ x: 0.2, y: 0.3 }, { x: 0.7, y: 0.6 }],
+        color: '#315d4d',
+        size: 8,
+        tool: 'brush',
+        brush: { style: 'round', version: 1, seed: 42 },
+      }] : [],
+    })),
+  };
+  await page.evaluate(({ key, project }) => localStorage.setItem(key, JSON.stringify(project)), { key: STORE_KEY, project: priorProject });
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', priorPhoto);
   const before = await saved(page);
   const base64 = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
@@ -46,8 +78,20 @@ test('Poe picker offers exactly four models and preview requires explicit use', 
     const project = await saved(page);
     return { width: project.width, height: project.height, layers: project.layers.length };
   }).toEqual({ width: 640, height: 320, layers: 1 });
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PREVIOUS_PROJECT_KEY)).toEqual(before);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', `data:image/png;base64,${base64}`);
+  await expect(page.getByTestId('button-switch-previous-project')).toBeVisible();
   await page.reload();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', `data:image/png;base64,${base64}`);
+  await page.getByTestId('button-switch-previous-project').click();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', priorPhoto);
+  await expect.poll(async () => saved(page)).toEqual(before);
+  await expect(page.getByTestId('button-switch-previous-project')).toHaveAccessibleName('Switch to saved sketch: Clouds over a blue sky');
+  await expect(page.getByText('Outline', { exact: true })).toBeVisible();
+  await expect(page.getByText('Details', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', priorPhoto);
+  expect((await saved(page)).layers[0].strokes).toEqual(before.layers[0].strokes);
 });
 
 test('Poe failures preserve the sketch and never issue an alternate-model request', async ({ page }) => {
