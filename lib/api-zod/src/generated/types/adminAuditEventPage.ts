@@ -18,8 +18,8 @@ export interface AdminAuditEventPage {
      */
   limit: number;
   /**
-     * @minimum 0
-     * @maximum 10000
+     * @maxLength 512
+     * @nullable
      */
-  offset: number;
+  nextCursor: string | null;
 }

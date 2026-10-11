@@ -22,3 +22,4 @@
 - [Long-stroke browser tests](long-stroke-browser-tests.md) — pace synthetic continuous pointer events across tasks so React commits drafts before pointer-up.
 - [PDF export browser fixtures](pdf-export-browser-fixtures.md) — object-URL capture hooks should preserve non-PDF URLs and wait specifically for PDF blobs.
 - [Node test timeout supervision](node-test-timeouts.md) — inject test deadlines through CLI arguments, not NODE_OPTIONS, including tsx-launched children.
+- [Postgres timestamp cursors](postgres-timestamp-cursors.md) — preserve microsecond timestamp precision in keyset cursors; JavaScript `Date` truncates it.

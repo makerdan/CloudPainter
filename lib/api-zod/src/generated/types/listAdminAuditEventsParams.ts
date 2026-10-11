@@ -15,10 +15,9 @@ export type ListAdminAuditEventsParams = {
  */
 limit?: number;
 /**
- * @minimum 0
- * @maximum 10000
+ * @maxLength 512
  */
-offset?: number;
+cursor?: string;
 /**
  * Restrict history to one account status action
  */

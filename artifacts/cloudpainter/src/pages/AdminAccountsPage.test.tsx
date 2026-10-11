@@ -25,7 +25,7 @@ const mocks = vi.hoisted(() => ({
     data: {
       totalCount: 26,
       limit: 25,
-      offset: 0,
+      nextCursor: "cursor-next",
       events: [
         { actorId: "user_admin123", targetId: "user_target123456", action: "suspend", outcome: "succeeded", createdAt: "2024-01-02T12:30:00.000Z" },
         { actorId: "user_other456", targetId: "user_target987654", action: "reactivate", outcome: "failed", createdAt: "2024-01-01T12:30:00.000Z" },
@@ -96,7 +96,7 @@ describe("CloudPainter admin account console", () => {
       data: {
         totalCount: 26,
         limit: 25,
-        offset: 0,
+        nextCursor: "cursor-next",
         events: [
           { actorId: "user_admin123", targetId: "user_target123456", action: "suspend", outcome: "succeeded", createdAt: "2024-01-02T12:30:00.000Z" },
           { actorId: "user_other456", targetId: "user_target987654", action: "reactivate", outcome: "failed", createdAt: "2024-01-01T12:30:00.000Z" },
@@ -145,29 +145,32 @@ describe("CloudPainter admin account console", () => {
     fireEvent.click(screen.getByTestId("button-next-page"));
     expect(mocks.listHook.mock.calls.some(([params]) => (params as { offset?: number }).offset === 25)).toBe(true);
     fireEvent.click(screen.getByTestId("button-audit-next-page"));
-    expect(mocks.auditHook.mock.calls.some(([params]) => (params as { offset?: number }).offset === 25)).toBe(true);
+    expect(mocks.auditHook.mock.calls.some(([params]) => (params as { cursor?: string }).cursor === "cursor-next")).toBe(true);
+    fireEvent.click(screen.getByTestId("button-audit-previous-page"));
+    expect(mocks.auditHook.mock.calls.some(([params]) => (params as { cursor?: string }).cursor === undefined)).toBe(true);
   });
 
-  it("filters status history by action and outcome and resets its page", () => {
+  it("filters status history by action and outcome and resets cursor paging", () => {
     render(<AdminAccountsPage />);
     fireEvent.click(screen.getByTestId("button-audit-next-page"));
-    expect(mocks.auditHook.mock.calls.some(([params]) => (params as { offset?: number }).offset === 25)).toBe(true);
+    expect(mocks.auditHook.mock.calls.at(-1)?.[0]).toEqual({ limit: 25, cursor: "cursor-next" });
 
     fireEvent.change(screen.getByTestId("select-audit-action"), { target: { value: "suspend" } });
+    expect(mocks.auditHook.mock.calls.at(-1)?.[0]).toEqual({ limit: 25, action: "suspend" });
     fireEvent.change(screen.getByTestId("select-audit-outcome"), { target: { value: "failed" } });
-
-    const latestParams = mocks.auditHook.mock.calls.at(-1)?.[0] as {
-      limit: number; offset: number; action?: string; outcome?: string;
-    };
-    expect(latestParams).toEqual({ limit: 25, offset: 0, action: "suspend", outcome: "failed" });
+    expect(mocks.auditHook.mock.calls.at(-1)?.[0]).toEqual({ limit: 25, action: "suspend", outcome: "failed" });
+    fireEvent.click(screen.getByTestId("button-audit-next-page"));
+    expect(mocks.auditHook.mock.calls.at(-1)?.[0]).toEqual({
+      limit: 25,
+      cursor: "cursor-next",
+      action: "suspend",
+      outcome: "failed",
+    });
 
     fireEvent.change(screen.getByTestId("select-audit-action"), { target: { value: "" } });
-    const clearedActionParams = mocks.auditHook.mock.calls.at(-1)?.[0] as {
-      limit: number; offset: number; action?: string; outcome?: string;
-    };
-    expect(clearedActionParams).toEqual({ limit: 25, offset: 0, outcome: "failed" });
+    expect(mocks.auditHook.mock.calls.at(-1)?.[0]).toEqual({ limit: 25, outcome: "failed" });
     fireEvent.change(screen.getByTestId("select-audit-outcome"), { target: { value: "" } });
-    expect(mocks.auditHook.mock.calls.at(-1)?.[0]).toEqual({ limit: 25, offset: 0 });
+    expect(mocks.auditHook.mock.calls.at(-1)?.[0]).toEqual({ limit: 25 });
   });
 
   it("requires explicit confirmation before changing status", () => {

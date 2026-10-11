@@ -22,9 +22,15 @@ export interface AdminAuditEvent {
 }
 export interface AdminStore {
   isEnabledAdmin(userId: string): Promise<boolean>;
-  listAuditEvents(params: { limit: number; offset: number; action?: AdminAction; outcome?: AdminAuditOutcome }): Promise<{
+  listAuditEvents(params: {
+    limit: number;
+    cursor?: { createdAt: string; id: string };
+    action?: AdminAction;
+    outcome?: AdminAuditOutcome;
+  }): Promise<{
     events: AdminAuditEvent[];
     totalCount: number;
+    nextCursor?: { createdAt: string; id: string };
   }>;
   startAction(actorUserId: string, targetUserId: string, action: AdminAction): Promise<string>;
   finishAction(auditId: string, outcome: AdminActionOutcome): Promise<void>;
@@ -44,6 +50,34 @@ const clerkAccounts: AdminAccountProvider = {
   async suspend(userId) { await clerkClient.users.banUser(userId); },
   async reactivate(userId) { await clerkClient.users.unbanUser(userId); },
 };
+
+type AuditCursor = { createdAt: string; id: string };
+
+function parseAuditCursor(value: string | undefined): AuditCursor | null | undefined {
+  if (value === undefined) return null;
+  if (value.length === 0 || value.length > 512 || !/^[A-Za-z0-9_-]+$/.test(value)) return undefined;
+  try {
+    const decoded = Buffer.from(value, "base64url").toString("utf8");
+    if (Buffer.from(decoded, "utf8").toString("base64url") !== value) return undefined;
+    const parsed: unknown = JSON.parse(decoded);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+    const candidate = parsed as Record<string, unknown>;
+    if (Object.keys(candidate).sort().join(",") !== "createdAt,id"
+      || typeof candidate.createdAt !== "string"
+      || typeof candidate.id !== "string"
+      || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(candidate.createdAt)
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(candidate.id)) return undefined;
+    const createdAt = new Date(candidate.createdAt);
+    if (!Number.isFinite(createdAt.getTime())) return undefined;
+    return { createdAt: candidate.createdAt, id: candidate.id };
+  } catch {
+    return undefined;
+  }
+}
+
+function encodeAuditCursor(cursor: AuditCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
 
 function safeAccount(user: Awaited<ReturnType<AdminAccountProvider["listUsers"]>>["data"][number]) {
   const primaryEmail = user.emailAddresses.find(email => email.id === user.primaryEmailAddressId)?.emailAddress ?? null;
@@ -115,23 +149,22 @@ export function createAdminRouter(store: AdminStore, provider: AdminAccountProvi
 
   router.get("/admin/audit-events", async (req, res): Promise<void> => {
     const rawLimit = req.query.limit === undefined ? "25" : String(req.query.limit);
-    const rawOffset = req.query.offset === undefined ? "0" : String(req.query.offset);
     const limit = Number(rawLimit);
-    const offset = Number(rawOffset);
+    const cursor = parseAuditCursor(typeof req.query.cursor === "string" ? req.query.cursor : undefined);
     const action = req.query.action;
     const outcome = req.query.outcome;
-    if (!/^\d+$/.test(rawLimit) || !/^\d+$/.test(rawOffset)
-      || !Number.isInteger(limit) || limit < 1 || limit > 50
-      || !Number.isInteger(offset) || offset < 0 || offset > 10_000
+    if (!/^\d+$/.test(rawLimit) || !Number.isInteger(limit) || limit < 1 || limit > 50
+      || req.query.offset !== undefined
+      || (req.query.cursor !== undefined && typeof req.query.cursor !== "string") || cursor === undefined
       || (action !== undefined && (typeof action !== "string" || !["suspend", "reactivate"].includes(action)))
       || (outcome !== undefined && (typeof outcome !== "string" || !["pending", "succeeded", "failed"].includes(outcome)))) {
-      res.status(400).json({ error: "Use a page size from 1 to 50, an offset up to 10,000, a valid action, and a valid outcome." });
+      res.status(400).json({ error: "Use a page size from 1 to 50, a valid history cursor, and valid action and outcome filters." });
       return;
     }
     try {
       const result = await store.listAuditEvents({
         limit,
-        offset,
+        ...(cursor ? { cursor } : {}),
         ...(action !== undefined ? { action: action as AdminAction } : {}),
         ...(outcome !== undefined ? { outcome: outcome as AdminAuditOutcome } : {}),
       });
@@ -145,7 +178,7 @@ export function createAdminRouter(store: AdminStore, provider: AdminAccountProvi
         })),
         totalCount: result.totalCount,
         limit,
-        offset,
+        nextCursor: result.nextCursor ? encodeAuditCursor(result.nextCursor) : null,
       }));
     } catch {
       res.status(503).json({ error: "Could not load account history. Please retry." });

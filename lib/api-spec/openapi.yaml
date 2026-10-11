@@ -79,8 +79,8 @@ paths:
           name: limit
           schema: { type: integer, minimum: 1, maximum: 50, default: 25 }
         - in: query
-          name: offset
-          schema: { type: integer, minimum: 0, maximum: 10000, default: 0 }
+          name: cursor
+          schema: { type: string, maxLength: 512 }
         - in: query
           name: action
           description: Restrict history to one account status action
@@ -505,7 +505,7 @@ components:
     AdminAuditEventPage:
       type: object
       additionalProperties: false
-      required: [events, totalCount, limit, offset]
+      required: [events, totalCount, limit, nextCursor]
       properties:
         events:
           type: array
@@ -513,7 +513,7 @@ components:
           items: { $ref: "#/components/schemas/AdminAuditEvent" }
         totalCount: { type: integer, minimum: 0 }
         limit: { type: integer, minimum: 1, maximum: 50 }
-        offset: { type: integer, minimum: 0, maximum: 10000 }
+        nextCursor: { type: ["string", "null"], maxLength: 512 }
     AdminAccountStatus:
       type: object
       additionalProperties: false

@@ -87,15 +87,13 @@ export const ListAdminAccountsResponse = zod.object({
 export const listAdminAuditEventsQueryLimitDefault = 25;
 export const listAdminAuditEventsQueryLimitMax = 50;
 
-export const listAdminAuditEventsQueryOffsetDefault = 0;
-export const listAdminAuditEventsQueryOffsetMin = 0;
-export const listAdminAuditEventsQueryOffsetMax = 10000;
+export const listAdminAuditEventsQueryCursorMax = 512;
 
 
 
 export const ListAdminAuditEventsQueryParams = zod.object({
   "limit": zod.coerce.number().int().min(1).max(listAdminAuditEventsQueryLimitMax).default(listAdminAuditEventsQueryLimitDefault),
-  "offset": zod.coerce.number().int().min(listAdminAuditEventsQueryOffsetMin).max(listAdminAuditEventsQueryOffsetMax).default(listAdminAuditEventsQueryOffsetDefault),
+  "cursor": zod.coerce.string().max(listAdminAuditEventsQueryCursorMax).optional(),
   "action": zod.enum(['suspend', 'reactivate']).optional().describe('Restrict history to one account status action'),
   "outcome": zod.enum(['pending', 'succeeded', 'failed']).optional().describe('Restrict history to one audit outcome')
 })
@@ -114,8 +112,7 @@ export const listAdminAuditEventsResponseTotalCountMin = 0;
 
 export const listAdminAuditEventsResponseLimitMax = 50;
 
-export const listAdminAuditEventsResponseOffsetMin = 0;
-export const listAdminAuditEventsResponseOffsetMax = 10000;
+export const listAdminAuditEventsResponseNextCursorMax = 512;
 
 
 
@@ -129,7 +126,7 @@ export const ListAdminAuditEventsResponse = zod.object({
 })).max(listAdminAuditEventsResponseEventsMax),
   "totalCount": zod.number().int().min(listAdminAuditEventsResponseTotalCountMin),
   "limit": zod.number().int().min(1).max(listAdminAuditEventsResponseLimitMax),
-  "offset": zod.number().int().min(listAdminAuditEventsResponseOffsetMin).max(listAdminAuditEventsResponseOffsetMax)
+  "nextCursor": zod.string().max(listAdminAuditEventsResponseNextCursorMax).nullable()
 })
 
 

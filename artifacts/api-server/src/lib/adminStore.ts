@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, lt, or, sql } from "drizzle-orm";
 import { db, cloudPainterAdminAccounts, cloudPainterAdminAudit } from "@workspace/db";
 import type { AdminAction, AdminAuditOutcome, AdminStore } from "../routes/admin";
 
@@ -10,33 +10,53 @@ export function createAdminStore(database: Pick<typeof db, "select" | "insert" |
         .where(eq(cloudPainterAdminAccounts.userId, userId));
       return row?.enabled === true;
     },
-    async listAuditEvents({ limit, offset, action, outcome }) {
+    async listAuditEvents({ limit, cursor, action, outcome }) {
       const filters = [
         ...(action ? [eq(cloudPainterAdminAudit.action, action)] : []),
         ...(outcome ? [eq(cloudPainterAdminAudit.outcome, outcome)] : []),
       ];
-      const where = filters.length > 0 ? and(...filters) : undefined;
+      const cursorConditionFor = (createdAt: string, id: string) => or(
+        lt(cloudPainterAdminAudit.createdAt, sql`${createdAt}::timestamptz`),
+        and(
+          eq(cloudPainterAdminAudit.createdAt, sql`${createdAt}::timestamptz`),
+          lt(cloudPainterAdminAudit.id, id),
+        ),
+      );
+      const cursorCondition = cursor
+        ? cursorConditionFor(cursor.createdAt, cursor.id)
+        : undefined;
+      const where = and(...filters, ...(cursorCondition ? [cursorCondition] : []));
+      const filterWhere = and(...filters);
       const [eventRows, [countRow]] = await Promise.all([
         database.select({
+          id: cloudPainterAdminAudit.id,
           actorId: cloudPainterAdminAudit.actorUserId,
           targetId: cloudPainterAdminAudit.targetUserId,
           action: cloudPainterAdminAudit.action,
           outcome: cloudPainterAdminAudit.outcome,
           createdAt: cloudPainterAdminAudit.createdAt,
+          cursorCreatedAt: sql<string>`to_char(${cloudPainterAdminAudit.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
         }).from(cloudPainterAdminAudit)
           .where(where)
           .orderBy(desc(cloudPainterAdminAudit.createdAt), desc(cloudPainterAdminAudit.id))
-          .limit(limit)
-          .offset(offset),
-        database.select({ totalCount: count() }).from(cloudPainterAdminAudit).where(where),
+          .limit(limit),
+        database.select({ totalCount: count() }).from(cloudPainterAdminAudit).where(filterWhere),
       ]);
+      const lastEvent = eventRows.at(-1);
+      const hasMore = lastEvent
+        ? (await database.select({ id: cloudPainterAdminAudit.id })
+          .from(cloudPainterAdminAudit)
+          .where(and(...filters, cursorConditionFor(lastEvent.cursorCreatedAt, lastEvent.id)))
+          .limit(1)).length > 0
+        : false;
       return {
-        events: eventRows.map(row => ({
+        events: eventRows.map(({ id: _id, cursorCreatedAt: _cursorCreatedAt, ...row }) => ({
           ...row,
-          action: row.action as AdminAction,
-          outcome: row.outcome as AdminAuditOutcome,
+          action: row.action as "suspend" | "reactivate",
+          outcome: row.outcome as "pending" | "succeeded" | "failed",
         })),
         totalCount: countRow?.totalCount ?? 0,
+        ...(hasMore && lastEvent ? { nextCursor: { createdAt: lastEvent.cursorCreatedAt, id: lastEvent.id } } : {}),
       };
     },
     async startAction(actorUserId, targetUserId, action) {

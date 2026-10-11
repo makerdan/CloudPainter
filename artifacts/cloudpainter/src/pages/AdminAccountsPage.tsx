@@ -56,7 +56,7 @@ export default function AdminAccountsPage() {
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
-  const [auditOffset, setAuditOffset] = useState(0);
+  const [auditCursors, setAuditCursors] = useState<(string | null)[]>([null]);
   const [auditAction, setAuditAction] = useState<'' | 'suspend' | 'reactivate'>('');
   const [auditOutcome, setAuditOutcome] = useState<'' | 'pending' | 'succeeded' | 'failed'>('');
   const [confirming, setConfirming] = useState<{ id: string; name: string; next: 'active' | 'suspended' } | null>(null);
@@ -74,6 +74,7 @@ export default function AdminAccountsPage() {
       setDenied(false);
       setConfirming(null);
       setNotice('');
+      setAuditCursors([null]);
     }
     previousSession.current = sessionId ?? null;
   }, [queryClient, sessionId]);
@@ -90,12 +91,14 @@ export default function AdminAccountsPage() {
     ...(search ? { query: search } : {}),
   }), [offset, search]);
   const listKey = useMemo(() => [...getListAdminAccountsQueryKey(params), sessionId ?? ''], [params, sessionId]);
+  const auditCursor = auditCursors[auditCursors.length - 1] ?? null;
+  const auditPageIndex = auditCursors.length - 1;
   const auditParams = useMemo<ListAdminAuditEventsParams>(() => ({
     limit: PAGE_SIZE,
-    offset: auditOffset,
+    ...(auditCursor ? { cursor: auditCursor } : {}),
     ...(auditAction ? { action: auditAction } : {}),
     ...(auditOutcome ? { outcome: auditOutcome } : {}),
-  }), [auditAction, auditOffset, auditOutcome]);
+  }), [auditAction, auditCursor, auditOutcome]);
   const auditKey = useMemo(() => [...getListAdminAuditEventsQueryKey(auditParams), sessionId ?? ''], [auditParams, sessionId]);
 
   const overview = useGetAdminOverview({
@@ -134,9 +137,8 @@ export default function AdminAccountsPage() {
     : undefined;
   const auditTotalCount = auditPage.data?.totalCount ?? 0;
   const auditReady = auditPage.isFetchedAfterMount;
-  const auditMaxOffset = Math.min(10_000, Math.max(0, (Math.ceil(auditTotalCount / PAGE_SIZE) - 1) * PAGE_SIZE));
-  const auditFirst = auditTotalCount === 0 ? 0 : auditOffset + 1;
-  const auditLast = Math.min(auditOffset + (auditPage.data?.events.length ?? 0), auditTotalCount);
+  const auditFirst = auditTotalCount === 0 ? 0 : auditPageIndex * PAGE_SIZE + 1;
+  const auditLast = Math.min(auditFirst + (auditPage.data?.events.length ?? 0) - 1, auditTotalCount);
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -291,7 +293,7 @@ export default function AdminAccountsPage() {
           <select data-testid="select-audit-action" value={auditAction}
             onChange={event => {
               setAuditAction(event.target.value as typeof auditAction);
-              setAuditOffset(0);
+              setAuditCursors([null]);
             }}>
             <option value="">All actions</option>
             <option value="suspend">Suspend</option>
@@ -303,7 +305,7 @@ export default function AdminAccountsPage() {
           <select data-testid="select-audit-outcome" value={auditOutcome}
             onChange={event => {
               setAuditOutcome(event.target.value as typeof auditOutcome);
-              setAuditOffset(0);
+              setAuditCursors([null]);
             }}>
             <option value="">All outcomes</option>
             <option value="pending">Pending</option>
@@ -325,8 +327,9 @@ export default function AdminAccountsPage() {
         <strong>{auditAction || auditOutcome ? 'No matching account status changes' : 'No account status changes yet'}</strong>
         <p>{auditAction || auditOutcome ? 'Try changing or clearing the selected filters.' : 'Suspends and reactivations will appear here.'}</p>
       </div>}
-      {!auditFatalError && auditReady && !auditPage.isLoading && (auditPage.data?.events.length ?? 0) > 0 && <>
-        <div className="admin-audit-table" role="table" aria-label="Account status changes">
+      {!auditFatalError && auditReady && !auditPage.isLoading
+        && ((auditPage.data?.events.length ?? 0) > 0 || auditPageIndex > 0) && <>
+        {(auditPage.data?.events.length ?? 0) > 0 && <div className="admin-audit-table" role="table" aria-label="Account status changes">
           <div className="admin-audit-labels" role="row">
             <span role="columnheader">ACTOR ID</span><span role="columnheader">TARGET ID</span>
             <span role="columnheader">ACTION</span><span role="columnheader">OUTCOME</span><span role="columnheader">TIME</span>
@@ -339,15 +342,19 @@ export default function AdminAccountsPage() {
             <span role="cell"><span className={`admin-audit-outcome ${event.outcome}`}>{event.outcome}</span></span>
             <time role="cell" dateTime={event.createdAt}>{dateTimeLabel(event.createdAt)}</time>
           </div>)}
-        </div>
+        </div>}
         <footer className="admin-pagination">
           <span data-testid="text-audit-pagination-range">{auditTotalCount ? `Showing ${auditFirst}–${auditLast} of ${auditTotalCount.toLocaleString()}` : 'No events'}</span>
           <div className="admin-page-controls">
-            <button type="button" className="admin-page-button" data-testid="button-audit-previous-page" disabled={auditOffset <= 0 || auditPage.isFetching}
-              onClick={() => setAuditOffset(current => Math.max(0, current - PAGE_SIZE))}><ArrowLeft size={15} /> Previous</button>
-            <span className="admin-page-index" data-testid="text-audit-page-number">{auditTotalCount ? `${Math.floor(auditOffset / PAGE_SIZE) + 1} / ${Math.max(1, Math.ceil(auditTotalCount / PAGE_SIZE))}` : '—'}</span>
-            <button type="button" className="admin-page-button" data-testid="button-audit-next-page" disabled={auditOffset >= auditMaxOffset || auditPage.isFetching}
-              onClick={() => setAuditOffset(current => Math.min(auditMaxOffset, current + PAGE_SIZE))}>Next <ArrowRight size={15} /></button>
+            <button type="button" className="admin-page-button" data-testid="button-audit-previous-page" disabled={auditPageIndex <= 0 || auditPage.isFetching}
+              onClick={() => setAuditCursors(current => current.slice(0, -1))}><ArrowLeft size={15} /> Previous</button>
+            <span className="admin-page-index" data-testid="text-audit-page-number">{auditTotalCount ? `${auditPageIndex + 1} / ${Math.max(1, Math.ceil(auditTotalCount / PAGE_SIZE))}` : '—'}</span>
+            <button type="button" className="admin-page-button" data-testid="button-audit-next-page"
+              disabled={!auditPage.data?.nextCursor || auditPage.isFetching}
+              onClick={() => {
+                const nextCursor = auditPage.data?.nextCursor;
+                if (nextCursor) setAuditCursors(current => [...current, nextCursor]);
+              }}>Next <ArrowRight size={15} /></button>
           </div>
         </footer>
       </>}
