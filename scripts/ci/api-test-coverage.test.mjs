@@ -34,6 +34,29 @@ function portableCommand([, packageName, suite]) {
   return `--filter ${packageName} run ${suite}`;
 }
 
+// Read the real manifests, not scripts invented by the pnpm shell stub. These
+// fixed workspace paths are inspected only; no command or package hook is run.
+const portableManifests = [
+  'artifacts/api-server/package.json',
+  'lib/integrations-openai-ai-server/package.json',
+  'artifacts/cloudpainter/package.json',
+].map(path => JSON.parse(readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')));
+
+function assertPortablePackageScripts(source, manifests) {
+  const selected = [...portableScript(source).matchAll(
+    /^run_check ([a-z0-9-]+) pnpm --filter (@workspace\/[a-z0-9-]+) run (test:[a-z0-9-]+)$/gm,
+  )].map(match => match.slice(1));
+  assert.deepEqual(selected, portableChecks, 'Manifest check must inspect every exact selected portable command');
+  for (const [label, packageName, suite] of selected) {
+    const packages = manifests.filter(manifest => manifest.name === packageName);
+    assert.ok(packages.length === 1, `${label}: expected one manifest for ${packageName}`);
+    const scripts = packages[0].scripts;
+    assert.ok(scripts && Object.hasOwn(scripts, suite)
+      && typeof scripts[suite] === 'string' && scripts[suite].trim().length > 0,
+    `${label}: ${packageName} run ${suite} must have a nonempty package script`);
+  }
+}
+
 function portableScript(source) {
   const body = stepBody(source, portableStep);
   const match = body.match(/^        run: \|\n((?:          [^\n]*\n|\n)+)$/m);
@@ -533,6 +556,47 @@ test('a swallowed settings failure is rejected', { timeout: 10000 }, () => {
 test('the executable portable stage selects all unit and mocked-provider suites', { timeout: 10000 }, () => {
   runPortableStage(workflow);
 });
+
+test('every selected portable suite has a command in its real package manifest', { timeout: 10000 }, () => {
+  assertPortablePackageScripts(workflow, portableManifests);
+});
+
+for (const [label, packageName, suite] of portableChecks) {
+  for (const [mutation, rewrite] of [
+    ['missing', scripts => { delete scripts[suite]; }],
+    ['renamed', scripts => {
+      scripts[`${suite}-renamed`] = scripts[suite];
+      delete scripts[suite];
+    }],
+    ['empty', scripts => { scripts[suite] = ''; }],
+    ['whitespace-only', scripts => { scripts[suite] = ' \t\n '; }],
+    ['non-string', scripts => { scripts[suite] = ['node', '--test']; }],
+  ]) {
+    test(`${label} ${mutation} package script is rejected without executing it`, { timeout: 10000 }, () => {
+      const manifests = structuredClone(portableManifests);
+      const manifest = manifests.find(entry => entry.name === packageName);
+      assert.ok(manifest && Object.hasOwn(manifest.scripts, suite), 'Mutation must target a real script');
+      rewrite(manifest.scripts);
+      assert.notDeepEqual(manifests, portableManifests, 'Mutation must change only the in-memory fixture');
+      assert.throws(() => assertPortablePackageScripts(workflow, manifests), {
+        code: 'ERR_ASSERTION',
+        message: `${label}: ${packageName} run ${suite} must have a nonempty package script`,
+      });
+    });
+  }
+}
+
+for (const manifest of portableManifests) {
+  test(`${manifest.name} renamed package cannot borrow scripts from another manifest`, { timeout: 10000 }, () => {
+    const manifests = structuredClone(portableManifests);
+    manifests.find(entry => entry.name === manifest.name).name += '-renamed';
+    const [label] = portableChecks.find(([, packageName]) => packageName === manifest.name);
+    assert.throws(() => assertPortablePackageScripts(workflow, manifests), {
+      code: 'ERR_ASSERTION',
+      message: `${label}: expected one manifest for ${manifest.name}`,
+    });
+  });
+}
 
 for (const check of [portableChecks[0], portableChecks.at(-1)]) {
   test(`${check[0]} failure fails the portable stage after executing every sibling`, { timeout: 10000 }, () => {

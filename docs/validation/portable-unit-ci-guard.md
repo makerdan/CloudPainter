@@ -73,10 +73,54 @@ and owned-process termination was verified. Raw output, input digests, selected
 limits, and the supervisor are retained in the ignored
 `generated-artifacts/ci-portable-unit-guard/` directory.
 
-This is focused local stub evidence, not a passing full CI pipeline. It does
-not establish that the selected package scripts exist or that their actual test
-suites pass.
+This earlier result is focused local stub evidence, not a passing full CI
+pipeline. By itself it does not establish that the selected package scripts
+exist or that their actual test suites pass.
 
+
+## Read-only package-manifest extension
+
+The guard now reads the real manifests at `artifacts/api-server/package.json`,
+`lib/integrations-openai-ai-server/package.json`, and
+`artifacts/cloudpainter/package.json`. It extracts the fourteen literal portable
+commands from the workflow and compares them with the independent coverage list.
+Each selected package must resolve to exactly one inspected manifest, and each
+selected suite must be an own script entry containing a nonempty command string.
+The check does not execute those strings or package hooks.
+
+For every selected package/suite, independent in-memory fixtures remove its
+script, rename its script key while preserving the command, or replace its
+command with empty, whitespace-only, or non-string content. Each must fail at
+the package/suite-specific assertion, not at shell status handling. Three
+package-name mutations additionally prove that scripts cannot be borrowed from
+another package. All real manifests and the workflow remain untouched.
+
+The owner authorized a task-local bounded offline run, then separately approved
+one corrected rerun. No active project-local checked route was verified; these
+approvals authorize only this local operation, not activation or modification of
+project-wide Failure Gate governance. The exact command was:
+
+```sh
+node --test --test-timeout=10000 --test-concurrency=1 scripts/ci/api-test-coverage.test.mjs
+```
+
+The first attempt rejected three package-rename fixture expectations because
+Node appended comparison details to assertion messages. The guard itself
+correctly rejected those renamed packages. After correcting that assertion
+shape, the approved rerun returned **exit 0, 120/120 tests passed**, with no skips
+or cancellations, in approximately **0.75 seconds**. The independent Python
+supervisor enforced 30 seconds execution, 10 seconds cleanup and 1 MiB output;
+owned descendants were reaped, the private process group was gone, and all five
+input hashes were unchanged during both runs. Both attempts and the supervisor
+are retained under ignored `generated-artifacts/ci-package-manifest-guard/`.
+
+CI coverage remains direct through the existing guard step on pull requests and
+pushes to `main`; no new workflow or duplicate shell-status fixture was added.
+Remote activation, current passing status, and merge requirements remain unknown.
+This proves package script entry availability, not dependency installation,
+underlying test-file existence, command semantics, or actual package-suite passes.
+No package suites, credentials, provider calls, application workflows, or live
+services were used.
 ## Multiple-failure extension
 
 On 2026-10-11 the owner separately approved one bounded stub-only local run for
