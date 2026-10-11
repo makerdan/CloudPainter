@@ -349,6 +349,33 @@ for (const redirectedSuite of suites) {
   });
 }
 
+for (const [label, statement] of [
+  ['unset DATABASE_URL', 'unset DATABASE_URL'],
+  ['empty DATABASE_URL', 'DATABASE_URL=""'],
+]) {
+  test(`${label} after the correct step environment is rejected at the effective boundary`, { timeout: 10000 }, () => {
+    const body = stepBody(workflow, databaseStep);
+    const mutatedBody = body.replace(
+      '          failed=0\n', `          failed=0\n          ${statement}\n`,
+    );
+    assert.notEqual(mutatedBody, body, 'Missing-target fixture must change executable shell commands');
+    const mutated = workflow.replace(body, mutatedBody);
+    // The correct step env still passes. All three stubs must run; rejection
+    // must come from their observed connection, not selection or shell failure.
+    databaseScript(mutated);
+    assert.throws(() => runDatabaseStage(mutated), {
+      code: 'ERR_ASSERTION',
+      message: /^Effective API suite DATABASE_URL must target only the disposable PostgreSQL service URL/,
+      actual: [
+        'test:image-access\t',
+        'test:palettes\t',
+        // The fixture reader trims trailing whitespace from the final record.
+        'test:settings',
+      ],
+    });
+  });
+}
+
 test('a comment naming another target does not redirect the effective connection', { timeout: 10000 }, () => {
   const body = stepBody(workflow, databaseStep);
   const mutated = workflow.replace(body, body.replace(
