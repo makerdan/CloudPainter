@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "wouter";
 import { Download, Loader2, Upload, X } from "lucide-react";
 import {
   getGetImageGenerationConfigQueryKey,
@@ -152,16 +151,10 @@ export function PoeUpscaleExport({ composeImage, title, width, height }: Props) 
       <section className="upscale-export panel" aria-labelledby="upscale-export-title">
         <div className="upscale-export-copy">
           <h2 id="upscale-export-title">Poe Assistant upscale export</h2>
-          <div className="upscale-export-disclosure" data-testid="upscale-route-disclosure" aria-live="polite">
-            <p><strong>Route:</strong> Poe Assistant; Assistant chooses the image provider.</p>
-            <p><strong>Processing:</strong> “Please upscale the attached image to be {scale}x”. The expected PNG is {width * scale} × {height * scale} pixels.</p>
-            <p>The merged photo and visible layers are sent to Poe only after you confirm, and may use Poe points.</p>
-          </div>
           {status && <p role="status" className="upscale-progress" data-testid="upscale-status">{status}</p>}
           {error && <p role="alert" className="upscale-error" data-testid="upscale-error">{error}</p>}
           {!sizeSupported && <p role="status">This composition is too large for {scale}× export. Output is limited to 8192 pixels per side and 20 megapixels; input is limited to 2048 pixels per side. Choose a smaller composition or scale.</p>}
           {!isLoaded && <p role="status">Checking account…</p>}
-          {isLoaded && !signedIn && <p role="status">Sign in with an approved account to use the connected Poe account’s points. <Link href="/sign-in">Sign in</Link></p>}
           {signedIn && configuration.data && !configuration.data.allowed && <p role="status">This account is not approved for Poe image requests. Ask the project owner for access.</p>}
           {signedIn && configuration.data?.allowed && <p className="upscale-budget">
             {configuration.data.remaining} of {configuration.data.dailyLimit} account attempts and {configuration.data.globalRemaining} shared attempts remain today. These are request caps, not point estimates.

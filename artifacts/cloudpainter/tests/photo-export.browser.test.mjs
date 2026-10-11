@@ -930,9 +930,10 @@ test('keeps ordinary PNG export local and unchanged unless the explicit Poe conf
     const scale = page.getByTestId('select-upscale-factor');
     await scale.selectOption('8');
     assert.equal(await scale.inputValue(), '8', 'users can choose 8× without starting a request');
-    assert.match(await page.getByTestId('upscale-route-disclosure').textContent(), /Poe Assistant.*Assistant chooses the image provider/i);
-    assert.match(await page.getByTestId('upscale-route-disclosure').textContent(), /Please upscale the attached image to be 8x/);
-    assert.match(await page.getByTestId('upscale-route-disclosure').textContent(), /2880 × 1920 pixels/);
+    const upscalePanel = page.locator('.upscale-export');
+    const panelText = await upscalePanel.innerText();
+    assert.doesNotMatch(panelText, /Assistant chooses the image provider|Please upscale the attached image|2880 × 1920 pixels|merged photo and visible layers are sent to Poe|may use Poe points|Sign in with an approved account/i);
+    assert.equal(await upscalePanel.getByRole('link', { name: 'Sign in' }).count(), 0, 'the panel should not show the removed sign-in prompt');
     await page.waitForFunction(() => !document.querySelector('[data-testid="button-upscale-export"]').disabled);
 
     const [download] = await Promise.all([
@@ -949,6 +950,7 @@ test('keeps ordinary PNG export local and unchanged unless the explicit Poe conf
       await page.getByTestId('button-upscale-export').click();
       const dialog = page.getByRole('dialog', { name: 'Send this composition to Poe?' });
       await dialog.waitFor({ state: 'visible' });
+      assert.match(await dialog.textContent(), /This sends the merged photo and visible layers to Poe Assistant and may use Poe points/i);
       assert.match(await dialog.textContent(), new RegExp(`Please upscale the attached image to be ${factor}x`));
       assert.match(await dialog.textContent(), new RegExp(`exactly ${360 * factor} × ${240 * factor} pixels`));
       assert.equal(upscaleRequests.length, factor === 4 ? 0 : 1, 'reviewing the disclosure must not transfer artwork');

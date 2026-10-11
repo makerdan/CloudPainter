@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     isError: false,
     refetch: vi.fn(),
   },
+  account: { signedIn: true },
 }));
 
 vi.mock("@workspace/api-client-react", () => ({
@@ -19,7 +20,11 @@ vi.mock("@workspace/api-client-react", () => ({
   useGetImageGenerationConfig: () => mocks.configuration,
 }));
 vi.mock("./Account", () => ({
-  usePaletteAccount: () => ({ userId: "fixture-user", sessionId: "fixture-session", isLoaded: true }),
+  usePaletteAccount: () => ({
+    userId: mocks.account.signedIn ? "fixture-user" : undefined,
+    sessionId: "fixture-session",
+    isLoaded: true,
+  }),
 }));
 
 const mergedBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
@@ -33,6 +38,15 @@ function renderExport() {
 
 beforeEach(() => {
   mocks.upscale.mockReset();
+  mocks.account.signedIn = true;
+  mocks.configuration.data = {
+    configured: true,
+    signedIn: true,
+    allowed: true,
+    dailyLimit: 2,
+    remaining: 2,
+    globalRemaining: 20,
+  };
   mocks.configuration.refetch.mockReset();
   Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:upscale-fixture") });
   Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
@@ -54,11 +68,27 @@ describe("Poe Assistant upscale export", () => {
     expect(controls.getAllByRole("option").map(option => option.textContent)).toEqual(["4×", "8×"]);
     expect((controls.getByRole("button", { name: "Review 4× export" }) as HTMLButtonElement).disabled).toBe(false);
     expect(controls.getByText(/2 of 2 account attempts and 20 shared attempts remain today/)).toBeTruthy();
-    expect(controls.getByTestId("upscale-route-disclosure").textContent).toContain("Poe Assistant; Assistant chooses the image provider.");
-    expect(controls.getByTestId("upscale-route-disclosure").textContent).toContain("Please upscale the attached image to be 4x");
-    expect(controls.getByTestId("upscale-route-disclosure").textContent).toContain("480 × 320 pixels");
-    expect(controls.queryByRole("link", { name: "Poe privacy policy" })).toBeNull();
+    expect(panel.textContent).not.toMatch(/Assistant chooses the image provider|Please upscale the attached image|merged photo and visible layers are sent to Poe|may use Poe points|Sign in with an approved account/i);
+    expect(controls.queryByRole("link", { name: "Sign in" })).toBeNull();
     expect([...panel.querySelectorAll("p")].every(paragraph => Boolean(paragraph.textContent?.trim()))).toBe(true);
+  });
+
+  it("keeps review unavailable to signed-out users without showing the removed sign-in prompt", () => {
+    mocks.account.signedIn = false;
+    renderExport();
+    const panel = screen.getByRole("region", { name: "Poe Assistant upscale export" });
+    expect((within(panel).getByRole("combobox", { name: "Poe Assistant upscale factor" }) as HTMLSelectElement).disabled).toBe(false);
+    expect((within(panel).getByRole("button", { name: "Review 4× export" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(panel.textContent).not.toMatch(/Sign in with an approved account|connected Poe account/i);
+    expect(within(panel).queryByRole("link", { name: "Sign in" })).toBeNull();
+  });
+
+  it("keeps unapproved accounts gated with an actionable status", () => {
+    mocks.configuration.data = { ...mocks.configuration.data, allowed: false };
+    renderExport();
+    const panel = screen.getByRole("region", { name: "Poe Assistant upscale export" });
+    expect(within(panel).getByText("This account is not approved for Poe image requests. Ask the project owner for access.")).toBeTruthy();
+    expect((within(panel).getByRole("button", { name: "Review 4× export" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it.each([4, 8] as const)("sends the merged PNG only after confirmation and downloads the validated %s× result", async scale => {
@@ -69,9 +99,6 @@ describe("Poe Assistant upscale export", () => {
     const { composeImage } = renderExport();
     const selector = screen.getByTestId("select-upscale-factor");
     await user.selectOptions(selector, String(scale));
-    const disclosure = screen.getByTestId("upscale-route-disclosure");
-    expect(disclosure.textContent).toContain(`Please upscale the attached image to be ${scale}x`);
-    expect(disclosure.textContent).toContain(`${120 * scale} × ${80 * scale} pixels`);
     expect(composeImage).not.toHaveBeenCalled();
     expect(mocks.upscale).not.toHaveBeenCalled();
     await user.click(screen.getByTestId("button-upscale-export"));
