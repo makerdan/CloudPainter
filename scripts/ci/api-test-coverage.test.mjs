@@ -42,7 +42,8 @@ function portableScript(source) {
   // Admit only this finite, builtin-only shell shape and stubbed pnpm calls.
   // A workflow edit cannot introduce real hooks/network commands into a guard.
   const statements = new Set([
-    'set +e', 'failed=0', 'failed=1', 'run_check() {', 'label="$1"', 'shift',
+    'set +e', 'failed=0', 'failed=1', 'failed=$((1 - failed))',
+    'run_check() {', 'label="$1"', 'shift',
     "printf '\\n=== %s ===\\n' \"$label\"", '"$@"', 'status=$?', 'status=0',
     'if [ "$status" -ne 0 ]; then',
     "printf 'FAILED (%s): exit %s\\n' \"$label\" \"$status\"",
@@ -57,7 +58,8 @@ function portableScript(source) {
   return script;
 }
 
-function runPortableStage(source, failingCheck) {
+function runPortableStage(source, failingChecks = []) {
+  const failingCommands = new Set(failingChecks.map(portableCommand));
   const script = portableScript(source);
   const bash = (process.env.PATH ?? '').split(':').map(path => join(path, 'bash')).find(existsSync);
   assert.ok(bash, 'Expected a local Bash executable');
@@ -66,7 +68,8 @@ function runPortableStage(source, failingCheck) {
     writeFileSync(join(directory, 'pnpm'), `#!/bin/sh
 printf '%s\\n' "$*" >> "$CALLS_FILE"
 if [ "$#" -ne 4 ] || [ "$1" != "--filter" ] || [ "$3" != "run" ]; then exit 98; fi
-if [ "$*" = "$FAILING_CALL" ]; then exit 23; fi
+# Delimit complete commands so shared suite names cannot fail other packages.
+case "$FAILING_CALLS" in *"|$*|"*) exit 23 ;; esac
 exit 0
 `, { mode: 0o700 });
     const result = spawnSync(bash, ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script], {
@@ -75,7 +78,7 @@ exit 0
       env: {
         PATH: directory,
         CALLS_FILE: join(directory, 'calls'),
-        FAILING_CALL: failingCheck ? portableCommand(failingCheck) : '',
+        FAILING_CALLS: `|${[...failingCommands].join('|')}|`,
       },
       encoding: 'utf8',
       timeout: 5000,
@@ -87,12 +90,12 @@ exit 0
     const calls = readFileSync(join(directory, 'calls'), 'utf8').trim().split('\n');
     assert.deepEqual(calls, portableChecks.map(portableCommand),
       'Effective portable suite selection must run every exact package/suite once, including siblings after a failure');
-    assert.equal(result.status, failingCheck ? 1 : 0,
-      'The portable stage must fail if any selected suite fails');
     const reports = result.stdout.split('\n').filter(line => /^(PASSED:|FAILED \()/.test(line));
-    assert.deepEqual(reports, portableChecks.map(check => check === failingCheck
+    assert.deepEqual(reports, portableChecks.map(check => failingCommands.has(portableCommand(check))
       ? `FAILED (${check[0]}): exit 23` : `PASSED: ${check[0]}`),
     'Portable stage must preserve each command status and label');
+    assert.equal(result.status, failingCommands.size ? 1 : 0,
+      'The portable stage must fail if any selected suite fails');
     return result;
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -347,7 +350,7 @@ test('the executable portable stage selects all unit and mocked-provider suites'
 
 for (const check of [portableChecks[0], portableChecks.at(-1)]) {
   test(`${check[0]} failure fails the portable stage after executing every sibling`, { timeout: 10000 }, () => {
-    runPortableStage(workflow, check);
+    runPortableStage(workflow, [check]);
   });
 
   for (const [label, before, after] of [
@@ -356,10 +359,30 @@ for (const check of [portableChecks[0], portableChecks.at(-1)]) {
     ['forced exit zero', 'exit "$failed"', 'exit 0'],
   ]) {
     test(`${label} is rejected for ${check[0]}`, { timeout: 10000 }, () => {
-      assert.throws(() => runPortableStage(mutatePortableStage(before, after), check),
-        /portable stage must fail/);
+      assert.throws(() => runPortableStage(mutatePortableStage(before, after), [check]),
+        label === 'swallowed command status'
+          ? /Portable stage must preserve each command status and label/
+          : /portable stage must fail/);
     });
   }
+}
+
+for (const [label, failingChecks] of [
+  ['first and last fail together', [portableChecks[0], portableChecks.at(-1)]],
+  ['two failures precede successful siblings', [portableChecks[0], portableChecks[1]]],
+]) {
+  test(`portable ${label} preserves every command and report and exits nonzero`, { timeout: 10000 }, () => {
+    runPortableStage(workflow, failingChecks);
+  });
+
+  test(`portable toggle-style aggregation is rejected when ${label}`, { timeout: 10000 }, () => {
+    // A parity accumulator passes single-failure cases but returns zero for two.
+    // Admit this exact builtin mutation so rejection proves the exit assertion,
+    // after verifying every exact sibling command and both failure reports.
+    const mutated = mutatePortableStage('failed=1', 'failed=$((1 - failed))');
+    assert.throws(() => runPortableStage(mutated, failingChecks),
+      /portable stage must fail/);
+  });
 }
 
 for (const [label, replacement] of [

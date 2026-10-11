@@ -76,3 +76,40 @@ limits, and the supervisor are retained in the ignored
 This is focused local stub evidence, not a passing full CI pipeline. It does
 not establish that the selected package scripts exist or that their actual test
 suites pass.
+
+## Multiple-failure extension
+
+On 2026-10-11 the owner separately approved one bounded stub-only local run for
+the multiple-failure extension, with Failure Gate inactive for this task only.
+The earlier task-specific approval was not reused as authority.
+
+The portable stub now accepts a set of complete package/suite commands. Two new
+positive cases fail the first and last commands together, or fail the first two
+commands before successful siblings. In each case the real Bash script must run
+all fourteen exact commands once, preserve every ordered pass/failure report, and
+exit 1. Report assertions precede the exit assertion, so negative aggregation
+fixtures also prove command selection and both failure reports remain intact.
+
+Both cases reject an in-memory `failed=$((1 - failed))` mutation specifically at
+the final exit assertion. This builtin-only mutation is explicitly admitted by
+the fixture parser: rejection is behavioral, not merely an unsupported-statement
+error. Two failures cannot cancel one another into a passing result. Existing
+single-failure, all-success, selection and unsafe-command controls remain.
+
+The authorized command was
+`node --test --test-timeout=10000 scripts/ci/api-test-coverage.test.mjs`.
+An independent Python monotonic supervisor enforced a 30-second execution limit,
+10-second cleanup allowance and 1 MiB output cap, with a private process group
+and a credential-free child environment. Each test retains its 10-second limit,
+and each stub shell retains a 5-second limit and 64 KiB buffer. There are no hooks
+or daemonizing commands in the inspected graph.
+
+The single run returned **exit 0: 41/41 tests passed**, with no failures, skips or
+cancellations, in approximately **0.76 seconds**. Both input hashes remained
+unchanged and the owned process group was confirmed stopped. The supervisor,
+raw output and hash/result record are retained under the ignored
+`generated-artifacts/ci-multiple-failures/` directory.
+
+CI coverage remains direct through the existing guard step shown above; no
+workflow, package suite, provider, database, credential or service was used or
+changed. Remote execution and required merge status remain unknown.
