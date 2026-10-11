@@ -56,6 +56,8 @@ type Project = {
   layers: PaintLayer[];
   selectedLayerId: string;
   title: string;
+  photoZoom: number;
+  photoPan: { x: number; y: number };
 };
 
 const STORE_KEY = 'cloudpainter-project-v1';
@@ -68,15 +70,32 @@ const createLayer = (name: string): PaintLayer => ({
 });
 const freshProject = (): Project => {
   const layer = createLayer('Layer 1');
-  return { image: null, width: 1200, height: 800, layers: [layer], selectedLayerId: layer.id, title: 'Untitled idea' };
+  return {
+    image: null, width: 1200, height: 800, layers: [layer], selectedLayerId: layer.id,
+    title: 'Untitled idea', photoZoom: 1, photoPan: { x: 0, y: 0 },
+  };
 };
+
+function normalizeProjectView(project: Project): Project {
+  const candidate = project as Project & { photoZoom?: unknown; photoPan?: { x?: unknown; y?: unknown } | null };
+  const photoZoom = typeof candidate.photoZoom === 'number' && Number.isFinite(candidate.photoZoom)
+    ? Math.max(1, Math.min(4, candidate.photoZoom))
+    : 1;
+  const photoPan = candidate.photoPan && typeof candidate.photoPan === 'object'
+    ? {
+        x: typeof candidate.photoPan.x === 'number' && Number.isFinite(candidate.photoPan.x) ? candidate.photoPan.x : 0,
+        y: typeof candidate.photoPan.y === 'number' && Number.isFinite(candidate.photoPan.y) ? candidate.photoPan.y : 0,
+      }
+    : { x: 0, y: 0 };
+  return { ...project, photoZoom, photoPan };
+}
 
 function readProject(): Project {
   try {
     const saved = localStorage.getItem(STORE_KEY);
     if (saved) {
       const project = JSON.parse(saved) as Project;
-      if (project && Array.isArray(project.layers) && project.layers.length) return project;
+      if (project && Array.isArray(project.layers) && project.layers.length) return normalizeProjectView(project);
     }
   } catch {
     // Corrupt or unavailable browser storage starts a fresh local project.
@@ -89,7 +108,7 @@ function readPreviousProject(): Project | null {
     const saved = localStorage.getItem(PREVIOUS_PROJECT_KEY);
     if (saved) {
       const project = JSON.parse(saved) as Project;
-      if (project && Array.isArray(project.layers) && project.layers.length) return project;
+      if (project && Array.isArray(project.layers) && project.layers.length) return normalizeProjectView(project);
     }
   } catch {
     // Ignore corrupt or unavailable recovery data without affecting the active project.
@@ -103,9 +122,11 @@ function readProjectHistory(): Project[] {
     if (saved) {
       const history = JSON.parse(saved) as unknown;
       if (Array.isArray(history)) {
-        return history.filter((project): project is Project =>
-          Boolean(project && Array.isArray(project.layers) && project.layers.length),
-        );
+        return history
+          .filter((project): project is Project =>
+            Boolean(project && Array.isArray(project.layers) && project.layers.length),
+          )
+          .map(normalizeProjectView);
       }
     }
   } catch {
@@ -177,8 +198,7 @@ function Home() {
   const [toast, setToast] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
-  const [photoZoom, setPhotoZoom] = useState(1);
-  const [photoPan, setPhotoPan] = useState({ x: 0, y: 0 });
+  const { photoZoom, photoPan } = project;
   const [exportSize, setExportSize] = useState<ExportSize>('1');
   const [paperOrientation, setPaperOrientation] = useState<PaperOrientation>('match-sketch');
   const [panMode, setPanMode] = useState(false);
@@ -229,8 +249,10 @@ function Home() {
   }, []);
 
   useEffect(() => {
-    setPhotoPan(current => clampPhotoPan(current));
-  }, [stageSize.width, stageSize.height, photoZoom]);
+    if (stageSize.width <= 0 || stageSize.height <= 0) return;
+    const clamped = clampPhotoPan(photoPan);
+    if (clamped.x !== photoPan.x || clamped.y !== photoPan.y) setPhotoView(photoZoom, clamped);
+  }, [stageSize.width, stageSize.height, photoZoom, photoPan.x, photoPan.y]);
 
   const announce = useCallback((message: string) => {
     setToast(message);
@@ -276,6 +298,10 @@ function Home() {
   }, [project.layers, project.width, project.height, draft, renderStroke]);
 
   const updateProject = (updater: (current: Project) => Project) => setProject(current => updater(current));
+  const setPhotoView = (zoom: number, pan: { x: number; y: number }) => updateProject(current => {
+    if (current.photoZoom === zoom && current.photoPan.x === pan.x && current.photoPan.y === pan.y) return current;
+    return { ...current, photoZoom: zoom, photoPan: pan };
+  });
   const changeLayer = (layerId: string, updater: (layer: PaintLayer) => PaintLayer) => {
     updateProject(current => ({ ...current, layers: current.layers.map(layer => layer.id === layerId ? updater(layer) : layer) }));
   };
@@ -295,12 +321,10 @@ function Home() {
         return;
       }
       setProjectHistory(nextHistory);
-      setPhotoZoom(1);
-      setPhotoPan({ x: 0, y: 0 });
       setPanMode(false);
       setProject({
         image: source, width, height, layers: [layer], selectedLayerId: layer.id,
-        title: prompt.slice(0, 42) || 'Generated idea',
+        title: prompt.slice(0, 42) || 'Generated idea', photoZoom: 1, photoPan: { x: 0, y: 0 },
       });
       announce('Generated image added. You can now sketch over it.');
       resolve();
@@ -318,10 +342,8 @@ function Home() {
       return;
     }
     setProjectHistory(nextHistory);
-    setPhotoZoom(1);
-    setPhotoPan({ x: 0, y: 0 });
     setPanMode(false);
-    setProject(savedProject);
+    setProject(normalizeProjectView(savedProject));
     announce(`Restored “${savedProject.title}”.`);
   };
   const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
@@ -338,13 +360,12 @@ function Home() {
       image.onload = () => {
         const { width, height } = getScaledImageDimensions(image.naturalWidth, image.naturalHeight);
         const layer = createLayer('Sketch layer');
-        setPhotoZoom(1);
-        setPhotoPan({ x: 0, y: 0 });
         setPanMode(false);
         setProject(current => ({
           ...current, image: String(reader.result), width, height,
           layers: [layer], selectedLayerId: layer.id,
           title: file.name.replace(/\.[^.]+$/, '').slice(0, 42) || 'Untitled idea',
+          photoZoom: 1, photoPan: { x: 0, y: 0 },
         }));
         announce('Photo added. Your original stays untouched.');
       };
@@ -358,10 +379,11 @@ function Home() {
 
   const startBlank = () => {
     const layer = createLayer('Layer 1');
-    setPhotoZoom(1);
-    setPhotoPan({ x: 0, y: 0 });
     setPanMode(false);
-    setProject(current => ({ ...current, image: null, width: 1200, height: 800, layers: [layer], selectedLayerId: layer.id, title: 'Untitled idea' }));
+    setProject(current => ({
+      ...current, image: null, width: 1200, height: 800, layers: [layer], selectedLayerId: layer.id,
+      title: 'Untitled idea', photoZoom: 1, photoPan: { x: 0, y: 0 },
+    }));
     announce('A fresh transparent canvas is ready.');
   };
 
@@ -453,8 +475,7 @@ function Home() {
       x: midpoint.x - stageRect.left - stageRect.width / 2 - pinch.anchor.x * nextZoom,
       y: midpoint.y - stageRect.top - stageRect.height / 2 - pinch.anchor.y * nextZoom,
     };
-    setPhotoZoom(nextZoom);
-    setPhotoPan(clampPhotoPan(nextPan, nextZoom));
+    setPhotoView(nextZoom, clampPhotoPan(nextPan, nextZoom));
     if (nextZoom === 1) setPanMode(false);
   };
   const handleStagePointerEndCapture = (event: PointerEvent<HTMLDivElement>) => {
@@ -465,7 +486,7 @@ function Home() {
   const continuePhotoPan = (event: PointerEvent<HTMLDivElement>) => {
     const panning = panningRef.current;
     if (panning?.pointerId === event.pointerId) {
-      setPhotoPan(clampPhotoPan({
+      setPhotoView(photoZoom, clampPhotoPan({
         x: panning.originX + event.clientX - panning.startX,
         y: panning.originY + event.clientY - panning.startY,
       }));
@@ -539,14 +560,12 @@ function Home() {
     setRenamingId(null);
   };
   const resetPhotoView = () => {
-    setPhotoZoom(1);
-    setPhotoPan({ x: 0, y: 0 });
+    setPhotoView(1, { x: 0, y: 0 });
     setPanMode(false);
   };
   const changePhotoZoom = (value: number) => {
     const nextZoom = Math.max(1, Math.min(4, value));
-    setPhotoZoom(nextZoom);
-    setPhotoPan(current => clampPhotoPan(current, nextZoom));
+    setPhotoView(nextZoom, clampPhotoPan(photoPan, nextZoom));
     if (nextZoom === 1) setPanMode(false);
   };
 

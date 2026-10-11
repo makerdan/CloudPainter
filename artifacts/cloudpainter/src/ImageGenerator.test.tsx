@@ -233,6 +233,7 @@ test('saved sketches can be browsed and restored without signing in', async ({ p
     image: null, width: 320, height: 240, selectedLayerId: 'oldest-layer', title: 'Oldest sketch',
     layers: [{ id: 'oldest-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
   };
+  const normalizedOldest = { ...oldest, photoZoom: 1, photoPan: { x: 0, y: 0 } };
   await page.addInitScript(({ project, history }) => {
     if (sessionStorage.getItem('cloudpainter-history-test-seeded')) return;
     localStorage.setItem('cloudpainter-project-v1', JSON.stringify(project));
@@ -243,10 +244,86 @@ test('saved sketches can be browsed and restored without signing in', async ({ p
   await expect(page.getByTestId('button-restore-project-0')).toHaveAccessibleName('Restore saved sketch: Earlier sketch');
   await expect(page.getByTestId('button-restore-project-1')).toHaveAccessibleName('Restore saved sketch: Oldest sketch');
   await page.getByTestId('button-restore-project-1').click();
-  await expect.poll(async () => saved(page)).toEqual(oldest);
+  await expect.poll(async () => saved(page)).toEqual(normalizedOldest);
   await expect(page.getByTestId('button-restore-project-0')).toHaveAccessibleName('Restore saved sketch: Current sketch');
   await page.reload();
   await expect(page.getByTestId('button-restore-project-1')).toHaveAccessibleName('Restore saved sketch: Earlier sketch');
   await expect(page.getByTestId('button-restore-project-2')).toHaveAccessibleName('Restore saved sketch: Oldest sketch');
-  await expect.poll(async () => saved(page)).toEqual(oldest);
+  await expect.poll(async () => saved(page)).toEqual(normalizedOldest);
+});
+
+test('saved sketches keep their own photo framing across switches and reloads', async ({ page }) => {
+  const photo = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+  const layer = { id: 'framing-test-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] };
+  const activeSketch = {
+    image: photo,
+    width: 320,
+    height: 240,
+    layers: [layer],
+    selectedLayerId: layer.id,
+    title: 'Zoomed sketch',
+    photoZoom: 2,
+    photoPan: { x: 36, y: -22 },
+  };
+  const savedSketch = {
+    image: photo,
+    width: 320,
+    height: 240,
+    layers: [layer],
+    selectedLayerId: layer.id,
+    title: 'Earlier framing',
+    photoZoom: 1.5,
+    photoPan: { x: -48, y: 30 },
+  };
+  await page.addInitScript(({ storeKey, historyKey, active, history }) => {
+    if (sessionStorage.getItem('cloudpainter-framing-test-seeded')) return;
+    sessionStorage.setItem('cloudpainter-framing-test-seeded', '1');
+    localStorage.setItem(storeKey, JSON.stringify(active));
+    localStorage.setItem(historyKey, JSON.stringify(history));
+  }, {
+    storeKey: STORE_KEY,
+    historyKey: PROJECT_HISTORY_KEY,
+    active: activeSketch,
+    history: [savedSketch],
+  });
+  await page.goto('./');
+
+  const stageContent = page.locator('.stage-content');
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('200');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(36px, -22px, 0px\) scale\(2\)/);
+  await page.getByTestId('input-photo-zoom').fill('225');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(36px, -22px, 0px\) scale\(2\.25\)/);
+  await page.getByTestId('button-pan-mode').click();
+  const stageBounds = await stageContent.boundingBox();
+  expect(stageBounds).not.toBeNull();
+  await page.mouse.move(stageBounds!.x + stageBounds!.width / 2, stageBounds!.y + stageBounds!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(stageBounds!.x + stageBounds!.width / 2 + 24, stageBounds!.y + stageBounds!.height / 2 - 12);
+  await page.mouse.up();
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(60px, -34px, 0px\) scale\(2\.25\)/);
+  await page.reload();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('225');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(60px, -34px, 0px\) scale\(2\.25\)/);
+  await expect.poll(async () => {
+    const project = await saved(page);
+    return { photoZoom: project?.photoZoom, photoPan: project?.photoPan };
+  }).toEqual({ photoZoom: 2.25, photoPan: { x: 60, y: -34 } });
+
+  await page.getByRole('button', { name: 'Restore saved sketch: Earlier framing' }).click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(-48px, 30px, 0px\) scale\(1\.5\)/);
+  await expect.poll(async () => {
+    const project = await saved(page);
+    return { title: project?.title, photoZoom: project?.photoZoom, photoPan: project?.photoPan };
+  }).toEqual({ title: 'Earlier framing', photoZoom: 1.5, photoPan: { x: -48, y: 30 } });
+
+  await page.reload();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(-48px, 30px, 0px\) scale\(1\.5\)/);
+  await page.getByRole('button', { name: 'Restore saved sketch: Zoomed sketch' }).click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('225');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(60px, -34px, 0px\) scale\(2\.25\)/);
+  await page.reload();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('225');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(60px, -34px, 0px\) scale\(2\.25\)/);
 });
