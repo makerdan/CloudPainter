@@ -3,6 +3,7 @@ import { expect, test, type Browser, type Download, type Page } from '@playwrigh
 
 const STORE_KEY = 'cloudpainter-project-v1';
 const PROJECT_HISTORY_KEY = 'cloudpainter-project-history-v1';
+const PREVIOUS_PROJECT_KEY = 'cloudpainter-previous-project-v1';
 const PROJECT_CONFLICT_STATUS = 'Changes from another tab need attention';
 
 const zoomPanTargets = [
@@ -2741,6 +2742,234 @@ test('photo visibility and opacity change the canvas and PNG without changing dr
   await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('100');
   await expect(photo).toHaveCSS('opacity', '1');
+});
+
+test('legacy saved and recovery sketches keep their marks through restore, edits, and reload', async ({ page }) => {
+  const stroke = (color: string, y: number) => ({
+    points: [{ x: 0.2, y }, { x: 0.8, y }],
+    color,
+    size: 12,
+    tool: 'brush',
+  });
+  const active = {
+    image: null,
+    width: 640,
+    height: 400,
+    title: 'Legacy active sketch',
+    selectedLayerId: 'legacy-active-layer',
+    layers: [{
+      id: 'legacy-active-layer', name: 'Original ink', visible: true, opacity: 1,
+      strokes: [stroke('#d32f2f', 0.3)], redo: [],
+    }],
+  };
+  const older = {
+    image: null,
+    width: 480,
+    height: 320,
+    title: 'Legacy recovery sketch',
+    selectedLayerId: 'legacy-recovery-layer',
+    layers: [{
+      id: 'legacy-recovery-layer', name: 'Older marks', visible: true, opacity: 1,
+      strokes: [stroke('#1565c0', 0.4)], redo: [],
+    }],
+  };
+  await page.addInitScript(({ storeKey, historyKey, activeProject, history }) => {
+    if (sessionStorage.getItem('legacy-sketch-recovery-seeded')) return;
+    sessionStorage.setItem('legacy-sketch-recovery-seeded', '1');
+    localStorage.setItem(storeKey, JSON.stringify(activeProject));
+    localStorage.setItem(historyKey, JSON.stringify(history));
+  }, {
+    storeKey: STORE_KEY,
+    historyKey: PROJECT_HISTORY_KEY,
+    activeProject: active,
+    history: [older],
+  });
+  await page.reload();
+
+  await expect(page.locator('canvas.draw-surface')).toBeVisible();
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes).toEqual(active.layers[0].strokes);
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.3 }))[3]).toBeGreaterThan(0);
+
+  await page.getByRole('button', { name: 'Restore saved sketch: Legacy recovery sketch' }).click();
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { title: project.title, width: project.width, height: project.height };
+  }).toEqual({ title: 'Legacy recovery sketch', width: 480, height: 320 });
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.4 }))[3]).toBeGreaterThan(0);
+
+  await drawNormalizedLine(page, { x: 0.25, y: 0.7 }, { x: 0.75, y: 0.7 });
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(2);
+  const restored = await savedProject(page);
+  expect(await savedProjectRaw(page)).toMatchObject({ photoZoom: 1, photoPan: { x: 0, y: 0 } });
+  expect(restored.layers[0].strokes[0]).toEqual(older.layers[0].strokes[0]);
+  await page.reload();
+  expect(await savedProject(page)).toEqual(restored);
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.4 }))[3]).toBeGreaterThan(0);
+});
+
+test('legacy single-project recovery remains fitted and editable without a history list', async ({ page }) => {
+  const reference = await png(page, 'legacy-recovery-reference.png', 480, 320);
+  const previous = {
+    image: `data:image/png;base64,${reference.buffer.toString('base64')}`,
+    width: 480,
+    height: 320,
+    title: 'Legacy single-project recovery',
+    selectedLayerId: 'legacy-single-project-layer',
+    layers: [{
+      id: 'legacy-single-project-layer',
+      name: 'Older drawing',
+      visible: true,
+      opacity: 1,
+      strokes: [{
+        points: [{ x: 0.2, y: 0.35 }, { x: 0.8, y: 0.35 }],
+        color: '#1565c0',
+        size: 12,
+        tool: 'brush',
+      }],
+      redo: [],
+    }],
+  };
+  const active = {
+    image: null,
+    width: 1200,
+    height: 800,
+    title: 'Current sketch',
+    selectedLayerId: 'current-layer',
+    layers: [{ id: 'current-layer', name: 'Current layer', visible: true, opacity: 1, strokes: [], redo: [] }],
+  };
+  await page.addInitScript(({ storeKey, previousKey, historyKey, currentProject, previousProject }) => {
+    if (sessionStorage.getItem('single-project-recovery-seeded')) return;
+    sessionStorage.setItem('single-project-recovery-seeded', '1');
+    localStorage.setItem(storeKey, JSON.stringify(currentProject));
+    localStorage.removeItem(historyKey);
+    localStorage.setItem(previousKey, JSON.stringify(previousProject));
+  }, {
+    storeKey: STORE_KEY,
+    previousKey: PREVIOUS_PROJECT_KEY,
+    historyKey: PROJECT_HISTORY_KEY,
+    currentProject: active,
+    previousProject: previous,
+  });
+  await page.reload();
+
+  const recovery = page.getByRole('button', { name: 'Restore saved sketch: Legacy single-project recovery' });
+  await expect(recovery).toBeVisible();
+  await recovery.click();
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { title: project.title, width: project.width, height: project.height };
+  }).toEqual({ title: previous.title, width: previous.width, height: previous.height });
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect(page.getByTestId('button-pan-mode')).toBeDisabled();
+  await expect(page.getByTestId('button-reset-photo-view')).toBeDisabled();
+  await expect.poll(() => photoPan(page)).toEqual({ x: 0, y: 0 });
+  const fittedView = await photoView(page);
+  expect(fittedView.transform).toBe('matrix(1, 0, 0, 1, 0, 0)');
+  expect(fittedView.content).toEqual(fittedView.stage);
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.35 }))[3]).toBeGreaterThan(0);
+
+  await drawNormalizedLine(page, { x: 0.25, y: 0.65 }, { x: 0.75, y: 0.65 });
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(2);
+  const restored = await savedProject(page);
+  expect(await savedProjectRaw(page)).toMatchObject({ photoZoom: 1, photoPan: { x: 0, y: 0 } });
+  await page.reload();
+  expect(await savedProject(page)).toEqual(restored);
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.35 }))[3]).toBeGreaterThan(0);
+});
+
+test('corrupt dimensions and malformed strokes are recovered without losing valid artwork', async ({ page }) => {
+  const reference = await png(page, 'corrupt-sketch-reference.png', 600, 400);
+  const validStroke = {
+    points: [{ x: 0.2, y: 0.35 }, { x: 0.8, y: 0.35 }],
+    color: '#2e7d32',
+    size: 10,
+    tool: 'pen',
+  };
+  const active = {
+    image: `data:image/png;base64,${reference.buffer.toString('base64')}`,
+    width: 0,
+    height: 480,
+    photoZoom: 1.5,
+    photoPan: { x: 0, y: 0 },
+    title: 'Corrupt active dimensions',
+    selectedLayerId: 'corrupt-active-layer',
+    layers: [{
+      id: 'corrupt-active-layer',
+      name: 'Keep this valid layer',
+      visible: true,
+      opacity: 1,
+      strokes: [
+        validStroke,
+        null,
+        { ...validStroke, points: null },
+        { ...validStroke, points: [{ x: 0.2, y: null }] },
+        { ...validStroke, size: 'bad' },
+        { ...validStroke, pressure: { version: 1, samples: null } },
+      ],
+      redo: [{ ...validStroke, color: 'red; fillRect(0,0,999,999)' }],
+    }],
+  };
+  const older = {
+    image: null,
+    width: 'not-a-width',
+    height: 320,
+    title: 'Corrupt recovery dimensions',
+    selectedLayerId: 'corrupt-recovery-layer',
+    layers: [{
+      id: 'corrupt-recovery-layer',
+      name: 'Recovery marks',
+      visible: true,
+      opacity: 1,
+      strokes: [validStroke, { ...validStroke, points: [{ x: Number.NaN, y: 0.4 }] }],
+      redo: [],
+    }],
+  };
+  await page.addInitScript(({ storeKey, historyKey, activeProject, history }) => {
+    if (sessionStorage.getItem('corrupt-sketch-recovery-seeded')) return;
+    sessionStorage.setItem('corrupt-sketch-recovery-seeded', '1');
+    localStorage.setItem(storeKey, JSON.stringify(activeProject));
+    localStorage.setItem(historyKey, JSON.stringify(history));
+  }, {
+    storeKey: STORE_KEY,
+    historyKey: PROJECT_HISTORY_KEY,
+    activeProject: active,
+    history: [older],
+  });
+  await page.reload();
+
+  await expect(page.locator('canvas.draw-surface')).toBeVisible();
+  await expect(page.getByTestId('status-toast')).toContainText('Some saved sketch data was invalid');
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
+  await expect(page.getByTestId('button-pan-mode')).toBeEnabled();
+  await page.getByTestId('button-zoom-in').click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('175');
+  await expect.poll(async () => (await savedProject(page))?.photoZoom).toBe(1.75);
+  await page.getByTestId('button-reset-photo-view').click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect.poll(async () => (await savedProject(page))?.photoZoom).toBe(1);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { width: project.width, height: project.height, count: project.layers[0].strokes.length };
+  }).toEqual({ width: 720, height: 480, count: 2 });
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.35 }))[3]).toBeGreaterThan(0);
+  const recoveredStroke = (await savedProject(page)).layers[0].strokes[1];
+  expect(recoveredStroke).not.toHaveProperty('pressure');
+  expect((await savedProject(page)).layers[0].redo).toEqual([]);
+
+  await page.getByRole('button', { name: 'Restore saved sketch: Corrupt recovery dimensions' }).click();
+  await expect(page.getByTestId('status-toast')).toContainText('remaining artwork was restored');
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { title: project.title, width: project.width, height: project.height, count: project.layers[0].strokes.length };
+  }).toEqual({ title: 'Corrupt recovery dimensions', width: 480, height: 320, count: 1 });
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.35 }))[3]).toBeGreaterThan(0);
+
+  await drawNormalizedLine(page, { x: 0.2, y: 0.55 }, { x: 0.8, y: 0.55 });
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(2);
+  const restored = await savedProject(page);
+  await page.reload();
+  expect(await savedProject(page)).toEqual(restored);
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.35 }))[3]).toBeGreaterThan(0);
 });
 
 async function photoPan(page: Page) {

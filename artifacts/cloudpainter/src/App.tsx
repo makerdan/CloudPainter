@@ -39,7 +39,7 @@ import { BrushDisclosure } from '@/components/BrushDisclosure';
 import NotFound from '@/pages/not-found';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { LogoCreationPanel } from '@/components/LogoCreationPanel';
-import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions } from '@/lib/imageDimensions';
+import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions, normalizeProjectDimensions } from '@/lib/imageDimensions';
 import { ImageGenerator } from '@/components/ImageGenerator';
 import { PoeUpscaleExport } from '@/components/PoeUpscaleExport';
 import { DrawingColorControl } from '@/components/DrawingColorControl';
@@ -51,7 +51,7 @@ import { AccountSettingsProvider, useAccountSettings } from '@/components/Accoun
 import SettingsPage from '@/components/SettingsPage';
 import { OutlinePanel } from '@/components/OutlinePanel';
 import { viewportToProject } from '@/lib/outlineGeometry';
-import { clearDrawing, copyDrawing, hasDrawing, pasteIntoLayers, renderDrawing, undoDrawing, redoDrawing, type DrawingClipboard, type DrawingEntry } from '@/lib/layerClipboard';
+import { clearDrawing, copyDrawing, hasDrawing, normalizeDrawingEntries, pasteIntoLayers, renderDrawing, undoDrawing, redoDrawing, type DrawingClipboard, type DrawingEntry } from '@/lib/layerClipboard';
 import { editorDefaultsFromSettings } from '@/lib/settingsPersistence';
 import AdminAccountsPage from '@/pages/AdminAccountsPage';
 
@@ -76,6 +76,7 @@ type Project = {
   referencePhotoOpacity: number;
 };
 
+const RECOVERED_PROJECTS = new WeakSet<Project>();
 const STORE_KEY = 'cloudpainter-project-v1';
 const PREVIOUS_PROJECT_KEY = 'cloudpainter-previous-project-v1';
 
@@ -96,16 +97,57 @@ const freshProject = (): Project => {
 };
 
 function normalizeProjectView(project: Project): Project {
+  let recovered = RECOVERED_PROJECTS.has(project);
   const candidate = project as Project & {
+    width?: unknown;
+    height?: unknown;
+    layers?: unknown;
+    selectedLayerId?: unknown;
+    image?: unknown;
+    title?: unknown;
     photoZoom?: unknown;
     photoPan?: { x?: unknown; y?: unknown } | null;
     referencePhotoVisible?: unknown;
     referencePhotoOpacity?: unknown;
   };
+  const dimensions = normalizeProjectDimensions(candidate.width, candidate.height);
+  if (candidate.width !== dimensions.width || candidate.height !== dimensions.height) recovered = true;
+  const layerIds = new Set<string>();
+  const layers = (Array.isArray(candidate.layers) ? candidate.layers : []).flatMap((value, index) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      recovered = true;
+      return [];
+    }
+    const layer = value as Record<string, unknown>;
+    const requestedId = typeof layer.id === 'string' && layer.id.length > 0 && layer.id.length <= 128
+      ? layer.id
+      : `recovered-layer-${index + 1}`;
+    if (requestedId !== layer.id) recovered = true;
+    let layerId = requestedId;
+    let suffix = 1;
+    while (layerIds.has(layerId)) {
+      layerId = `${requestedId}-${suffix}`;
+      suffix += 1;
+    }
+    if (layerId !== requestedId) recovered = true;
+    layerIds.add(layerId);
+    return [{
+      id: layerId,
+      name: typeof layer.name === 'string' && layer.name.trim() ? layer.name.slice(0, 120) : `Layer ${index + 1}`,
+      visible: typeof layer.visible === 'boolean' ? layer.visible : true,
+      opacity: typeof layer.opacity === 'number' && Number.isFinite(layer.opacity)
+        ? Math.max(0, Math.min(1, layer.opacity))
+        : 1,
+      strokes: normalizeDrawingEntries(layer.strokes, 0, () => { recovered = true; }),
+      redo: normalizeDrawingEntries(layer.redo, 0, () => { recovered = true; }),
+    }];
+  });
+  if (!layers.length) recovered = true;
+  const safeLayers = layers.length ? layers : [createLayer('Layer 1')];
   const photoZoom = typeof candidate.photoZoom === 'number' && Number.isFinite(candidate.photoZoom)
     ? Math.max(1, Math.min(4, candidate.photoZoom))
     : 1;
-  const photoPan = candidate.photoPan && typeof candidate.photoPan === 'object'
+  const photoPan = candidate.photoPan && typeof candidate.photoPan === 'object' && !Array.isArray(candidate.photoPan)
     ? {
         x: typeof candidate.photoPan.x === 'number' && Number.isFinite(candidate.photoPan.x) ? candidate.photoPan.x : 0,
         y: typeof candidate.photoPan.y === 'number' && Number.isFinite(candidate.photoPan.y) ? candidate.photoPan.y : 0,
@@ -118,23 +160,38 @@ function normalizeProjectView(project: Project): Project {
     && Number.isFinite(candidate.referencePhotoOpacity)
     ? Math.round(Math.max(0, Math.min(100, candidate.referencePhotoOpacity)))
     : 100;
-  return { ...project, photoZoom, photoPan, referencePhotoVisible, referencePhotoOpacity };
+  const normalized: Project = {
+    ...project,
+    image: typeof candidate.image === 'string' && candidate.image ? candidate.image : null,
+    width: dimensions.width,
+    height: dimensions.height,
+    layers: safeLayers,
+    selectedLayerId: typeof candidate.selectedLayerId === 'string'
+      && safeLayers.some(layer => layer.id === candidate.selectedLayerId)
+      ? candidate.selectedLayerId
+      : safeLayers[0].id,
+    title: typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.slice(0, 120) : 'Untitled idea',
+    photoZoom, photoPan, referencePhotoVisible, referencePhotoOpacity,
+  };
+  if (recovered) RECOVERED_PROJECTS.add(normalized);
+  return normalized;
 }
 
-function readProjectSnapshot(): { project: Project; snapshot: string | null } {
+function readProjectSnapshot(): { project: Project; snapshot: string | null; recovered: boolean } {
   let snapshot: string | null = null;
   try {
     snapshot = localStorage.getItem(STORE_KEY);
     if (snapshot) {
       const project = JSON.parse(snapshot) as Project;
       if (project && Array.isArray(project.layers) && project.layers.length) {
-        return { project: normalizeProjectView(project), snapshot };
+        const normalized = normalizeProjectView(project);
+        return { project: normalized, snapshot, recovered: RECOVERED_PROJECTS.has(normalized) };
       }
     }
   } catch {
     // Corrupt or unavailable browser storage starts a fresh local project.
   }
-  return { project: freshProject(), snapshot };
+  return { project: freshProject(), snapshot, recovered: false };
 }
 
 function projectFromSnapshot(snapshot: string | null): Project {
@@ -632,6 +689,10 @@ function Home() {
     toastTimer.current = window.setTimeout(() => setToast(''), 2600);
   }, []);
 
+  useEffect(() => {
+    if (initialProject.recovered) announce(RECOVERY_MESSAGE);
+  }, [initialProject.recovered, announce]);
+
   const refreshStorageEstimate = useCallback(async () => {
     const estimate = await readBrowserStorageEstimate();
     setStorageEstimate(estimate);
@@ -820,7 +881,9 @@ function Home() {
     setDrawingClipboard(null);
     setProject(nextProject);
     void refreshStorageEstimate();
-    announce(`Restored “${savedProject.title}”.`);
+    announce(RECOVERED_PROJECTS.has(nextProject)
+      ? 'Some saved sketch data was invalid and has been repaired or skipped. The remaining artwork was restored.'
+      : `Restored “${savedProject.title}”.`);
   };
   const deleteSavedProject = (index: number) => {
     const nextHistory = projectHistory.filter((_, currentIndex) => currentIndex !== index);
@@ -1895,3 +1958,5 @@ async function readBrowserStorageEstimate(): Promise<BrowserStorageEstimate | nu
 }
 
 const LOCAL_STORAGE_QUOTA_GUIDELINE_BYTES = 5 * 1024 * 1024;
+
+const RECOVERY_MESSAGE = 'Some saved sketch data was invalid and has been repaired or skipped. The remaining artwork is available.';

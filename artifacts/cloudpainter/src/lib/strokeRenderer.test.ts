@@ -183,3 +183,23 @@ test('every brush uses its recorded color and size; empty strokes perform no wor
     assert.deepEqual(replay({ ...small, points: [] }), []);
   }
 });
+
+test('malformed runtime stroke data is rejected without issuing canvas operations', { timeout: 1000 }, () => {
+  for (const malformed of [
+    { ...fixture, points: null },
+    { ...fixture, points: [{ x: 0.2, y: Number.NaN }] },
+    { ...fixture, size: Infinity },
+  ]) {
+    const recording = recordingContext();
+    renderStroke(recording.ctx, malformed as unknown as Stroke, 100, 200);
+    assert.deepEqual(recording.operations, []);
+  }
+  const malformedPressure = {
+    ...fixture,
+    instrument: { kind: 'pen', version: 2, seed: 8 },
+    pressure: { version: 1, samples: null },
+  };
+  const recording = recordingContext();
+  renderStroke(recording.ctx, malformedPressure as unknown as Stroke, 100, 200);
+  assert.ok(recording.operations.some(operation => operation[0] === 'closePath'));
+});

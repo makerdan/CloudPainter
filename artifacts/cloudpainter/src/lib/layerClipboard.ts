@@ -1,4 +1,4 @@
-import { renderStroke, type Stroke } from './strokeRenderer.ts';
+import { isSafeDrawingColor, normalizeStroke, renderStroke, type Stroke } from './strokeRenderer.ts';
 
 // Each entry is one history action. Legacy strokes remain unchanged.
 export type BackgroundFill = { kind: 'background-fill'; color: string };
@@ -6,6 +6,41 @@ export type ClearDrawing = { kind: 'clear' };
 export type DrawingEntry = Stroke | BackgroundFill | ClearDrawing | { kind: 'paste'; entries: DrawingEntry[] };
 export type DrawingHistory = { strokes: DrawingEntry[]; redo: DrawingEntry[] };
 export type DrawingClipboard = readonly DrawingEntry[];
+
+const MAX_PASTE_DEPTH = 8;
+
+export function normalizeDrawingEntries(entries: unknown, depth = 0, onRejected?: () => void): DrawingEntry[] {
+  if (!Array.isArray(entries) || depth > MAX_PASTE_DEPTH) {
+    if (entries !== undefined) onRejected?.();
+    return [];
+  }
+  const normalized: DrawingEntry[] = [];
+  for (const value of entries) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      onRejected?.();
+      continue;
+    }
+    const entry = value as Record<string, unknown>;
+    if (entry.kind === 'clear') {
+      normalized.push({ kind: 'clear' });
+    } else if (entry.kind === 'background-fill') {
+      if (isSafeDrawingColor(entry.color)) {
+        normalized.push({ kind: 'background-fill', color: entry.color });
+      } else {
+        onRejected?.();
+      }
+    } else if (entry.kind === 'paste') {
+      const pasted = normalizeDrawingEntries(entry.entries, depth + 1, onRejected);
+      if (pasted.length) normalized.push({ kind: 'paste', entries: pasted });
+      else onRejected?.();
+    } else {
+      const stroke = normalizeStroke(entry);
+      if (stroke) normalized.push(stroke);
+      else onRejected?.();
+    }
+  }
+  return normalized;
+}
 
 export function isPaste(entry: DrawingEntry): entry is { kind: 'paste'; entries: DrawingEntry[] } {
   return 'kind' in entry && entry.kind === 'paste';

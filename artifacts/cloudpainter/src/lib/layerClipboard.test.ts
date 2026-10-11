@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { clearDrawing, copyDrawing, hasDrawing, isBackgroundFill, isClear, isPaste, pasteDrawing, pasteIntoLayers, redoDrawing, renderDrawing, undoDrawing, type DrawingEntry } from './layerClipboard.ts';
+import { clearDrawing, copyDrawing, hasDrawing, isBackgroundFill, isClear, isPaste, normalizeDrawingEntries, pasteDrawing, pasteIntoLayers, redoDrawing, renderDrawing, undoDrawing, type DrawingEntry } from './layerClipboard.ts';
 import { renderStroke, type Stroke } from './strokeRenderer.ts';
 
 const stroke: Stroke = { tool: 'brush', color: '#336699', size: 14, points: [{ x: 0.2, y: 0.3 }, { x: 0.7, y: 0.3 }], brush: { style: 'dry', version: 1, seed: 42 } };
@@ -213,4 +213,47 @@ test('legacy fixtures replay unchanged; new groups/history preserve all brush an
   renderDrawing(before.context, pasted.strokes, 1200, 800, before.createCanvas);
   renderDrawing(after.context, restored.strokes, 1200, 800, after.createCanvas);
   assert.deepEqual(after.events, before.events);
+});
+
+test('saved drawing recovery keeps valid legacy marks and rejects malformed or over-nested entries', options, () => {
+  const malformedPressure = {
+    ...stroke,
+    instrument: { kind: 'pen', version: 2, seed: 12 },
+    pressure: { version: 1, samples: null },
+  };
+  let tooDeep: unknown = [structuredClone(stroke)];
+  for (let depth = 0; depth < 10; depth += 1) tooDeep = [{ kind: 'paste', entries: tooDeep }];
+
+  const recovered = normalizeDrawingEntries([
+    structuredClone(stroke),
+    null,
+    { ...stroke, points: null },
+    { ...stroke, points: [{ x: 0.2, y: null }] },
+    { ...stroke, size: 'large' },
+    { ...stroke, color: 'red; fillRect(0,0,999,999)' },
+    malformedPressure,
+    { kind: 'clear' },
+    { kind: 'background-fill', color: '#cc2200' },
+    { kind: 'background-fill', color: 'red; fillRect(0,0,999,999)' },
+    ...tooDeep as unknown[],
+  ]);
+
+  assert.deepEqual(recovered, [
+    stroke,
+    { ...stroke, instrument: { kind: 'pen', version: 2, seed: 12 } },
+    { kind: 'clear' },
+    { kind: 'background-fill', color: '#cc2200' },
+  ]);
+});
+
+test('stroke point limits retain a valid edge-sized mark and its neighboring artwork', options, () => {
+  const points = Array.from({ length: 50_000 }, () => ({ x: 0.2, y: 0.3 }));
+  const atLimit = { ...stroke, points };
+  const overLimit = { ...stroke, points: [...points, { x: 0.2, y: 0.3 }] };
+  const recovered = normalizeDrawingEntries([stroke, atLimit, overLimit]);
+
+  assert.equal(recovered.length, 2);
+  assert.deepEqual(recovered[0], stroke);
+  assert.equal((recovered[1] as Stroke).points.length, 50_000);
+  assert.deepEqual((recovered[1] as Stroke).points.at(-1), { x: 0.2, y: 0.3 });
 });

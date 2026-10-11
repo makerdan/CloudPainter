@@ -4,6 +4,7 @@ import {
   fitDimensionsWithinBounds,
   fitStageDimensions,
   getScaledImageDimensions,
+  normalizeProjectDimensions,
 } from './imageDimensions.ts';
 
 function assertSameAspectRatio(actual: { width: number; height: number }, expected: { width: number; height: number }) {
@@ -22,6 +23,34 @@ test('scales landscape and portrait imports under the cap without changing their
 
 test('keeps small imports at their original dimensions', () => {
   assert.deepEqual(getScaledImageDimensions(320, 180), { width: 320, height: 180 });
+});
+
+test('keeps valid project dimensions and proportions within the canvas bound', () => {
+  assert.deepEqual(normalizeProjectDimensions(640, 480), { width: 640, height: 480 });
+  const bounded = normalizeProjectDimensions(8000, 4000);
+  assert.deepEqual(bounded, { width: 2000, height: 1000 });
+  assertSameAspectRatio(bounded, { width: 8000, height: 4000 });
+});
+
+test('recovers an invalid saved dimension from its valid counterpart without changing project fit', () => {
+  const missingWidth = normalizeProjectDimensions(null, 480);
+  const missingHeight = normalizeProjectDimensions(720, Number.NaN);
+  assert.deepEqual(missingWidth, { width: 720, height: 480 });
+  assert.deepEqual(missingHeight, { width: 720, height: 480 });
+  assert.deepEqual(normalizeProjectDimensions(0, Infinity), { width: 1200, height: 800 });
+});
+
+test('bounds missing, non-positive, non-finite, and excessive saved dimensions', () => {
+  for (const width of [undefined, null, Number.NaN, 0, -12, Number.POSITIVE_INFINITY, 1_000_001]) {
+    const recovered = normalizeProjectDimensions(width, 480);
+    assert.ok(recovered.width > 0 && recovered.height > 0);
+    assert.ok(recovered.width <= 2000 && recovered.height <= 2000);
+    assert.deepEqual(recovered, { width: 720, height: 480 });
+  }
+
+  const oversizedValidPair = normalizeProjectDimensions(8000, 4000);
+  assert.deepEqual(oversizedValidPair, { width: 2000, height: 1000 });
+  assert.ok(oversizedValidPair.width <= 2000 && oversizedValidPair.height <= 2000);
 });
 
 test('fits landscape and portrait stages inside a height-constrained editor', () => {
