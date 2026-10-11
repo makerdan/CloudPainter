@@ -21,3 +21,13 @@ interaction does not necessarily request the keyboard focus ring.
 
 **How to apply:** Navigate with Tab or another keyboard action, focus the target,
 and then inspect its visible outline.
+
+Seed reload fixtures in a one-shot initialization script, not by writing storage
+in the outgoing mounted document.
+
+**Why:** Navigation can flush the outgoing document's in-memory project over a
+fixture written directly to storage, so the incoming document loads the wrong
+baseline even though the fixture write succeeded.
+
+**How to apply:** Seed after the outgoing pagehide flush and use a session marker
+to prevent later reloads from reseeding and hiding persistence regressions.

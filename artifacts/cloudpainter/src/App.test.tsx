@@ -476,6 +476,109 @@ for (const action of ['undo', 'redo'] as const) {
   });
 }
 
+for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) {
+  test(`a failed ${savePath} reports full storage without overwriting saved artwork`, async ({ page }) => {
+    const photo = await png(page, 'storage-failure.png', 480, 320);
+    const stroke = (color: string, y: number) => ({
+      points: [{ x: 0.2, y }, { x: 0.7, y }], color, size: 8, tool: 'pen',
+    });
+    const before = {
+      image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
+      width: 480, height: 320, title: 'Previously saved artwork',
+      selectedLayerId: 'storage-main',
+      layers: [
+        { id: 'storage-main', name: 'Main drawing', visible: true, opacity: 0.65,
+          strokes: [stroke('#1e88e5', 0.4), stroke('#8e24aa', 0.5)],
+          redo: [stroke('#00acc1', 0.6)] },
+        { id: 'storage-hidden', name: 'Hidden details', visible: false, opacity: 0.8,
+          strokes: [stroke('#43a047', 0.7)], redo: [stroke('#3949ab', 0.8)] },
+      ],
+    };
+    // Seed after the old document's pagehide flush, once only.
+    await page.addInitScript(({ key, project }) => {
+      const marker = `${key}-storage-failure-seeded`;
+      if (sessionStorage.getItem(marker)) return;
+      localStorage.setItem(key, JSON.stringify(project));
+      sessionStorage.setItem(marker, 'true');
+    }, { key: STORE_KEY, project: before });
+    await page.reload();
+    await expect(page.getByTestId('img-reference')).toBeVisible();
+    await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+    expect(await savedProject(page)).toEqual(before);
+    const storedBytes = await page.evaluate(key => localStorage.getItem(key), STORE_KEY);
+
+    const frozenTime = new Date('2026-10-11T12:00:00Z');
+    await page.clock.install({ time: frozenTime });
+    await page.clock.pauseAt(frozenTime);
+    await page.evaluate(key => {
+      const originalSetItem = Storage.prototype.setItem;
+      const attempts: string[] = [];
+      const fixtureWindow = window as typeof window & {
+        storageFailureFixture?: { attempts: string[]; restore: () => void };
+      };
+      fixtureWindow.storageFailureFixture = {
+        attempts,
+        restore: () => { Storage.prototype.setItem = originalSetItem; },
+      };
+      Storage.prototype.setItem = function (storageKey, value) {
+        if (this === localStorage && storageKey === key) {
+          attempts.push(value);
+          throw new DOMException('Test project quota exceeded', 'QuotaExceededError');
+        }
+        return originalSetItem.call(this, storageKey, value);
+      };
+      // Other keys and session storage must continue working normally.
+      localStorage.setItem('storage-failure-unrelated', 'untouched');
+      sessionStorage.setItem(key, 'session-only');
+    }, STORE_KEY);
+
+    try {
+      if (savePath === 'pagehide persistence') {
+        // A failed flush must also replace an already-visible success message.
+        await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+        await expect(page.getByTestId('status-save')).toHaveText('Storage is full');
+      }
+      await page.getByTestId('button-undo').click();
+      await expect(page.getByTestId('status-save')).toHaveText('Saving…');
+      if (savePath === 'debounced autosave') {
+        await page.clock.runFor(500);
+      } else {
+        // Dispatch in the current document, with the debounce still frozen:
+        // a navigation would hide the status we need to assert.
+        await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+      }
+      await expect(page.getByTestId('status-save')).toHaveText('Storage is full');
+      await expect(page.getByText('Saved in this browser', { exact: true })).toHaveCount(0);
+      const attempts = await page.evaluate(() => (
+        window as typeof window & { storageFailureFixture: { attempts: string[] } }
+      ).storageFailureFixture.attempts);
+      expect(attempts).toHaveLength(savePath === 'debounced autosave' ? 1 : 2);
+      expect(JSON.parse(attempts.at(-1)!)).toEqual({
+        ...before,
+        layers: [
+          { ...before.layers[0], strokes: before.layers[0].strokes.slice(0, -1),
+            redo: [...before.layers[0].redo, before.layers[0].strokes[1]] },
+          before.layers[1],
+        ],
+      });
+      expect(await page.evaluate(key => localStorage.getItem(key), STORE_KEY)).toBe(storedBytes);
+      expect(await savedProject(page)).toEqual(before);
+      expect(await page.evaluate(key => ({
+        unrelated: localStorage.getItem('storage-failure-unrelated'),
+        session: sessionStorage.getItem(key),
+      }), STORE_KEY)).toEqual({ unrelated: 'untouched', session: 'session-only' });
+    } finally {
+      await page.evaluate(() => {
+        const fixtureWindow = window as typeof window & {
+          storageFailureFixture?: { restore: () => void };
+        };
+        fixtureWindow.storageFailureFixture?.restore();
+        delete fixtureWindow.storageFailureFixture;
+      });
+    }
+  });
+}
+
 for (const redoOnly of [false, true]) {
 test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, remains safe when already empty,' : 'strokes and redo history'} and persists after reload`, async ({ page }) => {
   const photo = await png(page, 'clear-layer-reference.png', 480, 320);
