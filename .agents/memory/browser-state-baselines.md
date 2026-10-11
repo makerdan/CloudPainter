@@ -41,3 +41,14 @@ making a storage-denial regression fail before reaching its assertions.
 
 **How to apply:** Freeze time only when deterministic timer control is needed,
 and derive the pause point from the current browser clock.
+
+In multi-tab Chromium checks, background-page autosave timers may fire much later
+than their configured debounce interval; a 500 ms timer took about 10 seconds in
+the headless test context.
+
+**Why:** Browser background-tab throttling can distort timing-based assumptions
+without changing which tab ultimately wrote the shared snapshot.
+
+**How to apply:** Observe the actual persisted revision/snapshot to establish
+write order, record elapsed time, and do not treat the debounce interval as a
+guaranteed cross-tab deadline.
