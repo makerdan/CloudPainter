@@ -154,3 +154,42 @@ test('a stale version can be kept in Saved sketches without replacing the shared
     await browser.close();
   }
 });
+
+test('a failed conflict copy keeps both sketches unchanged and leaves the choice available', { timeout: 60_000 }, async () => {
+  const browser = await launchBrowser();
+  try {
+    const { context, first, second } = await openTwoTabs(browser);
+    await addLayerAndStroke(first);
+    const winningSnapshot = await first.evaluate(key => localStorage.getItem(key), STORE_KEY);
+
+    await addLayerAndStroke(second);
+    await second.getByTestId('storage-conflict').waitFor();
+    const staleLayerIds = await layerIds(second);
+    const staleDrawing = await second.locator('canvas.draw-surface').evaluate(canvas => canvas.toDataURL());
+    const historyBefore = await second.evaluate(key => localStorage.getItem(key), HISTORY_KEY);
+    assert.equal(await second.evaluate(key => localStorage.getItem(key), STORE_KEY), winningSnapshot);
+
+    await second.evaluate(historyKey => {
+      const originalSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === historyKey) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+        return originalSetItem.call(this, key, value);
+      };
+    }, HISTORY_KEY);
+    await second.getByTestId('button-conflict-preserve').click();
+
+    await second.getByTestId('status-toast').getByText(
+      'Could not save your version separately. Your sketch and the newer shared version are unchanged.',
+    ).waitFor();
+    await second.getByTestId('storage-conflict').waitFor();
+    assert.equal(await second.getByTestId('button-conflict-preserve').isEnabled(), true);
+    assert.equal(await second.evaluate(key => localStorage.getItem(key), STORE_KEY), winningSnapshot);
+    assert.equal(await second.evaluate(key => localStorage.getItem(key), HISTORY_KEY), historyBefore);
+    assert.deepEqual(await layerIds(second), staleLayerIds);
+    assert.equal(await second.locator('canvas.draw-surface').evaluate(canvas => canvas.toDataURL()), staleDrawing);
+
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+});
