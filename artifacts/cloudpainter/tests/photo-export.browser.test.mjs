@@ -474,6 +474,42 @@ test('reports PNG export failures without announcing a download', async () => {
   }
 });
 
+test('does not download a partial PNG when a visible layer canvas is unavailable', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await page.goto(appUrl);
+    await page.waitForFunction(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null');
+      return project?.layers?.some(layer => layer.visible);
+    });
+    const layerName = await page.evaluate(() => {
+      window.__cloudPainterDownloadClicks = 0;
+      HTMLAnchorElement.prototype.click = function countDownloadClick() {
+        window.__cloudPainterDownloadClicks += 1;
+      };
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null');
+      const layer = project?.layers?.find(candidate => candidate.visible);
+      if (!layer) throw new Error('Expected a visible drawing layer.');
+      const canvas = document.querySelector(`[data-testid="canvas-layer-${layer.id}"]`);
+      const fiberKey = canvas && Object.keys(canvas).find(key => key.startsWith('__reactFiber$'));
+      let fiber = fiberKey ? canvas[fiberKey] : null;
+      while (fiber && fiber.stateNode !== canvas) fiber = fiber.return;
+      if (typeof fiber?.ref !== 'function') throw new Error('Could not access the visible layer canvas ref.');
+      fiber.ref(null);
+      return layer.name;
+    });
+
+    await page.getByTestId('button-export').click();
+    const status = page.getByTestId('status-toast');
+    await status.waitFor({ state: 'visible' });
+    assert.match(await status.textContent(), new RegExp(`visible layer "${layerName}" could not be read`));
+    assert.match(await status.textContent(), /No file was downloaded/);
+    assert.equal(await page.evaluate(() => window.__cloudPainterDownloadClicks), 0);
+  } finally {
+    await page.close();
+  }
+});
+
 test('does not download a sketch-only PNG when the photo fails to decode during export', async () => {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   try {

@@ -534,13 +534,21 @@ function Home() {
       context.setTransform(layout.scale, 0, 0, layout.scale, layout.offsetX, layout.offsetY);
       const finish = () => {
         try {
-          project.layers.forEach(layer => {
-            if (!layer.visible) return;
+          for (const layer of project.layers) {
+            if (!layer.visible) continue;
             const source = canvasRefs.current[layer.id];
-            if (!source) return;
+            if (!source) {
+              announce(`Could not export PNG because visible layer "${layer.name}" could not be read. No file was downloaded.`);
+              return;
+            }
             context.globalAlpha = layer.opacity;
-            context.drawImage(source, 0, 0);
-          });
+            try {
+              context.drawImage(source, 0, 0);
+            } catch {
+              announce(`Could not export PNG because visible layer "${layer.name}" could not be read. No file was downloaded.`);
+              return;
+            }
+          }
           context.globalAlpha = 1;
           const png = canvas.toDataURL('image/png');
           const pngDataUrlPrefix = 'data:image/png;base64,';
