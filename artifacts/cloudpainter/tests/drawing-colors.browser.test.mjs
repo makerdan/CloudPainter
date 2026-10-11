@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFile, mkdir } from 'node:fs/promises';
 import { test } from 'node:test';
 import { chromium } from 'playwright-core';
-import { checkPaletteDisclosure } from './account-palette.browser-fixture.mjs';
+import { checkPaletteAccountTransition, checkPaletteDisclosure } from './account-palette.browser-fixture.mjs';
 
 // Reuse the existing preview; never launch a separate application server.
 const url = process.env.CLOUDPAINTER_TEST_URL;
@@ -195,6 +195,7 @@ test('preset and custom colors survive drawing, undo/redo, reload and PNG export
     await touch.close();
     await context.close();
     await checkPaletteDisclosure(browser, url);
+    await checkPaletteAccountTransition(browser, url);
   } finally {
     await browser.close();
   }
