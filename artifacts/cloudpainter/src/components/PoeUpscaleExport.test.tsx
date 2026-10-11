@@ -54,10 +54,10 @@ describe("Poe Assistant upscale export", () => {
     expect(controls.getAllByRole("option").map(option => option.textContent)).toEqual(["4×", "8×"]);
     expect((controls.getByRole("button", { name: "Review 4× export" }) as HTMLButtonElement).disabled).toBe(false);
     expect(controls.getByText(/2 of 2 account attempts and 20 shared attempts remain today/)).toBeTruthy();
-    expect(controls.queryByText(/Poe chooses the provider|Poe chooses the image provider|Please upscale the attached image|After you confirm|Avoid sensitive images/)).toBeNull();
+    expect(controls.getByTestId("upscale-route-disclosure").textContent).toContain("Poe Assistant; Assistant chooses the image provider.");
+    expect(controls.getByTestId("upscale-route-disclosure").textContent).toContain("Please upscale the attached image to be 4x");
+    expect(controls.getByTestId("upscale-route-disclosure").textContent).toContain("480 × 320 pixels");
     expect(controls.queryByRole("link", { name: "Poe privacy policy" })).toBeNull();
-    expect(controls.queryByTestId("upscale-route-disclosure")).toBeNull();
-    expect(panel.querySelector(".upscale-unavailable-label, .upscale-export-disclosure, .upscale-export-heading")).toBeNull();
     expect([...panel.querySelectorAll("p")].every(paragraph => Boolean(paragraph.textContent?.trim()))).toBe(true);
   });
 
@@ -69,6 +69,11 @@ describe("Poe Assistant upscale export", () => {
     const { composeImage } = renderExport();
     const selector = screen.getByTestId("select-upscale-factor");
     await user.selectOptions(selector, String(scale));
+    const disclosure = screen.getByTestId("upscale-route-disclosure");
+    expect(disclosure.textContent).toContain(`Please upscale the attached image to be ${scale}x`);
+    expect(disclosure.textContent).toContain(`${120 * scale} × ${80 * scale} pixels`);
+    expect(composeImage).not.toHaveBeenCalled();
+    expect(mocks.upscale).not.toHaveBeenCalled();
     await user.click(screen.getByTestId("button-upscale-export"));
     expect(mocks.upscale).not.toHaveBeenCalled();
     expect(composeImage).not.toHaveBeenCalled();

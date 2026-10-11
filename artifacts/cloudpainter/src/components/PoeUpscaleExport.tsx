@@ -152,6 +152,11 @@ export function PoeUpscaleExport({ composeImage, title, width, height }: Props) 
       <section className="upscale-export panel" aria-labelledby="upscale-export-title">
         <div className="upscale-export-copy">
           <h2 id="upscale-export-title">Poe Assistant upscale export</h2>
+          <div className="upscale-export-disclosure" data-testid="upscale-route-disclosure" aria-live="polite">
+            <p><strong>Route:</strong> Poe Assistant; Assistant chooses the image provider.</p>
+            <p><strong>Processing:</strong> “Please upscale the attached image to be {scale}x”. The expected PNG is {width * scale} × {height * scale} pixels.</p>
+            <p>The merged photo and visible layers are sent to Poe only after you confirm, and may use Poe points.</p>
+          </div>
           {status && <p role="status" className="upscale-progress" data-testid="upscale-status">{status}</p>}
           {error && <p role="alert" className="upscale-error" data-testid="upscale-error">{error}</p>}
           {!sizeSupported && <p role="status">This composition is too large for {scale}× export. Output is limited to 8192 pixels per side and 20 megapixels; input is limited to 2048 pixels per side. Choose a smaller composition or scale.</p>}

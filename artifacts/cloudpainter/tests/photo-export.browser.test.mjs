@@ -930,8 +930,9 @@ test('keeps ordinary PNG export local and unchanged unless the explicit Poe conf
     const scale = page.getByTestId('select-upscale-factor');
     await scale.selectOption('8');
     assert.equal(await scale.inputValue(), '8', 'users can choose 8× without starting a request');
-    assert.match(await page.getByTestId('upscale-route-disclosure').textContent(), /Nano-Banana-2/i);
+    assert.match(await page.getByTestId('upscale-route-disclosure').textContent(), /Poe Assistant.*Assistant chooses the image provider/i);
     assert.match(await page.getByTestId('upscale-route-disclosure').textContent(), /Please upscale the attached image to be 8x/);
+    assert.match(await page.getByTestId('upscale-route-disclosure').textContent(), /2880 × 1920 pixels/);
     await page.waitForFunction(() => !document.querySelector('[data-testid="button-upscale-export"]').disabled);
 
     const [download] = await Promise.all([
@@ -946,13 +947,18 @@ test('keeps ordinary PNG export local and unchanged unless the explicit Poe conf
     for (const factor of [4, 8]) {
       await scale.selectOption(String(factor));
       await page.getByTestId('button-upscale-export').click();
+      const dialog = page.getByRole('dialog', { name: 'Send this composition to Poe?' });
+      await dialog.waitFor({ state: 'visible' });
+      assert.match(await dialog.textContent(), new RegExp(`Please upscale the attached image to be ${factor}x`));
+      assert.match(await dialog.textContent(), new RegExp(`exactly ${360 * factor} × ${240 * factor} pixels`));
       assert.equal(upscaleRequests.length, factor === 4 ? 0 : 1, 'reviewing the disclosure must not transfer artwork');
       const [upscaledDownload] = await Promise.all([
         page.waitForEvent('download', { timeout: 10_000 }).catch(async () => {
           throw new Error(`${factor}x upscale did not download. Requests: ${upscaleRequests.length}; feedback: ${await page.locator('.upscale-export').innerText()}`);
         }),
-        page.getByTestId('button-confirm-upscale').click(),
+        dialog.getByTestId('button-confirm-upscale').click(),
       ]);
+      await dialog.waitFor({ state: 'hidden' });
       assert.equal(upscaledDownload.suggestedFilename(), `local-only-reference-assistant-${factor}x.png`);
       const submitted = upscaleRequests.at(-1);
       assert.equal(submitted.scale, factor);
