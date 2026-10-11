@@ -270,6 +270,51 @@ async function exportAndInspect(page, name, dimensions, expectedDimensions = dim
   }
 }
 
+async function inspectPdfArtwork(page, locations) {
+  await page.evaluate(() => {
+    window.__cloudPainterPdfBlob = null;
+    window.__cloudPainterNativeCreateObjectURL = URL.createObjectURL.bind(URL);
+    URL.createObjectURL = blob => {
+      window.__cloudPainterPdfBlob = blob;
+      return 'blob:cloudpainter-captured-pdf';
+    };
+    HTMLAnchorElement.prototype.click = function capturePdfDownload() {
+      window.__cloudPainterPdfDownload = this.href;
+    };
+  });
+  await page.getByTestId('button-export-pdf').click();
+  await page.waitForFunction(() => window.__cloudPainterPdfBlob instanceof Blob);
+
+  return page.evaluate(async locations => {
+    const pdfBytes = new Uint8Array(await window.__cloudPainterPdfBlob.arrayBuffer());
+    const pdfText = new TextDecoder('latin1').decode(pdfBytes);
+    const imageMatch = /\/Subtype \/Image \/Width (\d+) \/Height (\d+) \/ColorSpace \/DeviceRGB \/BitsPerComponent 8 \/Filter \/DCTDecode \/Length (\d+) >>\nstream\n/.exec(pdfText);
+    if (!imageMatch) throw new Error('The exported PDF does not contain the expected embedded JPEG artwork.');
+
+    const [, width, height, jpegLength] = imageMatch;
+    const jpegStart = imageMatch.index + imageMatch[0].length;
+    const jpegBlob = new Blob([pdfBytes.slice(jpegStart, jpegStart + Number(jpegLength))], { type: 'image/jpeg' });
+    const jpegUrl = window.__cloudPainterNativeCreateObjectURL(jpegBlob);
+    const image = new Image();
+    image.src = jpegUrl;
+    await image.decode();
+
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d');
+    context.drawImage(image, 0, 0);
+    URL.revokeObjectURL(jpegUrl);
+    return {
+      width: Number(width),
+      height: Number(height),
+      pixels: locations.map(([x, y]) => [
+        ...context.getImageData(Math.floor(canvas.width * x), Math.floor(canvas.height * y), 1, 1).data,
+      ]),
+    };
+  }, locations);
+}
+
 async function drawStroke(page, { startX, endX, y }) {
   const surface = page.locator('canvas.draw-surface');
   const bounds = await surface.boundingBox();
@@ -278,6 +323,12 @@ async function drawStroke(page, { startX, endX, y }) {
   await page.mouse.down();
   await page.mouse.move(bounds.x + bounds.width * endX, bounds.y + bounds.height * y, { steps: 5 });
   await page.mouse.up();
+}
+
+async function chooseDrawingColor(page, hex) {
+  await page.getByTestId('input-color-hex').fill(hex);
+  await page.getByTestId('button-apply-color').click();
+  await page.waitForFunction(value => document.querySelector('[data-testid="selected-color"]')?.textContent?.includes(value.toUpperCase()), hex);
 }
 
 async function waitForStrokeCount(page, layerIndex, count) {
@@ -399,6 +450,55 @@ test('exports only visible sketch layers and preserves their opacity', async () 
       [exportedState.project.width, exportedState.project.height],
       [originalState.project.width, originalState.project.height],
       'export size should not change the saved project dimensions',
+    );
+  } finally {
+    await page.close();
+  }
+});
+
+test('PDF artwork omits hidden strokes and preserves visible layer order and opacity', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await page.goto(appUrl);
+
+    await chooseDrawingColor(page, '#FF0000');
+    await drawStroke(page, { startX: 0.2, endX: 0.8, y: 0.5 });
+    await waitForStrokeCount(page, 0, 1);
+
+    await page.getByTestId('button-add-layer').click();
+    await chooseDrawingColor(page, '#00FF00');
+    await drawStroke(page, { startX: 0.3, endX: 0.7, y: 0.7 });
+    await waitForStrokeCount(page, 1, 1);
+    const hiddenLayer = page.locator('[data-testid^="layer-row-"]').filter({ hasText: 'Layer 2' });
+    await hiddenLayer.getByRole('button', { name: 'Hide layer' }).click();
+
+    await page.getByTestId('button-add-layer').click();
+    await chooseDrawingColor(page, '#0000FF');
+    await page.getByTestId('disclosure-opacity').click();
+    const opacity = page.getByTestId('input-layer-opacity');
+    await opacity.focus();
+    await opacity.press('Home');
+    for (let step = 0; step < 40; step++) await opacity.press('ArrowRight');
+    assert.equal(await opacity.inputValue(), '40', 'top drawing layer should be set to 40% opacity');
+    await drawStroke(page, { startX: 0.2, endX: 0.8, y: 0.5 });
+    await waitForStrokeCount(page, 2, 1);
+
+    const exported = await inspectPdfArtwork(page, [
+      [0.5, 0.5],
+      [0.5, 0.7],
+    ]);
+    assert.deepEqual([exported.width, exported.height], [1200, 800], 'PDF should embed artwork at the sketch dimensions');
+    const overlap = exported.pixels[0];
+    assert.ok(
+      Math.abs(overlap[0] - 153) <= 12
+        && overlap[1] <= 12
+        && Math.abs(overlap[2] - 102) <= 12,
+      `overlapping artwork should show 40% blue over opaque red, in layer order; received ${overlap}`,
+    );
+    const hiddenOnly = exported.pixels[1];
+    assert.ok(
+      hiddenOnly.every(channel => Math.abs(channel - 255) <= 3),
+      `a hidden green stroke should be absent from the white PDF artwork; received ${hiddenOnly}`,
     );
   } finally {
     await page.close();
