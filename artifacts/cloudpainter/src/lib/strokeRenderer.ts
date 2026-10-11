@@ -1,3 +1,5 @@
+import { getStroke } from 'perfect-freehand';
+
 export type Point = { x: number; y: number };
 export type BrushStyle = 'round' | 'chisel' | 'soft' | 'dry';
 export type DrawingTool = 'brush' | 'pencil' | 'pen' | 'eraser';
@@ -9,7 +11,11 @@ export type Stroke = {
   // Absent on legacy projects. Version pins the recipe for future renderer changes.
   brush?: { style: BrushStyle; version: 1; seed: number };
   // Legacy "pen" records have no instrument: keep their old brush recipe.
-  instrument?: { kind: 'pencil' | 'pen'; version: 1; seed: number };
+  instrument?:
+    | { kind: 'pencil' | 'pen'; version: 1; seed: number }
+    | { kind: 'pen'; version: 2; seed: number };
+  // Version 1 is normalized pressure aligned one-to-one with points.
+  pressure?: { version: 1; samples: number[] };
 };
 
 export const BRUSH_STYLES: { style: BrushStyle; label: string; description: string }[] = [
@@ -38,6 +44,30 @@ function roundPath(ctx: CanvasRenderingContext2D, stroke: Stroke, width: number,
     }
     ctx.stroke();
   }
+}
+
+function pressurePath(ctx: CanvasRenderingContext2D, stroke: Stroke, width: number, height: number) {
+  const samples = stroke.pressure?.version === 1 && stroke.pressure.samples.length === stroke.points.length
+    ? stroke.pressure.samples
+    : stroke.points.map(() => 0.5);
+  const outline = getStroke(stroke.points.map((point, index) => [
+    point.x * width,
+    point.y * height,
+    Number.isFinite(samples[index]) ? Math.max(0, Math.min(1, samples[index])) : 0.5,
+  ] as [number, number, number]), {
+    size: stroke.size,
+    thinning: 0.7,
+    smoothing: 0.5,
+    streamline: 0.5,
+    simulatePressure: false,
+    last: true,
+  });
+  if (!outline.length) return;
+  ctx.beginPath();
+  ctx.moveTo(outline[0][0], outline[0][1]);
+  for (let index = 1; index < outline.length; index++) ctx.lineTo(outline[index][0], outline[index][1]);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function seededRandom(seed: number) {
@@ -74,6 +104,8 @@ export function renderStroke(ctx: CanvasRenderingContext2D, stroke: Stroke, widt
         ctx.lineDashOffset = random() * stroke.size * 3;
         roundPath(ctx, stroke, width, height, spread, (random() - 0.5) * stroke.size * 0.2);
       }
+    } else if (stroke.tool === 'pen' && stroke.instrument?.kind === 'pen' && stroke.instrument.version === 2) {
+      pressurePath(ctx, stroke, width, height);
     } else if (stroke.tool !== 'eraser' && stroke.instrument?.kind === 'pen') {
       // Uniform ink with sharp ends/corners, distinct from a rounded brush tip.
       ctx.lineCap = 'butt';

@@ -42,7 +42,7 @@ import { PoeUpscaleExport } from '@/components/PoeUpscaleExport';
 import { DrawingColorControl } from '@/components/DrawingColorControl';
 import { BrushStyleControl } from '@/components/BrushStyleControl';
 import { BRUSH_STYLES, renderStroke, type BrushStyle, type DrawingTool, type Point, type Stroke } from '@/lib/strokeRenderer';
-import { createInstrumentStroke, toolAfterColorSelection, TOOL_GUIDANCE, type DrawingInstrument } from '@/lib/drawingTools';
+import { createInstrumentStroke, normalizePointerPressure, toolAfterColorSelection, TOOL_GUIDANCE, type DrawingInstrument } from '@/lib/drawingTools';
 import { AccountProvider, AccountControls, SignInPage, SignUpPage } from '@/components/Account';
 import { OutlinePanel } from '@/components/OutlinePanel';
 import { viewportToProject } from '@/lib/outlineGeometry';
@@ -741,7 +741,10 @@ function Home() {
     const point = pointFromEvent(event);
     setDraft({
       layerId: layer.id,
-      stroke: createInstrumentStroke(tool, point, color, brushSize * (project.width / stageSize.width), brushStyle, Math.floor(Math.random() * 4294967296)),
+      stroke: createInstrumentStroke(
+        tool, point, color, brushSize * (project.width / stageSize.width), brushStyle,
+        Math.floor(Math.random() * 4294967296), normalizePointerPressure(event.pointerType, event.pressure),
+      ),
     });
   };
   const beginPhotoPan = (event: PointerEvent<HTMLDivElement>) => {
@@ -846,7 +849,13 @@ function Home() {
       const last = current.stroke.points[current.stroke.points.length - 1];
       // Stationary touch/pointer events must not grow the stroke or darken its texture.
       if (last.x === point.x && last.y === point.y) return current;
-      return { ...current, stroke: { ...current.stroke, points: [...current.stroke.points, point] } };
+      const pressure = current.stroke.instrument?.kind === 'pen' && current.stroke.instrument.version === 2
+        ? { ...current.stroke.pressure!, samples: [...current.stroke.pressure!.samples, normalizePointerPressure(event.pointerType, event.pressure)] }
+        : current.stroke.pressure;
+      return {
+        ...current,
+        stroke: { ...current.stroke, points: [...current.stroke.points, point], ...(pressure ? { pressure } : {}) },
+      };
     });
   };
   const finishStroke = () => {

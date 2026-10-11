@@ -17,6 +17,10 @@ function freezeSnapshot(entries: DrawingEntry[]): DrawingClipboard {
       Object.freeze(entry.points);
       if (entry.brush) Object.freeze(entry.brush);
       if (entry.instrument) Object.freeze(entry.instrument);
+      if (entry.pressure) {
+        Object.freeze(entry.pressure.samples);
+        Object.freeze(entry.pressure);
+      }
     }
     Object.freeze(entry);
   }

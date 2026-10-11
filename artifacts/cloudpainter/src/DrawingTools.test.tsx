@@ -104,7 +104,11 @@ test('all instruments preserve pixels, settings, layer isolation, reload, histor
   expect(records.map((stroke: { tool: string }) => stroke.tool)).toEqual(['brush', 'brush', 'pencil', 'pencil', 'pen', 'pen', 'eraser']);
   expect(records[0].brush.style).toBe('soft');
   expect(records[2].instrument).toMatchObject({ kind: 'pencil', version: 1 });
-  expect(records[4].instrument).toMatchObject({ kind: 'pen', version: 1 });
+  expect(records[4].instrument).toMatchObject({ kind: 'pen', version: 2 });
+  expect(records[4].pressure).toMatchObject({ version: 1 });
+  expect(records[4].pressure.samples).toHaveLength(records[4].points.length);
+  expect(records[4].pressure.samples.every((pressure: number) => pressure === 0.5)).toBe(true);
+  expect(records[5].pressure).toEqual({ version: 1, samples: [0.5] });
   await page.reload();
   await expect.poll(() => pixels(page)).toBe(erased);
   expect(await pixels(page, '[data-testid="canvas-layer-legacy"]')).toBe(legacy);
@@ -134,6 +138,38 @@ test('all instruments preserve pixels, settings, layer isolation, reload, histor
   }, png)).toBe(true);
 });
 
+test('stylus pressure is saved with each pen point and rendered into the stroke', async ({ page }) => {
+  await page.goto('/');
+  const canvas = page.locator('canvas.draw-surface');
+  await canvas.scrollIntoViewIfNeeded();
+  await page.getByTestId('button-tool-pen').click();
+  const bounds = await canvas.evaluate((node: HTMLCanvasElement) => {
+    const bounds = node.getBoundingClientRect();
+    node.setPointerCapture = () => {};
+    return { x: bounds.left, y: bounds.top, width: bounds.width, height: bounds.height };
+  });
+  expect(bounds.width).toBeGreaterThan(0);
+  const before = await pixels(page);
+  const dispatch = async (type: string, x: number, y: number, pressure: number) => {
+    await canvas.evaluate((node: HTMLCanvasElement, event) => {
+      node.dispatchEvent(new PointerEvent(event.type, {
+        bubbles: true, pointerId: 91, pointerType: 'pen', button: 0, buttons: event.type === 'pointerup' ? 0 : 1,
+        clientX: event.x, clientY: event.y, pressure: event.pressure,
+      }));
+    }, { type, x: bounds.x + bounds.width * x, y: bounds.y + bounds.height * y, pressure });
+  };
+  await dispatch('pointerdown', 0.2, 0.5, 0.18);
+  await dispatch('pointermove', 0.5, 0.5, 0.82);
+  await dispatch('pointermove', 0.8, 0.5, 0.42);
+  await dispatch('pointerup', 0.8, 0.5, 0);
+  await expect.poll(() => pixels(page)).not.toBe(before);
+  await expect.poll(() => page.evaluate(key => {
+    const saved = localStorage.getItem(key);
+    const strokes = saved ? JSON.parse(saved).layers[0].strokes : [];
+    return strokes.at(-1)?.pressure?.samples?.map((pressure: number) => Number(pressure.toFixed(2)));
+  }, key)).toEqual([0.18, 0.82, 0.42]);
+});
+
 test('phone instrument buttons and tap marks remain usable without horizontal overflow', async ({ browser, baseURL }) => {
   const context = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   try {
@@ -152,6 +188,8 @@ test('phone instrument buttons and tap marks remain usable without horizontal ov
       return stored ? JSON.parse(stored).layers[0].strokes.length : -1;
     }, key)).toBe(4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const pressure = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes[2].pressure, key);
+    expect(pressure).toEqual({ version: 1, samples: [0.5] });
   } finally {
     await context.close();
   }

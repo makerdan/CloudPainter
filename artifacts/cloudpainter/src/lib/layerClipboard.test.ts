@@ -25,6 +25,28 @@ test('clipboard is an immutable independent snapshot; deleting or editing source
   assert.ok(Object.isFrozen((clipboard[0] as Stroke).brush));
 });
 
+test('pressure-aware pen samples survive layer copy, paste, undo/redo and JSON replay', options, () => {
+  const pressurePen: Stroke = {
+    tool: 'pen', color: '#315d4d', size: 12, points: [{ x: 0.2, y: 0.3 }, { x: 0.7, y: 0.3 }],
+    instrument: { kind: 'pen', version: 2, seed: 5 },
+    pressure: { version: 1, samples: [0.2, 0.8] },
+  };
+  const original = { ...source(), strokes: [pressurePen] as DrawingEntry[] };
+  const clipboard = copyDrawing(original)!;
+  const copied = clipboard[0] as Stroke;
+  assert.deepEqual(copied.pressure, pressurePen.pressure);
+  assert.ok(Object.isFrozen(copied.pressure!.samples));
+  const pasted = pasteDrawing(destination(), clipboard);
+  const undone = undoDrawing(pasted);
+  const restored = redoDrawing(JSON.parse(JSON.stringify(undone)));
+  assert.deepEqual(restored, JSON.parse(JSON.stringify(pasted)));
+  const before = recorder(), after = recorder();
+  renderDrawing(before.context, pasted.strokes, 1200, 800, before.createCanvas);
+  renderDrawing(after.context, restored.strokes, 1200, 800, after.createCanvas);
+  assert.deepEqual(after.events, before.events);
+  assert.ok(after.events.some(event => event[1] === 'closePath'));
+});
+
 test('paste appends one independent action, preserves destination settings, clears redo and leaves source untouched', options, () => {
   const src = source(), dest = { ...destination(), redo: [structuredClone(eraser)] };
   const before = JSON.stringify(src);

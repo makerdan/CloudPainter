@@ -55,6 +55,40 @@ test('legacy tap and eraser fixtures keep their original round geometry', { time
   assert.deepEqual(replay({ ...fixture, brush: { style: 'round', version: 1, seed: 42 } }), replay(fixture));
 });
 
+test('versioned pen pressure creates deterministic tapered outlines and changes with pressure', { timeout: 1000 }, () => {
+  const pressurePen: Stroke = {
+    ...fixture,
+    instrument: { kind: 'pen', version: 2, seed: 7 },
+    pressure: { version: 1, samples: [0.15, 0.9, 0.35] },
+  };
+  const expected = replay(pressurePen);
+  assert.ok(expected.some(operation => operation[0] === 'closePath'));
+  assert.ok(expected.some(operation => operation[0] === 'fill'));
+  assert.ok(expected.filter(operation => operation[0] === 'lineTo').length > fixture.points.length);
+  assert.deepEqual(replay(JSON.parse(JSON.stringify(pressurePen))), expected);
+  assert.deepEqual(replay(pressurePen), expected);
+
+  const light = replay({ ...pressurePen, pressure: { version: 1, samples: [0.1, 0.1, 0.1] } });
+  const firm = replay({ ...pressurePen, pressure: { version: 1, samples: [0.9, 0.9, 0.9] } });
+  assert.notDeepEqual(light, firm);
+
+  const fallback = replay({ ...pressurePen, pressure: undefined });
+  assert.deepEqual(fallback, replay({
+    ...pressurePen, pressure: { version: 1, samples: pressurePen.points.map(() => 0.5) },
+  }));
+});
+
+test('versioned pressure pen taps render a filled mark and empty strokes do no work', { timeout: 1000 }, () => {
+  const tap: Stroke = {
+    ...fixture,
+    points: [fixture.points[0]],
+    instrument: { kind: 'pen', version: 2, seed: 7 },
+    pressure: { version: 1, samples: [0.6] },
+  };
+  assert.ok(replay(tap).some(operation => operation[0] === 'fill'));
+  assert.deepEqual(replay({ ...tap, points: [], pressure: { version: 1, samples: [] } }), []);
+});
+
 for (const { style } of BRUSH_STYLES) {
   test(`${style} replays deterministically after persistence, undo/redo and a style change`, { timeout: 1000 }, () => {
     const stroke: Stroke = { ...fixture, brush: { style, version: 1, seed: 19342 } };
