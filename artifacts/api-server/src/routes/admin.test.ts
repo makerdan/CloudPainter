@@ -250,6 +250,10 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
       nextCursor: string | null;
     };
     assert.ok(newestHistory.nextCursor);
+    const insertedDuringPaging = await request(target, "admin-user", "session-a", {
+      method: "PUT", body: JSON.stringify({ status: "active" }),
+    });
+    assert.equal(insertedDuringPaging.status, 200);
     const historyResponse = await request(`/audit-events?limit=1&cursor=${newestHistory.nextCursor}`, "admin-user");
     assert.equal(historyResponse.status, 200);
     const history = await historyResponse.json() as { events: Record<string, unknown>[]; totalCount: number; nextCursor: string | null };
@@ -261,12 +265,22 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
         outcome: "succeeded",
         createdAt: "2024-02-03T04:05:06.000Z",
       }],
-      totalCount: 2,
+      totalCount: 3,
       limit: 1,
       nextCursor: null,
     });
+    const newestAfterInsertResponse = await request("/audit-events?limit=1", "admin-user");
+    assert.equal(newestAfterInsertResponse.status, 200);
+    const newestAfterInsert = await newestAfterInsertResponse.json() as {
+      events: { action: AdminAction; outcome: string; targetId: string }[];
+      nextCursor: string | null;
+    };
+    assert.equal(newestAfterInsert.events[0]?.action, "reactivate");
+    assert.equal(newestAfterInsert.events[0]?.outcome, "succeeded");
+    assert.equal(newestAfterInsert.events[0]?.targetId, "user_target123456");
+    assert.ok(newestAfterInsert.nextCursor);
     assert.deepEqual(Object.keys(history.events[0] ?? {}).sort(), ["action", "actorId", "createdAt", "outcome", "targetId"]);
-    assert.deepEqual(auditListCalls.at(-1), {
+    assert.deepEqual(auditListCalls.at(-2), {
       limit: 1,
       cursor: { createdAt: "2024-02-03T04:05:06.000000Z", id: "00000000-0000-4000-8000-000000000002" },
     });

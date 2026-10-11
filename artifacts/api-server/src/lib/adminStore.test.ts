@@ -95,6 +95,33 @@ test("PostgreSQL admin permissions deny missing or disabled rows and retain mini
 
     await client.query(`
       INSERT INTO cloudpainter_admin_audit (id, actor_user_id, target_user_id, action, outcome, created_at)
+      VALUES
+        ('00000000-0000-4000-8000-000000020000', 'paging-admin', 'paging-old-1', 'reactivate', 'pending', '2030-01-01T00:00:00Z'),
+        ('00000000-0000-4000-8000-000000020001', 'paging-admin', 'paging-old-2', 'reactivate', 'pending', '2030-01-01T00:00:00Z'),
+        ('00000000-0000-4000-8000-000000020002', 'paging-admin', 'paging-old-3', 'reactivate', 'pending', '2030-01-01T00:00:00Z'),
+        ('00000000-0000-4000-8000-000000020003', 'paging-admin', 'paging-old-4', 'reactivate', 'pending', '2030-01-01T00:00:00Z')
+    `);
+    const firstChangingPage = await store.listAuditEvents({ limit: 2, action: "reactivate", outcome: "pending" });
+    assert.deepEqual(firstChangingPage.events.map(event => event.targetId), ["paging-old-4", "paging-old-3"]);
+    assert.ok(firstChangingPage.nextCursor);
+    await client.query(`
+      INSERT INTO cloudpainter_admin_audit (id, actor_user_id, target_user_id, action, outcome, created_at)
+      VALUES ('00000000-0000-4000-8000-000000020004', 'paging-admin', 'paging-new', 'reactivate', 'pending', '2030-01-01T00:00:00Z')
+    `);
+    const laterChangingPage = await store.listAuditEvents({
+      limit: 2,
+      action: "reactivate",
+      outcome: "pending",
+      cursor: firstChangingPage.nextCursor,
+    });
+    assert.equal(laterChangingPage.totalCount, 5);
+    assert.deepEqual(laterChangingPage.events.map(event => event.targetId), ["paging-old-2", "paging-old-1"]);
+    assert.equal(laterChangingPage.nextCursor, undefined);
+    const newestChangingPage = await store.listAuditEvents({ limit: 2, action: "reactivate", outcome: "pending" });
+    assert.equal(newestChangingPage.events[0]?.targetId, "paging-new");
+
+    await client.query(`
+      INSERT INTO cloudpainter_admin_audit (id, actor_user_id, target_user_id, action, outcome, created_at)
       SELECT
         ('00000000-0000-4000-8000-' || lpad(to_hex(event_number), 12, '0'))::uuid,
         'archive-admin',
@@ -111,7 +138,7 @@ test("PostgreSQL admin permissions deny missing or disabled rows and retain mini
         id: "00000000-0000-4000-8000-000000000032",
       },
     });
-    assert.equal(deepPage.totalCount, 10_054);
+    assert.equal(deepPage.totalCount, 10_059);
     assert.equal(deepPage.events.length, 49);
     assert.equal(deepPage.events[0]?.targetId, "archived-49");
     assert.equal(deepPage.events.at(-1)?.targetId, "archived-1");
