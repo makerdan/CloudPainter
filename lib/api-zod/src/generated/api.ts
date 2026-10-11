@@ -168,6 +168,61 @@ export const SavePaletteResponse = zod.object({
 })
 
 
+export const GetSettingsHeader = zod.object({
+  "X-Settings-Session": zod.string().describe('Must match the verified current session so delayed requests cannot cross accounts.')
+})
+
+export const getSettingsResponseTextSizeMin = 80;
+export const getSettingsResponseTextSizeMax = 140;
+export const getSettingsResponseTextSizeMultipleOf = 10;
+
+export const getSettingsResponseBrushSizeMax = 48;
+
+
+
+export const GetSettingsResponse = zod.object({
+  "textSize": zod.number().int().min(getSettingsResponseTextSizeMin).max(getSettingsResponseTextSizeMax).multipleOf(getSettingsResponseTextSizeMultipleOf),
+  "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
+  "brushStyle": zod.enum(['round', 'chisel', 'soft', 'dry']),
+  "brushSize": zod.number().int().min(1).max(getSettingsResponseBrushSizeMax)
+})
+
+
+export const SaveSettingsHeader = zod.object({
+  "X-Settings-Session": zod.string().describe('Must match the verified current session so delayed requests cannot cross accounts.')
+})
+
+export const saveSettingsBodyTextSizeMin = 80;
+export const saveSettingsBodyTextSizeMax = 140;
+export const saveSettingsBodyTextSizeMultipleOf = 10;
+
+export const saveSettingsBodyBrushSizeMax = 48;
+
+
+
+export const SaveSettingsBody = zod.object({
+  "textSize": zod.number().int().min(saveSettingsBodyTextSizeMin).max(saveSettingsBodyTextSizeMax).multipleOf(saveSettingsBodyTextSizeMultipleOf),
+  "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
+  "brushStyle": zod.enum(['round', 'chisel', 'soft', 'dry']),
+  "brushSize": zod.number().int().min(1).max(saveSettingsBodyBrushSizeMax)
+})
+
+export const saveSettingsResponseTextSizeMin = 80;
+export const saveSettingsResponseTextSizeMax = 140;
+export const saveSettingsResponseTextSizeMultipleOf = 10;
+
+export const saveSettingsResponseBrushSizeMax = 48;
+
+
+
+export const SaveSettingsResponse = zod.object({
+  "textSize": zod.number().int().min(saveSettingsResponseTextSizeMin).max(saveSettingsResponseTextSizeMax).multipleOf(saveSettingsResponseTextSizeMultipleOf),
+  "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
+  "brushStyle": zod.enum(['round', 'chisel', 'soft', 'dry']),
+  "brushSize": zod.number().int().min(1).max(saveSettingsResponseBrushSizeMax)
+})
+
+
 /**
  * Returns server health status
  * @summary Health check

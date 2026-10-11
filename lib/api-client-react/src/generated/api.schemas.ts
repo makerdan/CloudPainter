@@ -160,6 +160,40 @@ export interface Palette {
   colors: PaletteColor[];
 }
 
+export type CloudPainterSettingsDrawingTool = typeof CloudPainterSettingsDrawingTool[keyof typeof CloudPainterSettingsDrawingTool];
+
+
+export const CloudPainterSettingsDrawingTool = {
+  brush: 'brush',
+  pencil: 'pencil',
+  pen: 'pen',
+} as const;
+
+export type CloudPainterSettingsBrushStyle = typeof CloudPainterSettingsBrushStyle[keyof typeof CloudPainterSettingsBrushStyle];
+
+
+export const CloudPainterSettingsBrushStyle = {
+  round: 'round',
+  chisel: 'chisel',
+  soft: 'soft',
+  dry: 'dry',
+} as const;
+
+export interface CloudPainterSettings {
+  /**
+     * @minimum 80
+     * @maximum 140
+     */
+  textSize: number;
+  drawingTool: CloudPainterSettingsDrawingTool;
+  brushStyle: CloudPainterSettingsBrushStyle;
+  /**
+     * @minimum 1
+     * @maximum 48
+     */
+  brushSize: number;
+}
+
 export interface HealthStatus {
   status: string;
 }

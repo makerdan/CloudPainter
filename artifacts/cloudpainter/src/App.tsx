@@ -44,9 +44,12 @@ import { BrushStyleControl } from '@/components/BrushStyleControl';
 import { BRUSH_STYLES, renderStroke, type BrushStyle, type DrawingTool, type Point, type Stroke } from '@/lib/strokeRenderer';
 import { createInstrumentStroke, normalizePointerPressure, toolAfterColorSelection, TOOL_GUIDANCE, type DrawingInstrument } from '@/lib/drawingTools';
 import { AccountProvider, AccountControls, SignInPage, SignUpPage } from '@/components/Account';
+import { AccountSettingsProvider, useAccountSettings } from '@/components/AccountSettings';
+import SettingsPage from '@/components/SettingsPage';
 import { OutlinePanel } from '@/components/OutlinePanel';
 import { viewportToProject } from '@/lib/outlineGeometry';
 import { copyDrawing, pasteIntoLayers, renderDrawing, undoDrawing, redoDrawing, type DrawingClipboard, type DrawingEntry } from '@/lib/layerClipboard';
+import { editorDefaultsFromSettings } from '@/lib/settingsPersistence';
 
 type PaintLayer = {
   id: string;
@@ -423,21 +426,35 @@ function getPdfEffectivePpi(
   return 72 / scale;
 }
 function Home() {
+  const accountSettings = useAccountSettings();
   const [project, setProject] = useState<Project>(readProject);
   const [projectHistory, setProjectHistory] = useState<Project[]>(readProjectHistory);
   const latestProject = useRef(project);
   latestProject.current = project;
   const [tool, setTool] = useState<DrawingTool>('brush');
   const lastDrawingTool = useRef<DrawingInstrument>('brush');
+  const editorDefaultsApplied = useRef(false);
+  const drawingDefaultsTouched = useRef(false);
   const [color, setColor] = useState('#315d4d');
   const [toolSizes, setToolSizes] = useState<Record<DrawingTool, number>>({ brush: 8, pencil: 3, pen: 3, eraser: 16 });
   const [penPressureSensitivity, setPenPressureSensitivity] = useState(50);
   const brushSize = toolSizes[tool];
   const selectTool = (nextTool: DrawingTool) => {
+    drawingDefaultsTouched.current = true;
     if (nextTool !== 'eraser') lastDrawingTool.current = nextTool;
     setTool(nextTool);
   };
   const [brushStyle, setBrushStyle] = useState<BrushStyle>('round');
+  useEffect(() => {
+    if (!accountSettings.ready || !accountSettings.signedIn || editorDefaultsApplied.current) return;
+    editorDefaultsApplied.current = true;
+    if (drawingDefaultsTouched.current) return;
+    const defaults = editorDefaultsFromSettings(accountSettings.settings, toolSizes);
+    setTool(defaults.tool);
+    lastDrawingTool.current = defaults.tool;
+    setBrushStyle(defaults.brushStyle);
+    setToolSizes(defaults.toolSizes);
+  }, [accountSettings.ready, accountSettings.signedIn, accountSettings.settings]);
   const [draft, setDraft] = useState<{ layerId: string; stroke: Stroke } | null>(null);
   const [savedStatus, setSavedStatus] = useState('Saved in this browser');
   const [storageEstimate, setStorageEstimate] = useState<BrowserStorageEstimate | null>(null);
@@ -1361,7 +1378,7 @@ function Home() {
             <div className="panel-title-row"><h2 className="panel-title">Drawing & feel</h2><span className="panel-kicker">02</span></div>
             <div hidden={tool !== 'brush'}>
             <BrushDisclosure title="Brush style" id="style" defaultOpen summary={BRUSH_STYLES.find(brush => brush.style === brushStyle)?.label}>
-              <BrushStyleControl embedded value={brushStyle} color={color} onChange={setBrushStyle} />
+              <BrushStyleControl embedded value={brushStyle} color={color} onChange={style => { drawingDefaultsTouched.current = true; setBrushStyle(style); }} />
             </BrushDisclosure>
             </div>
             <div hidden={tool !== 'pen'}>
@@ -1388,7 +1405,7 @@ function Home() {
               <DrawingColorControl color={color} tool={tool} onChange={nextColor => { setColor(nextColor); selectTool(toolAfterColorSelection(tool, lastDrawingTool.current)); }} />
             </BrushDisclosure>
             <BrushDisclosure title={`${tool[0].toUpperCase()}${tool.slice(1)} size`} id="size" summary={`${brushSize} px`}>
-              <input className="range-input" type="range" min="1" max="48" value={brushSize} onChange={event => setToolSizes(current => ({ ...current, [tool]: Number(event.target.value) }))} aria-label={`${tool[0].toUpperCase()}${tool.slice(1)} size`} data-testid="input-brush-size" />
+              <input className="range-input" type="range" min="1" max="48" value={brushSize} onChange={event => { drawingDefaultsTouched.current = true; setToolSizes(current => ({ ...current, [tool]: Number(event.target.value) })); }} aria-label={`${tool[0].toUpperCase()}${tool.slice(1)} size`} data-testid="input-brush-size" />
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9aa097', fontSize: 9, marginTop: 7 }}><span>Fine</span><span>Bold</span></div>
             </BrushDisclosure>
             <BrushDisclosure title="Layer opacity" id="opacity" summary={`${Math.round((selectedLayer?.opacity ?? 1) * 100)}%`}>
@@ -1514,14 +1531,14 @@ function LogoOptions({ directions }: { directions: typeof logoDirections }) {
 
 const queryClient = new QueryClient();
 function Router() {
-  return <Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/logo-options">{() => <LogoOptions directions={logoDirections} />}</Route><Route component={NotFound} /></Switch>;
+  return <Switch><Route path="/" component={Home} /><Route path="/settings" component={SettingsPage} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/logo-options">{() => <LogoOptions directions={logoDirections} />}</Route><Route component={NotFound} /></Switch>;
 }
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={350} skipDelayDuration={100}>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <ErrorBoundary><AccountProvider><Router /></AccountProvider></ErrorBoundary>
+          <ErrorBoundary><AccountProvider><AccountSettingsProvider><Router /></AccountSettingsProvider></AccountProvider></ErrorBoundary>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

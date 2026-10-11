@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './cloudPainterSettings';
+export * from './cloudPainterSettingsBrushStyle';
+export * from './cloudPainterSettingsDrawingTool';
 export * from './getImageGenerationConfig200';
 export * from './healthStatus';
 export * from './imageGenerationError';

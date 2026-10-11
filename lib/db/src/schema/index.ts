@@ -19,3 +19,4 @@
 
 export * from "./palettes";
 export * from "./image-generation";
+export * from "./settings";

@@ -20,6 +20,8 @@
     "test:brushes-browser": "playwright test --config playwright.brush.config.ts",
     "test:drawing-colors": "node --experimental-strip-types --test src/lib/drawingColors.test.ts",
     "test:palettes": "node --experimental-strip-types --test src/lib/palettePersistence.test.ts",
+    "test:settings": "node --experimental-strip-types --test src/lib/settingsPersistence.test.ts",
+    "test:settings-ui": "vitest run --config vitest.logo.config.ts src/components/SettingsPage.test.tsx",
     "test:drawing-colors-browser": "node --test tests/drawing-colors.browser.test.mjs",
     "test:keyboard-shortcuts": "node --test tests/keyboard-shortcuts.browser.test.mjs",
     "test:photo-export": "node --test tests/photo-export.browser.test.mjs",

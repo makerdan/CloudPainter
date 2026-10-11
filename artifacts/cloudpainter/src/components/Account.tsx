@@ -63,10 +63,11 @@ export function AccountControls() {
   const { signOut } = useClerk();
   const { leaving, setLeaving } = useContext(AccountContext);
   const [error, setError] = useState('');
-  if (!isLoaded) return <span className="account-note">Loading account…</span>;
-  if (!isSignedIn) return <div className="account-controls"><Link className="button button-small" href="/sign-in">Sign in</Link><Link className="button button-small" href="/sign-up">Create account</Link></div>;
+  if (!isLoaded) return <div className="account-controls"><Link className="button button-small" href="/settings" data-testid="link-account-settings">Settings</Link><span className="account-note">Loading account…</span></div>;
+  if (!isSignedIn) return <div className="account-controls"><Link className="button button-small" href="/settings" data-testid="link-account-settings">Settings</Link><Link className="button button-small" href="/sign-in">Sign in</Link><Link className="button button-small" href="/sign-up">Create account</Link></div>;
   return <div className="account-controls">
     <span className="account-note" data-testid="account-name">{user?.firstName || user?.primaryEmailAddress?.emailAddress || 'Your account'}</span>
+    <Link className="button button-small" href="/settings" data-testid="link-account-settings">Settings</Link>
     <TooltipButton className="button button-small" disabled={leaving}
       description="Sign out and hide your account palette. Your browser-local drawing stays on this device."
       onClick={async () => {
@@ -80,13 +81,13 @@ export function AccountControls() {
 export function SignInPage() {
   return <div className="account-page"><Link href="/">Back to your drawing</Link>
     <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallback={<AccountLoading />} />
-    <p>Only palettes are saved to your account. Projects and photos stay in this browser.</p>
+    <p>Palettes and personal preferences are saved to your account. Projects and photos stay in this browser.</p>
   </div>;
 }
 export function SignUpPage() {
   return <div className="account-page"><Link href="/">Back to your drawing</Link>
     <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} fallback={<AccountLoading />} />
-    <p>Only palettes are saved to your account. Projects and photos stay in this browser.</p>
+    <p>Palettes and personal preferences are saved to your account. Projects and photos stay in this browser.</p>
   </div>;
 }
 function AccountLoading() {

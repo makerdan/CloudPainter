@@ -96,6 +96,17 @@ test.beforeEach(async ({ page }) => {
   await trackPicker(page);
 });
 
+test('signed-out Settings access directs users to sign in without changing browser-local artwork', async ({ page }) => {
+  await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible();
+  const projectBefore = await page.evaluate(key => localStorage.getItem(key), STORE_KEY);
+  const settingsLink = page.getByTestId('link-account-settings');
+  await expect(settingsLink).toBeVisible();
+  await settingsLink.evaluate(element => (element as HTMLAnchorElement).click());
+  await expect(page).toHaveURL(/\/sign-in(?:\/|$)/);
+  await expect(page.getByText(/palettes and personal preferences are saved to your account/i)).toBeVisible();
+  expect(await page.evaluate(key => localStorage.getItem(key), STORE_KEY)).toBe(projectBefore);
+});
+
 test('the entire empty card opens the picker once, without a duplicate upload action', async ({ page }) => {
     const card = page.getByTestId('button-photo-card');
   await expect(page.getByTestId('button-upload')).toHaveCount(0);

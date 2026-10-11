@@ -139,6 +139,48 @@ paths:
           description: Palette changed on another device; reload before editing
         "503":
           description: Palette storage temporarily unavailable
+  /settings:
+    parameters:
+      - in: header
+        name: X-Settings-Session
+        required: true
+        schema: { type: string }
+        description: Must match the verified current session so delayed requests cannot cross accounts.
+    get:
+      operationId: getSettings
+      tags: [settings]
+      responses:
+        "200":
+          description: Current account settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CloudPainterSettings" }
+        "401":
+          description: Sign in required or session changed
+        "503":
+          description: Settings storage temporarily unavailable
+    put:
+      operationId: saveSettings
+      tags: [settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CloudPainterSettings" }
+      responses:
+        "200":
+          description: Saved account settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CloudPainterSettings" }
+        "400":
+          description: Invalid settings
+        "401":
+          description: Sign in required or session changed
+        "403":
+          description: Cross-site mutation denied
+        "503":
+          description: Settings storage temporarily unavailable
   /healthz:
     get:
       operationId: healthCheck
@@ -412,6 +454,15 @@ components:
         id: { type: string, pattern: "^[a-zA-Z0-9_-]{1,64}$" }
         name: { type: string, minLength: 1, maxLength: 40 }
         hex: { type: string, pattern: "^#[0-9a-fA-F]{6}$" }
+    CloudPainterSettings:
+      type: object
+      additionalProperties: false
+      required: [textSize, drawingTool, brushStyle, brushSize]
+      properties:
+        textSize: { type: integer, minimum: 80, maximum: 140, multipleOf: 10 }
+        drawingTool: { type: string, enum: [brush, pencil, pen] }
+        brushStyle: { type: string, enum: [round, chisel, soft, dry] }
+        brushSize: { type: integer, minimum: 1, maximum: 48 }
     HealthStatus:
       type: object
       properties:

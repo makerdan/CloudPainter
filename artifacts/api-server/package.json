@@ -14,6 +14,7 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:palettes": "tsx --test src/routes/palettes.test.ts",
+    "test:settings": "tsx --test src/routes/settings.test.ts",
     "test:logo-api": "node --import tsx --test tests/logo-images.test.ts",
     "verify:logo-live": "node --import tsx tests/verify-logo-live.ts"
   },
