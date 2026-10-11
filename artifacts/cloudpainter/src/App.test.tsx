@@ -1495,6 +1495,52 @@ test('reference photo display defaults, legacy projects, replacements, and saved
   });
 });
 
+test('restoring the reference photo display defaults preserves the photo and drawings after reload', async ({ page }) => {
+  await page.getByTestId('input-photo').setInputFiles(await png(page, 'photo-display-reset.png', 600, 400));
+  await expect(page.getByTestId('img-reference')).toBeVisible();
+
+  await page.getByTestId('button-add-layer').click();
+  const surface = page.locator('canvas.draw-surface');
+  const surfaceBox = await surface.boundingBox();
+  expect(surfaceBox).not.toBeNull();
+  await page.mouse.move(surfaceBox!.x + surfaceBox!.width * 0.3, surfaceBox!.y + surfaceBox!.height * 0.4);
+  await page.mouse.down();
+  await page.mouse.move(surfaceBox!.x + surfaceBox!.width * 0.7, surfaceBox!.y + surfaceBox!.height * 0.6, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await savedProject(page))?.layers[1]?.strokes.length).toBe(1);
+
+  const projectBeforeReset = await savedProject(page);
+  const sourceBeforeReset = await page.getByTestId('img-reference').getAttribute('src');
+  await page.getByTestId('input-reference-photo-opacity').fill('37');
+  await page.getByTestId('button-reference-photo-visibility').click();
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && [project.referencePhotoVisible, project.referencePhotoOpacity];
+  }).toEqual([false, 37]);
+
+  await page.getByTestId('button-reset-reference-photo-display').click();
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('100');
+  await expect(page.getByTestId('reference-photo-opacity-value')).toHaveText('100%');
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '1');
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', sourceBeforeReset!);
+  await expect.poll(() => savedProject(page)).toEqual({
+    ...projectBeforeReset,
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+  });
+
+  await page.reload();
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('100');
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', sourceBeforeReset!);
+  await expect.poll(async () => (await savedProject(page))?.layers).toEqual(projectBeforeReset.layers);
+  await expect.poll(() => savedProject(page)).toMatchObject({
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+  });
+});
+
 test('photo visibility and opacity change the canvas and PNG without changing drawing layers', async ({ page }) => {
   await page.getByTestId('input-photo').setInputFiles(await png(page, 'display-export.png', 600, 400));
   const photo = page.locator('.stage img.base-photo');

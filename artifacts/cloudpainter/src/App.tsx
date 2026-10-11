@@ -1178,6 +1178,19 @@ function Home() {
                   {project.referencePhotoVisible ? <EyeOff size={14} /> : <Eye size={14} />}
                   {project.referencePhotoVisible ? 'Hide photo' : 'Show photo'}
                 </TooltipButton>
+                <TooltipButton
+                  description="Show the reference photo at 100% opacity without changing the photo or your drawings."
+                  type="button"
+                  className="button reference-photo-reset"
+                  onClick={() => updateProject(current => ({
+                    ...current,
+                    referencePhotoVisible: true,
+                    referencePhotoOpacity: 100,
+                  }))}
+                  data-testid="button-reset-reference-photo-display"
+                >
+                  <RotateCcw size={13} /> Show photo at 100%
+                </TooltipButton>
                 <label className="reference-photo-opacity">
                   <span className="reference-photo-opacity-label">
                     <span>Reference photo opacity</span>
