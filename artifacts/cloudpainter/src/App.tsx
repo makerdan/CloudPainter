@@ -430,6 +430,14 @@ function getPdfEffectivePpi(
 function Home() {
   const accountSettings = useAccountSettings();
   const [project, setProject] = useState<Project>(readProject);
+  const persistedProjectSnapshot = useRef<string | null>(null);
+  const persistenceInitialized = useRef(false);
+  if (!persistenceInitialized.current) {
+    try { persistedProjectSnapshot.current = localStorage.getItem(STORE_KEY); }
+    catch { /* The existing save path reports unavailable storage to the user. */ }
+    persistenceInitialized.current = true;
+  }
+  const projectConflict = useRef(false);
   const [projectHistory, setProjectHistory] = useState<Project[]>(readProjectHistory);
   const latestProject = useRef(project);
   latestProject.current = project;
@@ -608,33 +616,59 @@ function Home() {
     return estimate;
   }, []);
 
+  const reportProjectConflict = useCallback(() => {
+    projectConflict.current = true;
+    setSavedStatus('Changed in another tab. Reload to use the saved sketch.');
+  }, []);
+
   useEffect(() => {
     void refreshStorageEstimate();
   }, [refreshStorageEstimate]);
 
   useEffect(() => {
+    const detectProjectChange = (event: StorageEvent) => {
+      if (event.key === STORE_KEY && event.newValue !== persistedProjectSnapshot.current) {
+        reportProjectConflict();
+      }
+    };
+    window.addEventListener('storage', detectProjectChange);
+    return () => window.removeEventListener('storage', detectProjectChange);
+  }, [reportProjectConflict]);
+
+  const persistProjectIfCurrent = useCallback((snapshot: Project) => {
+    if (projectConflict.current) return;
+    try {
+      if (localStorage.getItem(STORE_KEY) !== persistedProjectSnapshot.current) {
+        reportProjectConflict();
+        return;
+      }
+      const serialized = JSON.stringify(snapshot);
+      localStorage.setItem(STORE_KEY, serialized);
+      persistedProjectSnapshot.current = serialized;
+      setSavedStatus('Saved in this browser');
+      void refreshStorageEstimate();
+    } catch {
+      setSavedStatus('Storage is full');
+    }
+  }, [refreshStorageEstimate, reportProjectConflict]);
+
+  useEffect(() => {
+    if (projectConflict.current) return;
     setSavedStatus('Saving…');
     const timer = window.setTimeout(() => {
-      try {
-        localStorage.setItem(STORE_KEY, JSON.stringify(project));
-        setSavedStatus('Saved in this browser');
-        void refreshStorageEstimate();
-      } catch {
-        setSavedStatus('Storage is full');
-      }
+      persistProjectIfCurrent(project);
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [project, refreshStorageEstimate]);
+  }, [project, persistProjectIfCurrent]);
 
   useEffect(() => {
     // Account navigation must not cancel the last debounced project save.
     const flush = () => {
-      try { localStorage.setItem(STORE_KEY, JSON.stringify(latestProject.current)); }
-      catch { setSavedStatus('Storage is full'); }
+      persistProjectIfCurrent(latestProject.current);
     };
     window.addEventListener('pagehide', flush);
     return () => { window.removeEventListener('pagehide', flush); flush(); };
-  }, []);
+  }, [persistProjectIfCurrent]);
 
   useEffect(() => {
     project.layers.forEach(layer => {

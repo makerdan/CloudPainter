@@ -1,8 +1,9 @@
 import { readFile } from 'node:fs/promises';
-import { expect, test, type Download, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Download, type Page } from '@playwright/test';
 
 const STORE_KEY = 'cloudpainter-project-v1';
 const PROJECT_HISTORY_KEY = 'cloudpainter-project-history-v1';
+const PROJECT_CONFLICT_STATUS = 'Changed in another tab. Reload to use the saved sketch.';
 
 const zoomPanTargets = [
   { zoomSteps: 2, panX: 38, panY: -24, x: 0.24, y: 0.32, photoColor: [229, 57, 53] },
@@ -15,6 +16,45 @@ async function savedProject(page: Page) {
 
 async function savedProjectHistory(page: Page) {
   return page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY);
+}
+
+async function openSyntheticProjectTabs(browser: Browser, project: object) {
+  const baseURL = process.env.CLOUDPAINTER_TEST_URL;
+  if (!baseURL) throw new Error('Set CLOUDPAINTER_TEST_URL to the running CloudPainter preview URL.');
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await context.route('**/api/images/config', route => route.fulfill({
+    json: { configured: false, signedIn: false, allowed: false, dailyLimit: 0, remaining: 0, globalRemaining: 0 },
+  }));
+  await context.route('**/api/images/generate', route => route.fulfill({
+    status: 401,
+    json: { error: 'Sign in is required to generate images.' },
+  }));
+  await context.addInitScript(({ key, project }) => {
+    const marker = `${key}-multitab-test-seeded`;
+    if (sessionStorage.getItem(marker)) return;
+    localStorage.setItem(key, JSON.stringify(project));
+    sessionStorage.setItem(marker, 'true');
+  }, { key: STORE_KEY, project });
+
+  const [tabA, tabB] = await Promise.all([context.newPage(), context.newPage()]);
+  await Promise.all([tabA.goto(baseURL), tabB.goto(baseURL)]);
+  for (const tab of [tabA, tabB]) {
+    await expect(tab.getByTestId('button-photo-card')).toBeVisible();
+    await expect(tab.getByTestId('status-save')).toHaveText('Saved in this browser');
+    await expect.poll(() => savedProject(tab)).toEqual(project);
+  }
+  return { context, tabA, tabB };
+}
+
+async function addSyntheticStroke(page: Page) {
+  const surface = page.locator('canvas.draw-surface');
+  const bounds = await surface.boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.mouse.move(bounds!.x + bounds!.width * 0.3, bounds!.y + bounds!.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(bounds!.x + bounds!.width * 0.7, bounds!.y + bounds!.height * 0.65, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
 }
 
 async function png(page: Page, name: string, width: number, height: number) {
@@ -94,6 +134,83 @@ test.beforeEach(async ({ page }) => {
   await page.goto('./');
   await expect(page.getByTestId('button-photo-card')).toBeVisible();
   await trackPicker(page);
+});
+
+const syntheticMultiTabProject = {
+  image: null,
+  width: 320,
+  height: 180,
+  title: 'Synthetic multi-tab sketch',
+  selectedLayerId: 'multitab-main',
+  photoZoom: 1,
+  photoPan: { x: 0, y: 0 },
+  referencePhotoVisible: true,
+  referencePhotoOpacity: 100,
+  layers: [{
+    id: 'multitab-main',
+    name: 'Main drawing',
+    visible: true,
+    opacity: 1,
+    strokes: [],
+    redo: [],
+  }],
+};
+
+for (const firstWriter of ['A', 'B'] as const) {
+  test(`tab ${firstWriter} then the other tab cannot silently overwrite a newer sketch`, async ({ browser }) => {
+    const { context, tabA, tabB } = await openSyntheticProjectTabs(browser, syntheticMultiTabProject);
+    try {
+      const first = firstWriter === 'A' ? tabA : tabB;
+      const stale = firstWriter === 'A' ? tabB : tabA;
+      await first.bringToFront();
+      await addSyntheticStroke(first);
+      await expect(first.getByTestId('status-save')).toHaveText('Saved in this browser');
+      const savedByFirst = await savedProject(first);
+      expect(savedByFirst.layers[0].strokes).toHaveLength(1);
+
+      await stale.bringToFront();
+      await expect(stale.getByTestId('status-save')).toHaveText(PROJECT_CONFLICT_STATUS);
+      await addSyntheticStroke(stale);
+      await stale.waitForTimeout(700);
+
+      // The first tab's saved stroke is protected, while the stale tab still
+      // shows its own unsaved work and explicitly reports the conflict.
+      expect(await savedProject(stale)).toEqual(savedByFirst);
+      expect((await savedProject(stale)).layers[0].strokes).toHaveLength(1);
+      await expect(stale.getByTestId('button-undo')).toBeEnabled();
+      await expect(stale.getByTestId('status-save')).toHaveText(PROJECT_CONFLICT_STATUS);
+      await expect(first.getByTestId('button-undo')).toBeEnabled();
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+test('a stale tab pagehide and reload cannot replace the newer saved sketch', async ({ browser }) => {
+  const { context, tabA, tabB } = await openSyntheticProjectTabs(browser, syntheticMultiTabProject);
+  try {
+    await tabA.bringToFront();
+    await addSyntheticStroke(tabA);
+    await expect(tabA.getByTestId('status-save')).toHaveText('Saved in this browser');
+    const newerProject = await savedProject(tabA);
+    expect(newerProject.layers[0].strokes).toHaveLength(1);
+
+    await tabB.bringToFront();
+    await expect(tabB.getByTestId('status-save')).toHaveText(PROJECT_CONFLICT_STATUS);
+    await addSyntheticStroke(tabB);
+    await tabB.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+    await expect(tabB.getByTestId('status-save')).toHaveText(PROJECT_CONFLICT_STATUS);
+    expect(await savedProject(tabB)).toEqual(newerProject);
+
+    // Real reload exercises the pagehide flush as navigation occurs, then
+    // confirms the stale tab rehydrates the newer saved project.
+    await tabB.reload();
+    await expect(tabB.getByTestId('status-save')).toHaveText('Saved in this browser');
+    expect(await savedProject(tabB)).toEqual(newerProject);
+    await expect(tabB.getByTestId('button-undo')).toBeEnabled();
+  } finally {
+    await context.close();
+  }
 });
 
 test('signed-out Settings access directs users to sign in without changing browser-local artwork', async ({ page }) => {
@@ -896,13 +1013,10 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
         };
       }, STORE_KEY);
       expect(result.reads).toBeGreaterThan(0);
-      expect(writesBeforeSave).toBeGreaterThan(0); // Initial fallback autosave was also denied.
-      expect(result.writes).toHaveLength(writesBeforeSave + 1);
-      const attempted = JSON.parse(result.writes.at(-1)!);
-      expect(attempted.title).toBe('Untitled idea');
-      expect(attempted.image).toBeNull();
-      expect(attempted.layers).toHaveLength(2);
-      expect(attempted.layers.find((layer: { id: string }) => layer.id === attempted.selectedLayerId).strokes).toHaveLength(1);
+      // Do not replace a saved project with a fresh fallback when its current
+      // snapshot cannot be read and compared.
+      expect(writesBeforeSave).toBe(0);
+      expect(result.writes).toHaveLength(0);
       expect(result.storedBytes).toBe(storedBytes);
       expect(JSON.parse(result.storedBytes!)).toEqual(before);
       expect({ unrelated: result.unrelated, session: result.session })
