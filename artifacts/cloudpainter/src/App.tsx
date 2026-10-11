@@ -510,6 +510,7 @@ function Home() {
   const [outlineOpening, setOutlineOpening] = useState(false);
   const outlineOpenId = useRef(0);
   const photoImportsInProgress = useRef(0);
+  const photoImportId = useRef(0);
   const drawingRef = useRef(false);
   const panningRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const touchPointersRef = useRef(new Map<number, Point>());
@@ -835,6 +836,7 @@ function Home() {
   const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    const importId = ++photoImportId.current;
     if (!file.type.startsWith('image/')) {
       announce('Choose an image file to begin.');
       event.target.value = '';
@@ -851,14 +853,23 @@ function Home() {
     };
     const reader = new FileReader();
     reader.onload = () => {
+      if (importId !== photoImportId.current) {
+        finishImport();
+        return;
+      }
+      const source = String(reader.result);
       const image = new Image();
       image.onload = () => {
+        if (importId !== photoImportId.current) {
+          finishImport();
+          return;
+        }
         const { width, height } = getScaledImageDimensions(image.naturalWidth, image.naturalHeight);
         const layer = createLayer('Sketch layer');
         setPanMode(false);
         setDrawingClipboard(null);
         setProject(current => ({
-          ...current, image: String(reader.result), width, height,
+          ...current, image: source, width, height,
           layers: [layer], selectedLayerId: layer.id,
           title: file.name.replace(/\.[^.]+$/, '').slice(0, 42) || 'Untitled idea',
           photoZoom: 1, photoPan: { x: 0, y: 0 },
@@ -869,18 +880,18 @@ function Home() {
       };
       image.onerror = () => {
         finishImport();
-        announce('That photo could not be opened. Try another image.');
+        if (importId === photoImportId.current) announce('That photo could not be opened. Try another image.');
       };
       try {
-        image.src = String(reader.result);
+        image.src = source;
       } catch {
         finishImport();
-        announce('That photo could not be opened. Try another image.');
+        if (importId === photoImportId.current) announce('That photo could not be opened. Try another image.');
       }
     };
     const handleReadError = () => {
       finishImport();
-      announce('Could not read that file. Please try again.');
+      if (importId === photoImportId.current) announce('Could not read that file. Please try again.');
     };
     reader.onerror = handleReadError;
     reader.onabort = handleReadError;

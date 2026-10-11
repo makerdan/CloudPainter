@@ -379,7 +379,7 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
   await expect(page.getByTestId('input-photo')).toHaveAttribute('data-picker-clicks', '2');
 });
 
-test('a delayed photo shows accessible pending feedback and preserves existing replacement behavior', async ({ page }) => {
+test('a delayed earlier file read cannot replace newer work or hide pending feedback', async ({ page }) => {
   const slowPhoto = await png(page, 'slow-first.png', 160, 100);
   const fastPhoto = await png(page, 'fast-second.png', 240, 120);
   await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
@@ -461,11 +461,8 @@ test('a delayed photo shows accessible pending feedback and preserves existing r
   });
   await expect.poll(() => page.evaluate(
     () => typeof (window as Window & { releaseSlowPhotoDecode?: () => void }).releaseSlowPhotoDecode,
-  )).toBe('function');
-  await expect(page.getByTestId('status-photo-import')).toBeVisible();
-  await page.evaluate(() => {
-    (window as Window & { releaseSlowPhotoDecode?: () => void }).releaseSlowPhotoDecode?.();
-  });
+  )).toBe('undefined');
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
   await expect.poll(async () => {
     const project = await savedProject(page);
     return project && {
@@ -476,20 +473,19 @@ test('a delayed photo shows accessible pending feedback and preserves existing r
       layers: project.layers.map((layer: { strokes: unknown[] }) => layer.strokes.length),
     };
   }).toEqual({
-    title: 'slow-first',
-    width: 160,
-    height: 100,
-    image: `data:image/png;base64,${slowPhoto.buffer.toString('base64')}`,
-    layers: [0],
+    title: 'fast-second',
+    width: 240,
+    height: 120,
+    image: `data:image/png;base64,${fastPhoto.buffer.toString('base64')}`,
+    layers: [1],
   });
   await expect(page.getByTestId('img-reference')).toHaveAttribute(
-    'src', `data:image/png;base64,${slowPhoto.buffer.toString('base64')}`,
+    'src', `data:image/png;base64,${fastPhoto.buffer.toString('base64')}`,
   );
-  await expect(page.getByTestId('status-toast')).toHaveText('Photo added. Your original stays untouched.');
   await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
   await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
 
-  const slowProject = await savedProject(page);
+  const persistedFastProject = await savedProject(page);
   await input.setInputFiles(await png(page, 'unreadable.png', 40, 30));
   await expect(page.getByTestId('status-photo-import')).toBeVisible();
   await expect.poll(() => page.evaluate(
@@ -500,12 +496,103 @@ test('a delayed photo shows accessible pending feedback and preserves existing r
   });
   await expect(page.getByTestId('status-toast')).toHaveText('Could not read that file. Please try again.');
   await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
-  await expect.poll(() => savedProject(page)).toEqual(slowProject);
+  await expect.poll(() => savedProject(page)).toEqual(persistedFastProject);
 
   await page.reload();
-  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', slowProject.image);
-  await expect.poll(() => savedProject(page)).toEqual(slowProject);
-  expect((await savedProject(page)).layers[0].strokes).toHaveLength(0);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', persistedFastProject.image);
+  await expect.poll(() => savedProject(page)).toEqual(persistedFastProject);
+  expect((await savedProject(page)).layers[0].strokes).toHaveLength(1);
+});
+
+test('superseded image load and error callbacks do not change the active project or feedback', async ({ page }) => {
+  const slowPhoto = await png(page, 'slow-image.png', 160, 100);
+  const fastPhoto = await png(page, 'fast-image.png', 240, 120);
+  const slowSource = `data:image/png;base64,${slowPhoto.buffer.toString('base64')}`;
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  await page.evaluate(slowSource => {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    if (!descriptor?.get || !descriptor.set) throw new Error('Image src descriptor is unavailable.');
+    Object.defineProperty(HTMLImageElement.prototype, 'src', {
+      configurable: true,
+      get: descriptor.get,
+      set(value: string) {
+        if (String(value) === slowSource) {
+          (window as Window & { delayedPhotoImage?: HTMLImageElement }).delayedPhotoImage = this;
+          return;
+        }
+        descriptor.set!.call(this, value);
+      },
+    });
+  }, slowSource);
+
+  const input = page.getByTestId('input-photo');
+  await input.setInputFiles(slowPhoto);
+  await expect.poll(() => page.evaluate(
+    () => Boolean((window as Window & { delayedPhotoImage?: HTMLImageElement }).delayedPhotoImage),
+  )).toBe(true);
+  await input.setInputFiles(fastPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('fast-image');
+
+  const surface = page.locator('canvas.draw-surface');
+  const box = await surface.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width * 0.3, box!.y + box!.height * 0.35);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.65);
+  await page.mouse.up();
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+
+  await expect(page.getByTestId('status-toast')).toHaveCount(0);
+  const activeProject = await savedProject(page);
+  await page.evaluate(() => {
+    const image = (window as Window & { delayedPhotoImage?: HTMLImageElement }).delayedPhotoImage!;
+    image.onload?.(new Event('load'));
+    image.onerror?.(new Event('error'));
+  });
+  await expect.poll(() => savedProject(page)).toEqual(activeProject);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', activeProject.image);
+  await expect(page.getByTestId('status-toast')).toHaveCount(0);
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+});
+
+test('a superseded file-read error does not change the active project or feedback', async ({ page }) => {
+  const slowPhoto = await png(page, 'slow-read-error.png', 160, 100);
+  const fastPhoto = await png(page, 'fast-after-read-error.png', 240, 120);
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  await page.evaluate(() => {
+    const prototype = FileReader.prototype;
+    const readAsDataURL = prototype.readAsDataURL;
+    prototype.readAsDataURL = function (file) {
+      if (file.name !== 'slow-read-error.png') {
+        readAsDataURL.call(this, file);
+        return;
+      }
+      const reader = this;
+      const delayedOnerror = reader.onerror;
+      reader.onload = null;
+      reader.onerror = null;
+      (window as Window & { releaseSlowPhotoReadError?: () => void }).releaseSlowPhotoReadError = () => {
+        if (typeof delayedOnerror === 'function') delayedOnerror.call(reader, new ProgressEvent('error'));
+      };
+      readAsDataURL.call(reader, file);
+    };
+  });
+
+  const input = page.getByTestId('input-photo');
+  await input.setInputFiles(slowPhoto);
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releaseSlowPhotoReadError?: () => void }).releaseSlowPhotoReadError,
+  )).toBe('function');
+  await input.setInputFiles(fastPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('fast-after-read-error');
+  const activeProject = await savedProject(page);
+  await expect(page.getByTestId('status-toast')).toHaveCount(0);
+  await page.evaluate(() => {
+    (window as Window & { releaseSlowPhotoReadError?: () => void }).releaseSlowPhotoReadError?.();
+  });
+  await expect.poll(() => savedProject(page)).toEqual(activeProject);
+  await expect(page.getByTestId('status-toast')).toHaveCount(0);
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
 });
 
 test('choosing the identical photo again handles change and saves a fresh fitted sketch', async ({ page }) => {
