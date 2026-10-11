@@ -484,6 +484,62 @@ test('exports complete sketches in portrait and landscape on US Letter and A4 wi
   }
 });
 
+test('downloads centered Letter and A4 PDFs in portrait and landscape without changing the sketch', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await page.goto(appUrl);
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null')?.width > 0);
+    const before = await captureProjectState(page);
+    const pdfPaper = page.getByTestId('select-pdf-paper');
+    const pdfOrientation = page.getByTestId('select-pdf-orientation');
+    const sourceRatio = before.project.width / before.project.height;
+
+    for (const paper of [
+      { value: 'letter', name: 'US Letter', portrait: { width: 612, height: 792 }, landscape: { width: 792, height: 612 } },
+      { value: 'a4', name: 'A4', portrait: { width: 595.28, height: 841.89 }, landscape: { width: 841.89, height: 595.28 } },
+    ]) {
+      await pdfPaper.selectOption(paper.value);
+      for (const orientation of ['portrait', 'landscape']) {
+        await pdfOrientation.selectOption(orientation);
+        const [download] = await Promise.all([
+          page.waitForEvent('download'),
+          page.getByTestId('button-export-pdf').click(),
+        ]);
+        assert.equal(
+          download.suggestedFilename(),
+          `Untitled-idea-${paper.value}-${orientation}.pdf`,
+          `${paper.name} ${orientation}: PDF filename`,
+        );
+        const pdf = (await readFile(await download.path())).toString('latin1');
+        const pageBox = pdf.match(/\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/);
+        assert.ok(pageBox, `${paper.name} ${orientation}: PDF page should have a MediaBox`);
+        const pageWidth = Number(pageBox[1]);
+        const pageHeight = Number(pageBox[2]);
+        assertClose(pageWidth, paper[orientation].width, `${paper.name} ${orientation}: page width in points`);
+        assertClose(pageHeight, paper[orientation].height, `${paper.name} ${orientation}: page height in points`);
+
+        const content = pdf.match(/5 0 obj\n<< \/Length \d+ >>\nstream\n([\s\S]*?)endstream\nendobj/);
+        assert.ok(content, `${paper.name} ${orientation}: PDF should include its image placement instructions`);
+        const placement = content[1].match(/q ([\d.]+) 0 0 ([\d.]+) ([\d.-]+) ([\d.-]+) cm \/Im0 Do Q/);
+        assert.ok(placement, `${paper.name} ${orientation}: PDF should place the artwork as one complete image`);
+        const [artworkWidth, artworkHeight, artworkX, artworkY] = placement.slice(1).map(Number);
+        assertClose(artworkWidth / artworkHeight, sourceRatio, `${paper.name} ${orientation}: artwork should keep the full sketch aspect ratio`);
+        assertClose(artworkX + artworkWidth / 2, pageWidth / 2, `${paper.name} ${orientation}: artwork should be centered horizontally`);
+        assertClose(artworkY + artworkHeight / 2, pageHeight / 2, `${paper.name} ${orientation}: artwork should be centered vertically`);
+        assert.ok(artworkX >= 0 && artworkY >= 0, `${paper.name} ${orientation}: artwork should not extend beyond the lower page edges`);
+        assert.ok(
+          artworkX + artworkWidth <= pageWidth + 0.01 && artworkY + artworkHeight <= pageHeight + 0.01,
+          `${paper.name} ${orientation}: artwork should fit within the page`,
+        );
+      }
+    }
+
+    assert.deepEqual(await captureProjectState(page), before, 'PDF size and orientation choices must not change the editable sketch');
+  } finally {
+    await page.close();
+  }
+});
+
 test('keeps PNG size and export controls on screen on narrow phones', async () => {
   const page = await browser.newPage({ viewport: { width: 402, height: 874 } });
   try {

@@ -6,6 +6,7 @@ import {
   Eye,
   EyeOff,
   Eraser,
+  FileDown,
   Hand,
   ImagePlus,
   Layers,
@@ -140,6 +141,8 @@ function readProjectHistory(): Project[] {
 type ExportSize = '1' | '2' | 'letter' | 'a4';
 
 type PaperOrientation = 'match-sketch' | 'portrait' | 'landscape';
+
+type PdfPaperSize = 'letter' | 'a4';
 const PRINT_PAPER_PIXELS = {
   letter: { width: 2550, height: 3300 },
   a4: { width: 2480, height: 3508 },
@@ -288,6 +291,85 @@ async function composeProjectCanvas(
   return { canvas, scale: layout.scale };
 }
 
+function createPrintPdf(
+  source: HTMLCanvasElement,
+  paperSize: PdfPaperSize,
+  orientation: PdfOrientation,
+): Blob {
+  const portraitPage = paperSize === 'letter'
+    ? { width: 612, height: 792 }
+    : { width: 595.28, height: 841.89 };
+  const page = orientation === 'landscape'
+    ? { width: portraitPage.height, height: portraitPage.width }
+    : portraitPage;
+  const scale = Math.min(page.width / source.width, page.height / source.height);
+  const artworkWidth = source.width * scale;
+  const artworkHeight = source.height * scale;
+  const artworkX = (page.width - artworkWidth) / 2;
+  const artworkY = (page.height - artworkHeight) / 2;
+
+  const flattened = document.createElement('canvas');
+  flattened.width = source.width;
+  flattened.height = source.height;
+  const context = flattened.getContext('2d');
+  if (!context) throw new Error('Could not create the PDF export. Try again or use a smaller sketch.');
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, flattened.width, flattened.height);
+  context.drawImage(source, 0, 0);
+
+  const jpegUrl = flattened.toDataURL('image/jpeg', 0.96);
+  const jpegPrefix = 'data:image/jpeg;base64,';
+  if (!jpegUrl.startsWith(jpegPrefix) || jpegUrl.length === jpegPrefix.length) {
+    throw new Error('Could not create the PDF export. Try again or use a smaller sketch.');
+  }
+  const jpegBytes = Uint8Array.from(atob(jpegUrl.slice(jpegPrefix.length)), character => character.charCodeAt(0));
+  const encode = (value: string) => new TextEncoder().encode(value);
+  const imagePlacement = `q ${artworkWidth.toFixed(4)} 0 0 ${artworkHeight.toFixed(4)} ${artworkX.toFixed(4)} ${artworkY.toFixed(4)} cm /Im0 Do Q\n`;
+  const imagePlacementBytes = encode(imagePlacement);
+  const chunks: Uint8Array[] = [encode('%PDF-1.4\n')];
+  const offsets = [0];
+  let byteLength = chunks[0].byteLength;
+  const appendObject = (objectNumber: number, objectParts: Uint8Array[]) => {
+    offsets[objectNumber] = byteLength;
+    for (const part of objectParts) {
+      chunks.push(part);
+      byteLength += part.byteLength;
+    }
+  };
+
+  appendObject(1, [encode('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n')]);
+  appendObject(2, [encode('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n')]);
+  appendObject(3, [encode(
+    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.width} ${page.height}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`,
+  )]);
+  appendObject(4, [
+    encode(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${flattened.width} /Height ${flattened.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.byteLength} >>\nstream\n`),
+    jpegBytes,
+    encode('\nendstream\nendobj\n'),
+  ]);
+  appendObject(5, [
+    encode(`5 0 obj\n<< /Length ${imagePlacementBytes.byteLength} >>\nstream\n`),
+    imagePlacementBytes,
+    encode('endstream\nendobj\n'),
+  ]);
+
+  const xrefOffset = byteLength;
+  const xref = [
+    'xref\n0 6\n',
+    '0000000000 65535 f \n',
+    ...offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`),
+    `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`,
+  ].join('');
+  const xrefBytes = encode(xref);
+  const pdfBytes = new Uint8Array(byteLength + xrefBytes.byteLength);
+  let cursor = 0;
+  for (const chunk of chunks) {
+    pdfBytes.set(chunk, cursor);
+    cursor += chunk.byteLength;
+  }
+  pdfBytes.set(xrefBytes, cursor);
+  return new Blob([pdfBytes.buffer], { type: 'application/pdf' });
+}
 function Home() {
   const [project, setProject] = useState<Project>(readProject);
   const [projectHistory, setProjectHistory] = useState<Project[]>(readProjectHistory);
@@ -311,6 +393,8 @@ function Home() {
   const { photoZoom, photoPan } = project;
   const [exportSize, setExportSize] = useState<ExportSize>('1');
   const [paperOrientation, setPaperOrientation] = useState<PaperOrientation>('match-sketch');
+  const [pdfPaperSize, setPdfPaperSize] = useState<PdfPaperSize>('letter');
+  const [pdfOrientation, setPdfOrientation] = useState<PdfOrientation>('portrait');
   const [panMode, setPanMode] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -708,6 +792,23 @@ function Home() {
     }
   };
 
+  const exportPdf = async () => {
+    try {
+      const { canvas } = await composeProjectCanvas(project, canvasRefs.current, '1');
+      const pdf = createPrintPdf(canvas, pdfPaperSize, pdfOrientation);
+      const title = project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea';
+      const downloadUrl = URL.createObjectURL(pdf);
+      const link = document.createElement('a');
+      link.download = `${title}-${pdfPaperSize}-${pdfOrientation}.pdf`;
+      link.href = downloadUrl;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      announce('PDF exported. Your browser saved the print-ready page.');
+    } catch {
+      announce('Could not create the PDF export. Try again or use a smaller sketch.');
+    }
+  };
+
   const composePngForUpscale = async (): Promise<Blob> => {
     const { canvas } = await composeProjectCanvas(project, canvasRefs.current, '1');
     return await new Promise<Blob>((resolve, reject) => {
@@ -775,6 +876,21 @@ function Home() {
               </label>
             )}
             <TooltipButton description="Export the reference photo and visible drawing layers as a PNG." className="button button-primary" onClick={exportPng} data-testid="button-export"><Upload size={14} /> Export PNG</TooltipButton>
+            <label className="export-size-control">
+              <span>PDF paper</span>
+              <select aria-label="PDF paper size" data-testid="select-pdf-paper" value={pdfPaperSize} onChange={event => setPdfPaperSize(event.target.value as PdfPaperSize)}>
+                <option value="letter">US Letter</option>
+                <option value="a4">A4</option>
+              </select>
+            </label>
+            <label className="export-size-control">
+              <span>PDF orientation</span>
+              <select aria-label="PDF orientation" data-testid="select-pdf-orientation" value={pdfOrientation} onChange={event => setPdfOrientation(event.target.value as PdfOrientation)}>
+                <option value="portrait">Portrait</option>
+                <option value="landscape">Landscape</option>
+              </select>
+            </label>
+            <TooltipButton description="Download the full sketch centered on the selected Letter or A4 PDF page." className="button" onClick={exportPdf} data-testid="button-export-pdf"><FileDown size={14} /> Export PDF</TooltipButton>
           </div>
         </div>
       </header>
@@ -1120,3 +1236,5 @@ function withSavedProject(history: Project[], project: Project): Project[] {
   const serializedProject = JSON.stringify(project);
   return [project, ...history.filter(saved => JSON.stringify(saved) !== serializedProject)];
 }
+
+type PdfOrientation = 'portrait' | 'landscape';
