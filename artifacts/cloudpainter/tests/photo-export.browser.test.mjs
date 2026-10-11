@@ -563,6 +563,53 @@ test('PDF artwork omits hidden strokes and preserves visible layer order and opa
   }
 });
 
+test('keeps fine sketch marks in the PDF image and reports effective print resolution', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await page.goto(appUrl);
+    const resolutionStatus = page.getByTestId('pdf-resolution-status');
+    assert.match(await resolutionStatus.innerText(), /160 PPI.*Fine details may soften/);
+    assert.equal(await resolutionStatus.getAttribute('data-quality'), 'limited');
+
+    await page.evaluate(() => {
+      const canvas = document.querySelector('canvas.draw-surface');
+      const context = canvas?.getContext('2d');
+      if (!context) throw new Error('Could not create the fine-detail PDF fixture.');
+      context.fillStyle = '#111111';
+      context.fillRect(200, 400, 800, 1);
+      context.fillRect(600, 300, 4, 4);
+    });
+    const exported = await inspectPdfArtwork(page, [
+      [0.5, 400.5 / 800],
+      [0.5, 0.49],
+      [602 / 1200, 302 / 800],
+      [610 / 1200, 302 / 800],
+    ]);
+    assert.deepEqual([exported.width, exported.height], [1200, 800], 'PDF should retain the sketch pixel dimensions rather than inventing resolution');
+    assert.ok(exported.pixels[0].slice(0, 3).every(channel => channel < 210), `one-pixel stroke should remain visible in the embedded PDF image; received ${exported.pixels[0]}`);
+    assert.ok(exported.pixels[1].slice(0, 3).every(channel => channel > 235), `one-pixel stroke should remain distinct from blank paper; received ${exported.pixels[1]}`);
+    assert.ok(exported.pixels[2].slice(0, 3).every(channel => channel < 180), `small detail should remain visible in the embedded PDF image; received ${exported.pixels[2]}`);
+    assert.ok(exported.pixels[3].slice(0, 3).every(channel => channel > 225), `small detail should remain distinct from blank paper; received ${exported.pixels[3]}`);
+
+    await page.getByTestId('select-pdf-orientation').selectOption('landscape');
+    assert.match(await resolutionStatus.innerText(), /120 PPI.*Fine details may soften/);
+  } finally {
+    await page.close();
+  }
+
+  const highResolutionPage = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await highResolutionPage.goto(appUrl);
+    const dimensions = await importPhoto(highResolutionPage, { width: 2400, height: 1600 }, 'high-resolution-print.png');
+    assert.deepEqual(dimensions, { width: 2000, height: 1333 }, 'photo imports should use the app-supported maximum sketch dimensions');
+    const resolutionStatus = highResolutionPage.getByTestId('pdf-resolution-status');
+    assert.match(await resolutionStatus.innerText(), /267 PPI.*Fine details may soften; increase the safe margin/);
+    assert.equal(await resolutionStatus.getAttribute('data-quality'), 'limited');
+  } finally {
+    await highResolutionPage.close();
+  }
+});
+
 test('exports complete sketches in portrait and landscape on US Letter and A4 without changing the project', async () => {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   try {

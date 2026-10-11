@@ -383,6 +383,27 @@ function createPrintPdf(
   pdfBytes.set(xrefBytes, cursor);
   return new Blob([pdfBytes.buffer], { type: 'application/pdf' });
 }
+
+function getPdfEffectivePpi(
+  sourceWidth: number,
+  sourceHeight: number,
+  paperSize: PdfPaperSize,
+  orientation: PdfOrientation,
+  safeMargin: PdfSafeMargin,
+): number {
+  const portraitPage = paperSize === 'letter'
+    ? { width: 612, height: 792 }
+    : { width: 595.28, height: 841.89 };
+  const page = orientation === 'landscape'
+    ? { width: portraitPage.height, height: portraitPage.width }
+    : portraitPage;
+  const margin = PDF_SAFE_MARGIN_POINTS[safeMargin];
+  const scale = Math.min(
+    (page.width - margin * 2) / sourceWidth,
+    (page.height - margin * 2) / sourceHeight,
+  );
+  return 72 / scale;
+}
 function Home() {
   const [project, setProject] = useState<Project>(readProject);
   const [projectHistory, setProjectHistory] = useState<Project[]>(readProjectHistory);
@@ -431,6 +452,13 @@ function Home() {
   } | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
   const selectedLayer = project.layers.find(layer => layer.id === project.selectedLayerId) ?? project.layers[0];
+  const pdfEffectivePpi = Math.round(getPdfEffectivePpi(
+    project.width,
+    project.height,
+    pdfPaperSize,
+    pdfOrientation,
+    pdfSafeMargin,
+  ));
   const visibleLayers = useMemo(() => [...project.layers].reverse(), [project.layers]);
   const stageSize = fitStageDimensions(
     project.width,
@@ -1034,6 +1062,17 @@ function Home() {
       </header>
 
       <section className="workspace">
+        <p
+          className="pdf-resolution-status"
+          data-quality={pdfEffectivePpi < 300 ? 'limited' : 'print-ready'}
+          data-testid="pdf-resolution-status"
+          role="status"
+          aria-live="polite"
+        >
+          Approx. {pdfEffectivePpi} PPI at this print size. {pdfEffectivePpi < 300
+            ? 'Fine details may soften; increase the safe margin to print the artwork smaller.'
+            : 'Suitable for fine details.'}
+        </p>
         <div className="intro-row">
           <div>
             <p className="eyebrow">A little room for what you see</p>
