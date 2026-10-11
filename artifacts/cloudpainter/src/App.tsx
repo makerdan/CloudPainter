@@ -53,6 +53,7 @@ import { OutlinePanel } from '@/components/OutlinePanel';
 import { viewportToProject } from '@/lib/outlineGeometry';
 import { copyDrawing, pasteIntoLayers, renderDrawing, undoDrawing, redoDrawing, type DrawingClipboard, type DrawingEntry } from '@/lib/layerClipboard';
 import { editorDefaultsFromSettings } from '@/lib/settingsPersistence';
+import AdminAccountsPage from '@/pages/AdminAccountsPage';
 
 type PaintLayer = {
   id: string;
@@ -1707,7 +1708,7 @@ function LogoOptions({ directions }: { directions: typeof logoDirections }) {
 
 const queryClient = new QueryClient();
 function Router() {
-  return <Switch><Route path="/" component={Home} /><Route path="/settings" component={SettingsPage} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/logo-options">{() => <LogoOptions directions={logoDirections} />}</Route><Route component={NotFound} /></Switch>;
+  return <Switch><Route path="/" component={Home} /><Route path="/settings" component={SettingsPage} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/logo-options">{() => <LogoOptions directions={logoDirections} />}</Route><Route path="/admin" component={AdminAccountsPage} /><Route component={NotFound} /></Switch>;
 }
 function App() {
   return (

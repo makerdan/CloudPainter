@@ -9,6 +9,107 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Read the account count for authorized CloudPainter administrators
+ */
+export const getAdminOverviewHeaderXAdminSessionMax = 256;
+
+
+
+export const GetAdminOverviewHeader = zod.object({
+  "X-Admin-Session": zod.string().max(getAdminOverviewHeaderXAdminSessionMax)
+})
+
+export const getAdminOverviewResponseTotalAccountsMin = 0;
+
+
+
+export const GetAdminOverviewResponse = zod.object({
+  "totalAccounts": zod.number().int().min(getAdminOverviewResponseTotalAccountsMin)
+})
+
+
+/**
+ * @summary Search and page through CloudPainter accounts
+ */
+export const listAdminAccountsQueryLimitDefault = 25;
+export const listAdminAccountsQueryLimitMax = 50;
+
+export const listAdminAccountsQueryOffsetDefault = 0;
+export const listAdminAccountsQueryOffsetMin = 0;
+export const listAdminAccountsQueryOffsetMax = 10000;
+
+export const listAdminAccountsQueryQueryMax = 100;
+
+
+
+export const ListAdminAccountsQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(listAdminAccountsQueryLimitMax).default(listAdminAccountsQueryLimitDefault),
+  "offset": zod.coerce.number().int().min(listAdminAccountsQueryOffsetMin).max(listAdminAccountsQueryOffsetMax).default(listAdminAccountsQueryOffsetDefault),
+  "query": zod.coerce.string().max(listAdminAccountsQueryQueryMax).optional()
+})
+
+export const listAdminAccountsHeaderXAdminSessionMax = 256;
+
+
+
+export const ListAdminAccountsHeader = zod.object({
+  "X-Admin-Session": zod.string().max(listAdminAccountsHeaderXAdminSessionMax)
+})
+
+export const listAdminAccountsResponseAccountsMax = 50;
+
+export const listAdminAccountsResponseTotalCountMin = 0;
+
+export const listAdminAccountsResponseLimitMax = 50;
+
+export const listAdminAccountsResponseOffsetMin = 0;
+export const listAdminAccountsResponseOffsetMax = 10000;
+
+
+
+export const ListAdminAccountsResponse = zod.object({
+  "accounts": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['active', 'suspended'])
+})).max(listAdminAccountsResponseAccountsMax),
+  "totalCount": zod.number().int().min(listAdminAccountsResponseTotalCountMin),
+  "limit": zod.number().int().min(1).max(listAdminAccountsResponseLimitMax),
+  "offset": zod.number().int().min(listAdminAccountsResponseOffsetMin).max(listAdminAccountsResponseOffsetMax)
+})
+
+
+/**
+ * @summary Suspend or reactivate a CloudPainter account
+ */
+export const setAdminAccountStatusPathUserIdRegExp = new RegExp('^user_[A-Za-z0-9]{5,}$');
+
+
+export const SetAdminAccountStatusParams = zod.object({
+  "userId": zod.coerce.string().regex(setAdminAccountStatusPathUserIdRegExp)
+})
+
+export const setAdminAccountStatusHeaderXAdminSessionMax = 256;
+
+
+
+export const SetAdminAccountStatusHeader = zod.object({
+  "X-Admin-Session": zod.string().max(setAdminAccountStatusHeaderXAdminSessionMax)
+})
+
+export const SetAdminAccountStatusBody = zod.object({
+  "status": zod.enum(['active', 'suspended'])
+})
+
+export const SetAdminAccountStatusResponse = zod.object({
+  "id": zod.string(),
+  "status": zod.enum(['active', 'suspended'])
+})
+
+
+/**
  * @summary Hosted mask capability and account access, without inference
  */
 export const GetOutlineConfigResponse = zod.object({

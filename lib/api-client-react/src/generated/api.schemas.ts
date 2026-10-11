@@ -5,6 +5,71 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface AdminOverview {
+  /** @minimum 0 */
+  totalAccounts: number;
+}
+
+export type AdminAccountStatusProperty = typeof AdminAccountStatusProperty[keyof typeof AdminAccountStatusProperty];
+
+
+export const AdminAccountStatusProperty = {
+  active: 'active',
+  suspended: 'suspended',
+} as const;
+
+export interface AdminAccount {
+  id: string;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  email: string | null;
+  createdAt: string;
+  status: AdminAccountStatusProperty;
+}
+
+export interface AdminAccountPage {
+  /** @maxItems 50 */
+  accounts: AdminAccount[];
+  /** @minimum 0 */
+  totalCount: number;
+  /**
+     * @minimum 1
+     * @maximum 50
+     */
+  limit: number;
+  /**
+     * @minimum 0
+     * @maximum 10000
+     */
+  offset: number;
+}
+
+export type AdminAccountStatusStatus = typeof AdminAccountStatusStatus[keyof typeof AdminAccountStatusStatus];
+
+
+export const AdminAccountStatusStatus = {
+  active: 'active',
+  suspended: 'suspended',
+} as const;
+
+export interface AdminAccountStatus {
+  status: AdminAccountStatusStatus;
+}
+
+export type AdminAccountStatusResultStatus = typeof AdminAccountStatusResultStatus[keyof typeof AdminAccountStatusResultStatus];
+
+
+export const AdminAccountStatusResultStatus = {
+  active: 'active',
+  suspended: 'suspended',
+} as const;
+
+export interface AdminAccountStatusResult {
+  id: string;
+  status: AdminAccountStatusResultStatus;
+}
+
 export interface OutlineInput {
   /**
      * Bare base64 PNG or JPEG inference crop; never a remote URL
@@ -284,6 +349,23 @@ export interface ImageGenerationError {
  * Safe error message; rate limits include Retry-After
  */
 export type LogoImageErrorResponse = LogoImageError;
+
+export type ListAdminAccountsParams = {
+/**
+ * @minimum 1
+ * @maximum 50
+ */
+limit?: number;
+/**
+ * @minimum 0
+ * @maximum 10000
+ */
+offset?: number;
+/**
+ * @maxLength 100
+ */
+query?: string;
+};
 
 export type GetImageGenerationConfig200 = {
   configured: boolean;

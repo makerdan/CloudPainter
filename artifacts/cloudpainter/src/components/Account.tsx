@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { ClerkProvider, SignIn, SignUp, useAuth, useClerk, useUser } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
+import { getGetAdminOverviewQueryKey, useGetAdminOverview } from '@workspace/api-client-react';
 import { Link, useLocation } from 'wouter';
 import { TooltipButton } from './tooltip-button';
 
@@ -58,16 +59,29 @@ export function usePaletteAccount() {
   return { isLoaded, userId: leaving ? null : userId, sessionId: leaving ? null : sessionId };
 }
 export function AccountControls() {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, sessionId } = useAuth();
   const { user } = useUser();
   const { signOut } = useClerk();
   const { leaving, setLeaving } = useContext(AccountContext);
   const [error, setError] = useState('');
+  const adminOverview = useGetAdminOverview({
+    request: {
+      headers: { 'X-Admin-Session': sessionId ?? '' },
+      credentials: 'same-origin',
+    },
+    query: {
+      enabled: Boolean(isLoaded && isSignedIn && sessionId && !leaving),
+      queryKey: [...getGetAdminOverviewQueryKey(), sessionId ?? ''],
+      retry: false,
+      staleTime: 0,
+    },
+  });
   if (!isLoaded) return <div className="account-controls"><Link className="button button-small" href="/settings" data-testid="link-account-settings">Settings</Link><span className="account-note">Loading account…</span></div>;
   if (!isSignedIn) return <div className="account-controls"><Link className="button button-small" href="/settings" data-testid="link-account-settings">Settings</Link><Link className="button button-small" href="/sign-in">Sign in</Link><Link className="button button-small" href="/sign-up">Create account</Link></div>;
   return <div className="account-controls">
     <span className="account-note" data-testid="account-name">{user?.firstName || user?.primaryEmailAddress?.emailAddress || 'Your account'}</span>
     <Link className="button button-small" href="/settings" data-testid="link-account-settings">Settings</Link>
+    {adminOverview.isSuccess && !leaving && <Link className="button button-small" href="/admin" data-testid="link-admin-console">Admin console</Link>}
     <TooltipButton className="button button-small" disabled={leaving}
       description="Sign out and hide your account palette. Your browser-local drawing stays on this device."
       onClick={async () => {

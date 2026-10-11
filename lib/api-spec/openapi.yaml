@@ -14,7 +14,87 @@ tags:
     description: Poe-only image generation
   - name: logos
     description: Exploratory logo concepts
+  - name: admin
+    description: Protected account oversight
 paths:
+  /admin/overview:
+    get:
+      operationId: getAdminOverview
+      tags: [admin]
+      summary: Read the account count for authorized CloudPainter administrators
+      parameters:
+        - in: header
+          name: X-Admin-Session
+          required: true
+          schema: { type: string, maxLength: 256 }
+      responses:
+        "200":
+          description: Bounded account overview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminOverview" }
+        "401": { description: Sign in required or session changed }
+        "404": { description: Page not found for accounts without dashboard access }
+        "503": { description: Account administration is temporarily unavailable }
+  /admin/accounts:
+    get:
+      operationId: listAdminAccounts
+      tags: [admin]
+      summary: Search and page through CloudPainter accounts
+      parameters:
+        - in: header
+          name: X-Admin-Session
+          required: true
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 25 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, maximum: 10000, default: 0 }
+        - in: query
+          name: query
+          schema: { type: string, maxLength: 100 }
+      responses:
+        "200":
+          description: Account page with limited identifying metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminAccountPage" }
+        "400": { description: Invalid search or pagination }
+        "401": { description: Sign in required or session changed }
+        "404": { description: Page not found for accounts without dashboard access }
+        "503": { description: Account information is temporarily unavailable }
+  /admin/accounts/{userId}/status:
+    put:
+      operationId: setAdminAccountStatus
+      tags: [admin]
+      summary: Suspend or reactivate a CloudPainter account
+      parameters:
+        - in: header
+          name: X-Admin-Session
+          required: true
+          schema: { type: string, maxLength: 256 }
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string, pattern: "^user_[A-Za-z0-9]{5,}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminAccountStatus" }
+      responses:
+        "200":
+          description: The account status was changed and audited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminAccountStatusResult" }
+        "400": { description: Invalid account status request }
+        "401": { description: Sign in required or session changed }
+        "403": { description: Cross-site mutation denied }
+        "404": { description: Page not found for accounts without dashboard access }
+        "503": { description: Account status could not be changed }
   /outlines/config:
     get:
       operationId: getOutlineConfig
@@ -350,6 +430,47 @@ components:
           schema:
             $ref: "#/components/schemas/LogoImageError"
   schemas:
+    AdminOverview:
+      type: object
+      additionalProperties: false
+      required: [totalAccounts]
+      properties:
+        totalAccounts: { type: integer, minimum: 0 }
+    AdminAccount:
+      type: object
+      additionalProperties: false
+      required: [id, name, email, createdAt, status]
+      properties:
+        id: { type: string }
+        name: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        status: { type: string, enum: [active, suspended] }
+    AdminAccountPage:
+      type: object
+      additionalProperties: false
+      required: [accounts, totalCount, limit, offset]
+      properties:
+        accounts:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/AdminAccount" }
+        totalCount: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1, maximum: 50 }
+        offset: { type: integer, minimum: 0, maximum: 10000 }
+    AdminAccountStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [active, suspended] }
+    AdminAccountStatusResult:
+      type: object
+      additionalProperties: false
+      required: [id, status]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [active, suspended] }
     OutlineInput:
       type: object
       additionalProperties: false

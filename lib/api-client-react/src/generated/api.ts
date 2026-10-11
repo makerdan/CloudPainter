@@ -20,10 +20,15 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AdminAccountPage,
+  AdminAccountStatus,
+  AdminAccountStatusResult,
+  AdminOverview,
   CloudPainterSettings,
   GetImageGenerationConfig200,
   HealthStatus,
   ImageGenerationError,
+  ListAdminAccountsParams,
   LogoImageErrorResponse,
   LogoImageRequest,
   LogoImageResult,
@@ -63,6 +68,256 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetAdminOverviewUrl = () => {
+
+
+
+
+  return `/api/admin/overview`
+}
+
+/**
+ * @summary Read the account count for authorized CloudPainter administrators
+ */
+export const getAdminOverview = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminOverview> => {
+
+  return customFetch<AdminOverview>(getGetAdminOverviewUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminOverviewQueryKey = () => {
+    return [
+    `/api/admin/overview`
+    ] as const;
+    }
+
+
+export const getGetAdminOverviewQueryOptions = <TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminOverviewQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminOverview>>> = ({ signal }) => getAdminOverview({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminOverviewQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminOverview>>>
+export type GetAdminOverviewQueryError = ErrorType<void>
+
+
+/**
+ * @summary Read the account count for authorized CloudPainter administrators
+ */
+
+export function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminOverviewQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListAdminAccountsUrl = (params?: ListAdminAccountsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/accounts?${stringifiedParams}` : `/api/admin/accounts`
+}
+
+/**
+ * @summary Search and page through CloudPainter accounts
+ */
+export const listAdminAccounts = async (params?: ListAdminAccountsParams, options?: Parameters<typeof customFetch>[1]): Promise<AdminAccountPage> => {
+
+  return customFetch<AdminAccountPage>(getListAdminAccountsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminAccountsQueryKey = (params?: ListAdminAccountsParams,) => {
+    return [
+    `/api/admin/accounts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAdminAccountsQueryOptions = <TData = Awaited<ReturnType<typeof listAdminAccounts>>, TError = ErrorType<void>>(params?: ListAdminAccountsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminAccountsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminAccounts>>> = ({ signal }) => listAdminAccounts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminAccounts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminAccountsQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminAccounts>>>
+export type ListAdminAccountsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Search and page through CloudPainter accounts
+ */
+
+export function useListAdminAccounts<TData = Awaited<ReturnType<typeof listAdminAccounts>>, TError = ErrorType<void>>(
+ params?: ListAdminAccountsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminAccountsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSetAdminAccountStatusUrl = (userId: string,) => {
+
+
+
+
+  return `/api/admin/accounts/${userId}/status`
+}
+
+/**
+ * @summary Suspend or reactivate a CloudPainter account
+ */
+export const setAdminAccountStatus = async (userId: string,
+    adminAccountStatus: AdminAccountStatus, options?: Parameters<typeof customFetch>[1]): Promise<AdminAccountStatusResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AdminAccountStatusResult>(getSetAdminAccountStatusUrl(userId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminAccountStatus)
+  }
+);}
+
+
+
+
+
+export const getSetAdminAccountStatusMutationKey = () => ['setAdminAccountStatus'] as const;
+
+export const getSetAdminAccountStatusMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setAdminAccountStatus>>, TError,SetAdminAccountStatusMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setAdminAccountStatus>>, TError,SetAdminAccountStatusMutationVariables, TContext> => {
+
+const mutationKey = getSetAdminAccountStatusMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setAdminAccountStatus>>, SetAdminAccountStatusMutationVariables> = (props) => {
+          const {userId,data} = props ?? {};
+
+          return  setAdminAccountStatus(userId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetAdminAccountStatusMutationResult = NonNullable<Awaited<ReturnType<typeof setAdminAccountStatus>>>
+    export type SetAdminAccountStatusMutationBody = BodyType<AdminAccountStatus>
+    export type SetAdminAccountStatusMutationError = ErrorType<void>
+    export type SetAdminAccountStatusMutationVariables = {userId: string;data: BodyType<AdminAccountStatus>}
+
+    /**
+ * @summary Suspend or reactivate a CloudPainter account
+ */
+export const useSetAdminAccountStatus = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setAdminAccountStatus>>, TError,SetAdminAccountStatusMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setAdminAccountStatus>>,
+        TError,
+        SetAdminAccountStatusMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSetAdminAccountStatusMutationOptions(options));
+    }
 
 export const getGetOutlineConfigUrl = () => {
 
