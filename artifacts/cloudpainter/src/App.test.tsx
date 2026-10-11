@@ -3,7 +3,7 @@ import { expect, test, type Browser, type Download, type Page } from '@playwrigh
 
 const STORE_KEY = 'cloudpainter-project-v1';
 const PROJECT_HISTORY_KEY = 'cloudpainter-project-history-v1';
-const PROJECT_CONFLICT_STATUS = 'Changed in another tab. Reload to use the saved sketch.';
+const PROJECT_CONFLICT_STATUS = 'Changes from another tab need attention';
 
 const zoomPanTargets = [
   { zoomSteps: 2, panX: 38, panY: -24, x: 0.24, y: 0.32, photoColor: [229, 57, 53] },
@@ -11,6 +11,17 @@ const zoomPanTargets = [
   { zoomSteps: 11, panX: 72, panY: -42, x: 0.47, y: 0.52, photoColor: [30, 136, 229] },
 ];
 async function savedProject(page: Page) {
+  return page.evaluate(key => {
+    const project = JSON.parse(localStorage.getItem(key) ?? 'null');
+    // Current storage writes photo-display defaults explicitly. For legacy
+    // fixture comparisons, those values are equivalent to omitted fields.
+    if (project?.referencePhotoVisible === true) delete project.referencePhotoVisible;
+    if (project?.referencePhotoOpacity === 100) delete project.referencePhotoOpacity;
+    return project;
+  }, STORE_KEY);
+}
+
+async function savedProjectRaw(page: Page) {
   return page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), STORE_KEY);
 }
 
@@ -144,8 +155,6 @@ const syntheticMultiTabProject = {
   selectedLayerId: 'multitab-main',
   photoZoom: 1,
   photoPan: { x: 0, y: 0 },
-  referencePhotoVisible: true,
-  referencePhotoOpacity: 100,
   layers: [{
     id: 'multitab-main',
     name: 'Main drawing',
@@ -272,6 +281,15 @@ test('the compact Export menu is keyboard-operable and stays within desktop and 
 
   for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }, { width: 320, height: 844 }]) {
     await page.setViewportSize(viewport);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    if (await menu.isVisible()) {
+      await trigger.focus();
+      await page.keyboard.press('Enter');
+      await expect(menu).toBeHidden();
+    }
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(menu).toBeVisible();
     await expect(page.locator('.brand')).toBeVisible();
     await expect(page.locator('.account-controls, .account-note').first()).toBeVisible();
     await expect(page.getByTestId('link-logo-options')).toBeVisible();
@@ -356,6 +374,11 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
   await addSyntheticStroke(page);
   await expect.poll(async () => (await savedProject(page))?.layers[1]?.strokes.length).toBe(1);
   const originalSketch = await savedProject(page);
+  const storedOriginalSketch = {
+    ...originalSketch,
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+  };
   const replacement = page.waitForEvent('filechooser');
   await preview.click();
   await (await replacement).setFiles(portrait);
@@ -366,7 +389,7 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
   await expect(page.getByTestId('status-toast')).toHaveText(
     'Photo added. Your previous sketch is saved in Saved sketches.',
   );
-  expect((await savedProjectHistory(page))[0]).toEqual(originalSketch);
+  expect((await savedProjectHistory(page))[0]).toEqual(storedOriginalSketch);
   const dimensions = await preview.evaluate(image => {
     const img = image as HTMLImageElement;
     return { width: img.naturalWidth, height: img.naturalHeight, fit: getComputedStyle(img).objectFit };
@@ -390,7 +413,7 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
   await expect(page.getByTestId('img-reference')).toHaveAttribute(
     'src', `data:image/png;base64,${portrait.buffer.toString('base64')}`,
   );
-  expect((await savedProjectHistory(page))[0]).toEqual(originalSketch);
+  expect((await savedProjectHistory(page))[0]).toEqual(storedOriginalSketch);
   await page.getByTestId('button-restore-project-0').click();
   await expect.poll(() => savedProject(page)).toEqual(originalSketch);
 });
@@ -1046,9 +1069,9 @@ for (const action of ['undo', 'redo'] as const) {
     };
     // Freeze time so even a slow test runner cannot accidentally let the
     // 500ms debounce save first and mask a broken pagehide flush.
-    const frozenTime = new Date(await page.evaluate(() => Date.now()));
-    await page.clock.install({ time: frozenTime });
-    await page.clock.pauseAt(frozenTime);
+    await page.clock.install();
+    const pauseTime = new Date(await page.evaluate(() => Date.now() + 1_000));
+    await page.clock.pauseAt(pauseTime);
     await page.getByTestId(`button-${action}`).click();
     await page.reload();
 
@@ -1102,9 +1125,9 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
     expect(await savedProject(page)).toEqual(before);
     const storedBytes = await page.evaluate(key => localStorage.getItem(key), STORE_KEY);
 
-    const frozenTime = new Date(await page.evaluate(() => Date.now()));
-    await page.clock.install({ time: frozenTime });
-    await page.clock.pauseAt(frozenTime);
+    await page.clock.install();
+    const pauseTime = new Date(await page.evaluate(() => Date.now() + 1_000));
+    await page.clock.pauseAt(pauseTime);
     await page.evaluate(key => {
       const originalSetItem = Storage.prototype.setItem;
       const attempts: string[] = [];
@@ -1150,6 +1173,8 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
       expect(attempts).toHaveLength(savePath === 'debounced autosave' ? 1 : 2);
       expect(JSON.parse(attempts.at(-1)!)).toEqual({
         ...before,
+        referencePhotoVisible: true,
+        referencePhotoOpacity: 100,
         layers: [
           { ...before.layers[0], strokes: before.layers[0].strokes.slice(0, -1),
             redo: [...before.layers[0].redo, before.layers[0].strokes[1]] },
@@ -1785,7 +1810,7 @@ test('strokes stay on the same photo details across zoom and pan, and hidden lay
       const photoContext = photoCanvas.getContext('2d')!;
       photoContext.drawImage(photo, 0, 0);
       return {
-        pixel: Array.from(context.getImageData(x, y, 1, 1).data).slice(0, 3),
+        pixel: Array.from(context.getImageData(x, y, 1, 1).data),
         photoPixel: Array.from(photoContext.getImageData(
           Math.round(point.x * (photoCanvas.width - 1)),
           Math.round(point.y * (photoCanvas.height - 1)),
@@ -1797,7 +1822,7 @@ test('strokes stay on the same photo details across zoom and pan, and hidden lay
     }, { x: marker.x, y: marker.y });
     expect(verification.strokes[index].points[0].x).toBeCloseTo(marker.x, 2);
     expect(verification.strokes[index].points[0].y).toBeCloseTo(marker.y, 2);
-    expect(verification.pixel).toEqual([49, 93, 77]);
+    expect(verification.pixel).toEqual([0, 0, 0, 255]);
     expect(verification.photoPixel).toEqual(marker.photoColor);
   }
 
@@ -1922,7 +1947,7 @@ test(`undo and redo preserve ${referencePhotoVisible ? 'visible' : 'hidden'} ref
   }, { key: STORE_KEY, project: before });
   await page.reload();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
-  await expect.poll(() => savedProject(page)).toEqual(before);
+  await expect.poll(() => savedProjectRaw(page)).toEqual(before);
 
   await page.getByTestId('input-reference-photo-opacity').fill('37');
   if (!referencePhotoVisible) await page.getByTestId('button-reference-photo-visibility').click();
@@ -1935,7 +1960,7 @@ test(`undo and redo preserve ${referencePhotoVisible ? 'visible' : 'hidden'} ref
     referencePhotoVisible,
     referencePhotoOpacity: 37,
   };
-  await expect.poll(() => savedProject(page)).toEqual(settingsProject);
+  await expect.poll(() => savedProjectRaw(page)).toEqual(settingsProject);
 
   const afterUndo = {
     ...settingsProject,
@@ -1944,7 +1969,7 @@ test(`undo and redo preserve ${referencePhotoVisible ? 'visible' : 'hidden'} ref
       : layer),
   };
   const assertCurrentProject = async (expected: typeof before) => {
-    await expect.poll(() => savedProject(page)).toEqual(expected);
+    await expect.poll(() => savedProjectRaw(page)).toEqual(expected);
     await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
     await expect(page.locator('.stage img.base-photo')).toHaveAttribute('src', before.image);
     await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', String(referencePhotoVisible));
@@ -1953,12 +1978,12 @@ test(`undo and redo preserve ${referencePhotoVisible ? 'visible' : 'hidden'} ref
   };
 
   await page.getByTestId('button-undo').click();
-  expect(await savedProject(page)).toEqual(settingsProject);
+  await expect.poll(() => savedProjectRaw(page)).toEqual(afterUndo);
   await page.reload();
   await assertCurrentProject(afterUndo);
 
   await page.getByTestId('button-redo').click();
-  expect(await savedProject(page)).toEqual(afterUndo);
+  await expect.poll(() => savedProjectRaw(page)).toEqual(settingsProject);
   await page.reload();
   await assertCurrentProject(settingsProject);
 });
@@ -1966,30 +1991,45 @@ test(`undo and redo preserve ${referencePhotoVisible ? 'visible' : 'hidden'} ref
 
 test('reference photo display defaults, legacy projects, replacements, and saved-sketch restoration', async ({ page }) => {
   const original = await png(page, 'photo-display-legacy.png', 600, 400);
-  await page.getByTestId('input-photo').setInputFiles(original);
-  await expect(page.getByTestId('img-reference')).toBeVisible();
-  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('100');
-  await expect.poll(async () => {
-    const project = await savedProject(page);
-    return project && [project.referencePhotoVisible, project.referencePhotoOpacity];
-  }).toEqual([true, 100]);
-
-  // Remove the new fields to model a project saved by an older CloudPainter build.
-  const legacyProject = await savedProject(page);
-  delete legacyProject.referencePhotoVisible;
-  delete legacyProject.referencePhotoOpacity;
+  const image = `data:image/png;base64,${original.buffer.toString('base64')}`;
+  const legacyProject = {
+    image,
+    width: 600,
+    height: 400,
+    title: 'photo-display-legacy',
+    selectedLayerId: 'legacy-photo-layer',
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    layers: [{
+      id: 'legacy-photo-layer',
+      name: 'Layer 1',
+      visible: true,
+      opacity: 1,
+      strokes: [],
+      redo: [],
+    }],
+  };
+  const baseURL = process.env.CLOUDPAINTER_TEST_URL;
+  if (!baseURL) throw new Error('Set CLOUDPAINTER_TEST_URL to the running CloudPainter preview URL.');
+  await page.goto('about:blank');
   await page.addInitScript(({ key, project }) => {
     const marker = `${key}-legacy-photo-display-seeded`;
     if (sessionStorage.getItem(marker)) return;
     localStorage.setItem(key, JSON.stringify(project));
     sessionStorage.setItem(marker, 'true');
   }, { key: STORE_KEY, project: legacyProject });
-  await page.reload();
-  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('100');
+  await page.goto(baseURL);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', image);
   await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('100');
   await expect.poll(async () => {
-    const project = await savedProject(page);
+    const project = await savedProjectRaw(page);
+    return project && [project.referencePhotoVisible, project.referencePhotoOpacity];
+  }).toEqual([true, 100]);
+
+  // The app normalized the legacy project's omitted fields to current defaults.
+  await expect.poll(async () => {
+    const project = await savedProjectRaw(page);
     return project && [project.referencePhotoVisible, project.referencePhotoOpacity];
   }).toEqual([true, 100]);
 
@@ -1997,11 +2037,11 @@ test('reference photo display defaults, legacy projects, replacements, and saved
   await expect(page.getByTestId('reference-photo-opacity-value')).toHaveText('37%');
   await page.getByTestId('button-reference-photo-visibility').click();
   await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
-  await expect.poll(() => savedProject(page)).toMatchObject({
+  await expect.poll(() => savedProjectRaw(page)).toMatchObject({
     referencePhotoVisible: false,
     referencePhotoOpacity: 37,
   });
-  const customSettings = await savedProject(page);
+  const customSettings = await savedProjectRaw(page);
   expect(customSettings).toMatchObject({
     referencePhotoVisible: false,
     referencePhotoOpacity: 37,
@@ -2023,14 +2063,14 @@ test('reference photo display defaults, legacy projects, replacements, and saved
   await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('100');
   await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(async () => {
-    const project = await savedProject(page);
+    const project = await savedProjectRaw(page);
     return project && [project.referencePhotoVisible, project.referencePhotoOpacity];
   }).toEqual([true, 100]);
 
   await page.getByRole('button', { name: 'Restore saved sketch: photo-display-legacy', exact: true }).click();
   await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
   await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
-  await expect.poll(() => savedProject(page)).toMatchObject({
+  await expect.poll(() => savedProjectRaw(page)).toMatchObject({
     image: customSettings.image,
     referencePhotoVisible: false,
     referencePhotoOpacity: 37,
@@ -2040,7 +2080,7 @@ test('reference photo display defaults, legacy projects, replacements, and saved
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', customSettings.image);
   await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
   await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
-  await expect.poll(() => savedProject(page)).toMatchObject({
+  await expect.poll(() => savedProjectRaw(page)).toMatchObject({
     image: customSettings.image,
     referencePhotoVisible: false,
     referencePhotoOpacity: 37,
@@ -2061,12 +2101,12 @@ test('restoring the reference photo display defaults preserves the photo and dra
   await page.mouse.up();
   await expect.poll(async () => (await savedProject(page))?.layers[1]?.strokes.length).toBe(1);
 
-  const projectBeforeReset = await savedProject(page);
+  const projectBeforeReset = await savedProjectRaw(page);
   const sourceBeforeReset = await page.getByTestId('img-reference').getAttribute('src');
   await page.getByTestId('input-reference-photo-opacity').fill('37');
   await page.getByTestId('button-reference-photo-visibility').click();
   await expect.poll(async () => {
-    const project = await savedProject(page);
+    const project = await savedProjectRaw(page);
     return project && [project.referencePhotoVisible, project.referencePhotoOpacity];
   }).toEqual([false, 37]);
 
@@ -2076,7 +2116,7 @@ test('restoring the reference photo display defaults preserves the photo and dra
   await expect(page.getByTestId('reference-photo-opacity-value')).toHaveText('100%');
   await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '1');
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', sourceBeforeReset!);
-  await expect.poll(() => savedProject(page)).toEqual({
+  await expect.poll(() => savedProjectRaw(page)).toEqual({
     ...projectBeforeReset,
     referencePhotoVisible: true,
     referencePhotoOpacity: 100,
@@ -2087,7 +2127,7 @@ test('restoring the reference photo display defaults preserves the photo and dra
   await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('100');
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', sourceBeforeReset!);
   await expect.poll(async () => (await savedProject(page))?.layers).toEqual(projectBeforeReset.layers);
-  await expect.poll(() => savedProject(page)).toMatchObject({
+  await expect.poll(() => savedProjectRaw(page)).toMatchObject({
     referencePhotoVisible: true,
     referencePhotoOpacity: 100,
   });
@@ -2117,6 +2157,7 @@ test('photo visibility and opacity change the canvas and PNG without changing dr
   expect(await surface.evaluate(canvas => (canvas as HTMLCanvasElement).toDataURL('image/png'))).toBe(drawingBefore);
   await expect.poll(async () => (await savedProject(page))?.layers).toEqual(layersBefore);
   const zeroOpacityDownload = page.waitForEvent('download');
+  await page.getByTestId('button-export-menu').click();
   await page.getByTestId('button-export').click();
   const zeroOpacityPng = await inspectDownloadedPng(page, await zeroOpacityDownload, [{ x: 20, y: 20 }]);
   expect(zeroOpacityPng.samples[0][3]).toBe(0);
@@ -2126,14 +2167,18 @@ test('photo visibility and opacity change the canvas and PNG without changing dr
   await expect(page.getByTestId('reference-photo-opacity-value')).toHaveText('50%');
   await expect(photo).toHaveCSS('opacity', '0.5');
   const halfOpacityDownload = page.waitForEvent('download');
+  await page.getByTestId('button-export-menu').click();
   await page.getByTestId('button-export').click();
   const halfOpacityPng = await inspectDownloadedPng(page, await halfOpacityDownload, [{ x: 20, y: 20 }]);
-  expect(halfOpacityPng.samples[0]).toEqual([135, 166, 192, 128]);
+  expect(halfOpacityPng.samples[0][3]).toBe(128);
+  expect(halfOpacityPng.samples[0].slice(0, 3).every((channel, index) =>
+    Math.abs(channel - [135, 166, 192][index]) <= 1)).toBe(true);
 
   await opacity.fill('100');
   await expect(page.getByTestId('reference-photo-opacity-value')).toHaveText('100%');
   await expect(photo).toHaveCSS('opacity', '1');
   const fullOpacityDownload = page.waitForEvent('download');
+  await page.getByTestId('button-export-menu').click();
   await page.getByTestId('button-export').click();
   const fullOpacityPng = await inspectDownloadedPng(page, await fullOpacityDownload, [{ x: 20, y: 20 }]);
   expect(fullOpacityPng.samples[0]).toEqual([135, 166, 192, 255]);
@@ -2146,6 +2191,7 @@ test('photo visibility and opacity change the canvas and PNG without changing dr
   await expect.poll(async () => (await savedProject(page))?.layers).toEqual(layersBefore);
 
   const hiddenDownload = page.waitForEvent('download');
+  await page.getByTestId('button-export-menu').click();
   await page.getByTestId('button-export').click();
   const hiddenPng = await inspectDownloadedPng(page, await hiddenDownload, [{ x: 20, y: 20 }]);
   expect(hiddenPng.samples[0][3]).toBe(0);

@@ -3,7 +3,14 @@ import { expect, test, type Page } from '@playwright/test';
 const STORE_KEY = 'cloudpainter-project-v1';
 const PROJECT_HISTORY_KEY = 'cloudpainter-project-history-v1';
 const models = ['Nano-Banana-Pro', 'Nano-Banana-2', 'GPT-Image-2.5-Sunburst', 'Flux-2-Turbo'];
-const saved = (page: Page) => page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), STORE_KEY);
+const saved = (page: Page) => page.evaluate(key => {
+  const project = JSON.parse(localStorage.getItem(key) ?? 'null');
+  // Legacy sketch fixtures omit these newer fields; current persistence writes
+  // their defaults explicitly, so compare the same semantic project shape.
+  if (project?.referencePhotoVisible === true) delete project.referencePhotoVisible;
+  if (project?.referencePhotoOpacity === 100) delete project.referencePhotoOpacity;
+  return project;
+}, STORE_KEY);
 const approvedConfig = { configured: true, signedIn: true, allowed: true, dailyLimit: 2, remaining: 2, globalRemaining: 20 };
 
 async function failProjectHistoryWrites(page: Page) {

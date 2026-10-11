@@ -43,6 +43,10 @@ for (const photo of [
     await expect(page.getByTestId('img-reference')).toBeVisible();
     const stage = page.getByTestId('canvas-stage');
     const surface = page.locator('canvas.draw-surface');
+    await expect.poll(async () => {
+      const bounds = await stage.boundingBox();
+      return bounds ? bounds.width / bounds.height : 0;
+    }).toBeCloseTo(photo.width / photo.height, 2);
     const fitBounds = await stage.boundingBox();
     expect(fitBounds).not.toBeNull();
 
