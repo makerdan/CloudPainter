@@ -294,6 +294,130 @@ async function captureProjectState(page) {
   });
 }
 
+async function inspectPhotoStrokeAlignment(page, stroke, landmark) {
+  return page.evaluate(({ point, landmark }) => {
+    const photo = document.querySelector('.base-photo');
+    const canvas = document.querySelector('canvas.draw-surface');
+    if (!(photo instanceof HTMLImageElement) || !(canvas instanceof HTMLCanvasElement)) {
+      throw new Error('The reference photo or drawing canvas is missing.');
+    }
+    const photoRect = photo.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const photoX = photoRect.left + landmark.x * photoRect.width;
+    const photoY = photoRect.top + landmark.y * photoRect.height;
+    const strokeX = canvasRect.left + point.x * canvasRect.width;
+    const strokeY = canvasRect.top + point.y * canvasRect.height;
+    const photoCanvas = document.createElement('canvas');
+    photoCanvas.width = photo.naturalWidth;
+    photoCanvas.height = photo.naturalHeight;
+    const photoContext = photoCanvas.getContext('2d');
+    const drawingContext = canvas.getContext('2d');
+    if (!photoContext || !drawingContext) throw new Error('Could not inspect photo and drawing pixels.');
+    photoContext.drawImage(photo, 0, 0);
+    const photoPixel = photoContext.getImageData(
+      Math.round(landmark.x * (photoCanvas.width - 1)),
+      Math.round(landmark.y * (photoCanvas.height - 1)),
+      1,
+      1,
+    ).data;
+    const strokePixel = drawingContext.getImageData(
+      Math.round(point.x * (canvas.width - 1)),
+      Math.round(point.y * (canvas.height - 1)),
+      1,
+      1,
+    ).data;
+    return {
+      screenError: Math.hypot(photoX - strokeX, photoY - strokeY),
+      photoColor: [...photoPixel].slice(0, 3),
+      strokePixelAlpha: strokePixel[3],
+      photoBounds: [photoRect.left, photoRect.top, photoRect.width, photoRect.height],
+      canvasBounds: [canvasRect.left, canvasRect.top, canvasRect.width, canvasRect.height],
+    };
+  }, { point: stroke.points[0], landmark });
+}
+
+for (const photo of [
+  { name: 'landscape', width: 600, height: 400 },
+  { name: 'portrait', width: 400, height: 600 },
+]) {
+  test(`keeps a ${photo.name} sketch aligned when the editor narrows`, async () => {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    try {
+      await page.goto(appUrl);
+      await importPhoto(page, photo, `resize-alignment-${photo.name}.png`);
+
+      const stage = page.getByTestId('canvas-stage');
+      const wideStage = await stage.boundingBox();
+      const photoBounds = await stage.locator('img.base-photo').boundingBox();
+      assert.ok(wideStage && photoBounds, `${photo.name}: the fitted photo and stage should be visible`);
+      const landmark = { x: 0.1, y: 0.1 };
+      await page.mouse.click(
+        photoBounds.x + photoBounds.width * landmark.x,
+        photoBounds.y + photoBounds.height * landmark.y,
+      );
+      await waitForStrokeCount(page, 0, 1);
+
+      const before = await captureProjectState(page);
+      const originalStroke = before.project.layers[0].strokes[0];
+      assertClose(originalStroke.points[0].x, landmark.x, `${photo.name}: saved stroke x coordinate`);
+      assertClose(originalStroke.points[0].y, landmark.y, `${photo.name}: saved stroke y coordinate`);
+      const surface = page.locator('canvas.draw-surface');
+      const originalDrawing = await surface.evaluate(canvas => canvas.toDataURL());
+      const initial = await inspectPhotoStrokeAlignment(page, originalStroke, {
+        ...landmark,
+        photoColor: [229, 57, 53],
+      });
+      assert.ok(initial.screenError < 3, `${photo.name}: initial stroke should mark the same photo detail`);
+      assert.deepEqual(initial.photoColor, [229, 57, 53], `${photo.name}: marker should be the known red photo detail`);
+      assert.ok(initial.strokePixelAlpha > 0, `${photo.name}: the stroke should render on its saved canvas point`);
+      assert.deepEqual(initial.photoBounds, initial.canvasBounds, `${photo.name}: photo and drawing bounds should match`);
+
+      for (let step = 0; step < 2; step += 1) await page.getByTestId('button-zoom-in').click();
+      const zoom = page.getByTestId('input-photo-zoom');
+      assert.equal(await zoom.inputValue(), '150', `${photo.name}: zoom should be above fit before resizing`);
+      await page.getByTestId('button-pan-mode').click();
+      await page.mouse.move(wideStage.x + wideStage.width / 2, wideStage.y + wideStage.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(wideStage.x + wideStage.width / 2 + 40, wideStage.y + wideStage.height / 2 - 24, { steps: 4 });
+      await page.mouse.up();
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForFunction(width => {
+        const resizedStage = document.querySelector('[data-testid="canvas-stage"]');
+        return resizedStage instanceof HTMLElement && resizedStage.clientWidth < width;
+      }, wideStage.width);
+      const resized = await inspectPhotoStrokeAlignment(page, originalStroke, {
+        ...landmark,
+        photoColor: [229, 57, 53],
+      });
+      assert.ok(resized.screenError < 3, `${photo.name}: narrowing the editor should preserve landmark alignment`);
+      assert.deepEqual(resized.photoColor, [229, 57, 53], `${photo.name}: the same photo landmark should remain under the stroke`);
+      assert.ok(resized.strokePixelAlpha > 0, `${photo.name}: the saved drawing pixel should remain present after resizing`);
+      assert.deepEqual(resized.photoBounds, resized.canvasBounds, `${photo.name}: resized photo and drawing bounds should match`);
+      assert.deepEqual((await captureProjectState(page)).project.layers[0].strokes, before.project.layers[0].strokes);
+
+      await page.getByTestId('button-reset-photo-view').click();
+      await page.waitForFunction(() => {
+        const zoomControl = document.querySelector('[data-testid="input-photo-zoom"]');
+        const panControl = document.querySelector('[data-testid="button-pan-mode"]');
+        return zoomControl?.value === '100' && panControl?.getAttribute('aria-pressed') === 'false';
+      });
+      const fitted = await inspectPhotoStrokeAlignment(page, originalStroke, {
+        ...landmark,
+        photoColor: [229, 57, 53],
+      });
+      assert.ok(fitted.screenError < 3, `${photo.name}: returning to fit should preserve landmark alignment`);
+      assert.deepEqual(fitted.photoColor, [229, 57, 53], `${photo.name}: fit should preserve the reference photo`);
+      assert.ok(fitted.strokePixelAlpha > 0, `${photo.name}: fit should preserve the drawing pixels`);
+      assert.deepEqual(fitted.photoBounds, fitted.canvasBounds, `${photo.name}: fitted photo and drawing bounds should match`);
+      assert.deepEqual((await captureProjectState(page)).project.layers[0].strokes, before.project.layers[0].strokes);
+      assert.equal(await surface.evaluate(canvas => canvas.toDataURL()), originalDrawing);
+    } finally {
+      await page.close();
+    }
+  });
+}
+
 async function exportAndInspect(page, name, dimensions, expectedDimensions = dimensions, expectedPaperSizeMm) {
   await page.evaluate(() => {
     window.__cloudPainterExport = null;
