@@ -395,6 +395,54 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
   await expect.poll(() => savedProject(page)).toEqual(originalSketch);
 });
 
+test('multiple photo replacements keep every earlier sketch restorable after reload', async ({ page }) => {
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  const initialProject = await savedProject(page);
+  const stages = [
+    { photo: await png(page, 'recovery-alpha.png', 320, 200), strokes: 1 },
+    { photo: await png(page, 'recovery-beta.png', 400, 240), strokes: 2 },
+    { photo: await png(page, 'recovery-gamma.png', 480, 300), strokes: 3 },
+    { photo: await png(page, 'recovery-current.png', 240, 360), strokes: 0 },
+  ];
+  const input = page.getByTestId('input-photo');
+  const savedSketches: Awaited<ReturnType<typeof savedProject>>[] = [];
+
+  for (let index = 0; index < stages.length; index += 1) {
+    const { photo, strokes } = stages[index];
+    await input.setInputFiles(photo);
+    await expect.poll(async () => (await savedProject(page))?.title).toBe(photo.name.replace(/\.png$/, ''));
+    for (let stroke = 0; stroke < strokes; stroke += 1) {
+      await addSyntheticStroke(page);
+    }
+    await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(strokes);
+    await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+    if (index < stages.length - 1) savedSketches.push(await savedProject(page));
+  }
+
+  const expectedHistory = [...savedSketches].reverse();
+  const allSavedSketches = [...expectedHistory, initialProject];
+  expect((await savedProjectHistory(page))).toEqual(allSavedSketches);
+
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${stages[3].photo.buffer.toString('base64')}`,
+  );
+  await expect.poll(() => savedProjectHistory(page)).toEqual(allSavedSketches);
+
+  for (const sketch of allSavedSketches) {
+    await page.getByRole('button', { name: `Restore saved sketch: ${sketch.title}`, exact: true }).click();
+    await expect.poll(() => savedProject(page)).toEqual(sketch);
+    if (sketch.image) {
+      await expect(page.getByTestId('img-reference')).toHaveAttribute('src', sketch.image);
+    } else {
+      await expect(page.getByTestId('img-reference')).toHaveCount(0);
+    }
+    await expect.poll(async () => savedProjectHistory(page)).toEqual(
+      expect.arrayContaining(allSavedSketches),
+    );
+  }
+});
+
 test('a delayed earlier file read cannot replace newer work or hide pending feedback', async ({ page }) => {
   const slowPhoto = await png(page, 'slow-first.png', 160, 100);
   const fastPhoto = await png(page, 'fast-second.png', 240, 120);
