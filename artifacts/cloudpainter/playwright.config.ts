@@ -9,7 +9,7 @@ if (!baseURL) {
 
 export default defineConfig({
   testDir: './src',
-  testMatch: ['App.test.tsx', 'ImageGenerator.test.tsx'],
+  testMatch: ['App.test.tsx', 'ImageGenerator.test.tsx', 'PanLimits.test.ts'],
   timeout: 30_000,
   globalTimeout: 240_000,
   expect: { timeout: 5_000 },
