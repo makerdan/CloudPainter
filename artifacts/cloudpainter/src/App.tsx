@@ -859,24 +859,45 @@ function Home() {
       }
       const source = String(reader.result);
       const image = new Image();
-      image.onload = () => {
+      image.onload = async () => {
         if (importId !== photoImportId.current) {
           finishImport();
           return;
         }
         const { width, height } = getScaledImageDimensions(image.naturalWidth, image.naturalHeight);
         const layer = createLayer('Sketch layer');
-        setPanMode(false);
-        setDrawingClipboard(null);
-        setProject(current => ({
-          ...current, image: source, width, height,
+        const estimate = await refreshStorageEstimate();
+        if (importId !== photoImportId.current) {
+          finishImport();
+          return;
+        }
+        const currentProject = latestProject.current;
+        const nextProject: Project = {
+          ...currentProject, image: source, width, height,
           layers: [layer], selectedLayerId: layer.id,
           title: file.name.replace(/\.[^.]+$/, '').slice(0, 42) || 'Untitled idea',
           photoZoom: 1, photoPan: { x: 0, y: 0 },
           referencePhotoVisible: true, referencePhotoOpacity: 100,
-        }));
+        };
+        const nextHistory = withSavedProject(readProjectHistory(), currentProject);
+        if (!confirmHistoryWriteIfStorageIsLow(estimate, nextProject, nextHistory)) {
+          finishImport();
+          announce('Photo replacement cancelled. Your sketch is unchanged.');
+          return;
+        }
+        try {
+          localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
+        } catch {
+          finishImport();
+          announce('Could not save a recovery copy of your current sketch. Your project is unchanged.');
+          return;
+        }
+        setProjectHistory(nextHistory);
+        setPanMode(false);
+        setDrawingClipboard(null);
+        setProject(nextProject);
         finishImport();
-        announce('Photo added. Your original stays untouched.');
+        announce('Photo added. Your previous sketch is saved in Saved sketches.');
       };
       image.onerror = () => {
         finishImport();
@@ -1333,7 +1354,7 @@ function Home() {
             <p className="section-label">Reference photo</p>
             <div className="source-card-frame">
               <TooltipButton
-                description={project.image ? 'Choose a new reference photo, replacing the current photo and drawing layers.' : 'Choose a reference photo and start a fresh drawing layer; the original photo stays unchanged.'}
+                description={project.image ? 'Choose a new reference photo. Your current sketch is saved in Saved sketches before its photo and drawing layers are replaced.' : 'Choose a reference photo and start a fresh drawing layer; your current sketch is saved in Saved sketches.'}
                 type="button"
                 className={`source-card ${project.image ? 'loaded' : ''}`}
                 onClick={openPhoto}

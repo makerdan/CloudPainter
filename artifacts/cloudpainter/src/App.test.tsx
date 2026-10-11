@@ -352,6 +352,10 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
   // Include a layer before replacement to guard the existing import-reset behavior.
   await page.getByTestId('button-add-layer').click();
   await zoomAndPan(page);
+  await page.getByTestId('button-pan-mode').click();
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[1]?.strokes.length).toBe(1);
+  const originalSketch = await savedProject(page);
   const replacement = page.waitForEvent('filechooser');
   await preview.click();
   await (await replacement).setFiles(portrait);
@@ -359,6 +363,10 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
     const project = await savedProject(page);
     return project && { width: project.width, height: project.height, title: project.title, layers: project.layers.length };
   }).toEqual({ width: 300, height: 500, title: 'portrait', layers: 1 });
+  await expect(page.getByTestId('status-toast')).toHaveText(
+    'Photo added. Your previous sketch is saved in Saved sketches.',
+  );
+  expect((await savedProjectHistory(page))[0]).toEqual(originalSketch);
   const dimensions = await preview.evaluate(image => {
     const img = image as HTMLImageElement;
     return { width: img.naturalWidth, height: img.naturalHeight, fit: getComputedStyle(img).objectFit };
@@ -377,6 +385,14 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
     return { stage: view.stage, content: view.content };
   }).toEqual({ stage, content: stage });
   await expect(page.getByTestId('input-photo')).toHaveAttribute('data-picker-clicks', '2');
+
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${portrait.buffer.toString('base64')}`,
+  );
+  expect((await savedProjectHistory(page))[0]).toEqual(originalSketch);
+  await page.getByTestId('button-restore-project-0').click();
+  await expect.poll(() => savedProject(page)).toEqual(originalSketch);
 });
 
 test('a delayed earlier file read cannot replace newer work or hide pending feedback', async ({ page }) => {
@@ -441,7 +457,9 @@ test('a delayed earlier file read cannot replace newer work or hide pending feed
     const project = await savedProject(page);
     return project && { title: project.title, width: project.width, height: project.height };
   }).toEqual({ title: 'fast-second', width: 240, height: 120 });
-  await expect(page.getByTestId('status-toast')).toHaveText('Photo added. Your original stays untouched.');
+  await expect(page.getByTestId('status-toast')).toHaveText(
+    'Photo added. Your previous sketch is saved in Saved sketches.',
+  );
   await expect(page.getByTestId('status-photo-import')).toBeVisible();
 
   const surface = page.locator('canvas.draw-surface');
@@ -486,6 +504,7 @@ test('a delayed earlier file read cannot replace newer work or hide pending feed
   await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
 
   const persistedFastProject = await savedProject(page);
+  const persistedFastHistory = await savedProjectHistory(page);
   await input.setInputFiles(await png(page, 'unreadable.png', 40, 30));
   await expect(page.getByTestId('status-photo-import')).toBeVisible();
   await expect.poll(() => page.evaluate(
@@ -497,11 +516,70 @@ test('a delayed earlier file read cannot replace newer work or hide pending feed
   await expect(page.getByTestId('status-toast')).toHaveText('Could not read that file. Please try again.');
   await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
   await expect.poll(() => savedProject(page)).toEqual(persistedFastProject);
+  expect(await savedProjectHistory(page)).toEqual(persistedFastHistory);
 
   await page.reload();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', persistedFastProject.image);
   await expect.poll(() => savedProject(page)).toEqual(persistedFastProject);
+  expect(await savedProjectHistory(page)).toEqual(persistedFastHistory);
   expect((await savedProject(page)).layers[0].strokes).toHaveLength(1);
+});
+
+test('a photo decode failure leaves the current sketch and saved sketches unchanged', async ({ page }) => {
+  const initialPhoto = await png(page, 'keep-this-sketch.png', 320, 200);
+  await page.getByTestId('input-photo').setInputFiles(initialPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('keep-this-sketch');
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  const activeProject = await savedProject(page);
+  const activeHistory = await savedProjectHistory(page);
+
+  await page.getByTestId('input-photo').setInputFiles({
+    name: 'corrupt.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('not a decodable image'),
+  });
+  await expect(page.getByTestId('status-toast')).toHaveText(
+    'That photo could not be opened. Try another image.',
+  );
+  expect(await savedProject(page)).toEqual(activeProject);
+  expect(await savedProjectHistory(page)).toEqual(activeHistory);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', activeProject.image);
+});
+
+test('a photo replacement is blocked if its recovery copy cannot be saved', async ({ page }) => {
+  const initialPhoto = await png(page, 'recover-before-replace.png', 320, 200);
+  await page.getByTestId('input-photo').setInputFiles(initialPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('recover-before-replace');
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  const activeProject = await savedProject(page);
+  const activeHistory = await savedProjectHistory(page);
+
+  await page.evaluate(key => {
+    const originalSetItem = Storage.prototype.setItem;
+    (window as typeof window & { restoreHistoryStorage?: () => void }).restoreHistoryStorage = () => {
+      Storage.prototype.setItem = originalSetItem;
+    };
+    Storage.prototype.setItem = function (storageKey, value) {
+      if (this === localStorage && storageKey === key) {
+        throw new DOMException('Test history quota exceeded', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, storageKey, value);
+    };
+  }, PROJECT_HISTORY_KEY);
+
+  await page.getByTestId('input-photo').setInputFiles(await png(page, 'must-not-replace.png', 240, 120));
+  await expect(page.getByTestId('status-toast')).toHaveText(
+    'Could not save a recovery copy of your current sketch. Your project is unchanged.',
+  );
+  expect(await savedProject(page)).toEqual(activeProject);
+  expect(await savedProjectHistory(page)).toEqual(activeHistory);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', activeProject.image);
+
+  await page.evaluate(() => {
+    (window as typeof window & { restoreHistoryStorage?: () => void }).restoreHistoryStorage?.();
+  });
 });
 
 test('superseded image load and error callbacks do not change the active project or feedback', async ({ page }) => {
