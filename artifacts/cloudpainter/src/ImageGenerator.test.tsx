@@ -91,7 +91,16 @@ test('Poe picker offers exactly four models and preview requires explicit use', 
   await page.getByTestId('button-use-generated-image').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect.poll(async () => {
-    const project = await saved(page);
+  const project = (title: string, photoZoom: unknown, photoPan: unknown) => ({
+    image: photo,
+    width: 320,
+    height: 240,
+    layers: [layer],
+    selectedLayerId: layer.id,
+    title,
+    photoZoom,
+    photoPan,
+  });
     return { width: project.width, height: project.height, layers: project.layers.length };
   }).toEqual({ width: 640, height: 320, layers: 1 });
   expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY)).toEqual([before]);
@@ -274,16 +283,16 @@ test('anonymous visitors can draw but must sign in before generation', async ({ 
 
 test('saved sketches can be browsed and restored without signing in', async ({ page }) => {
   const current = {
-    image: null, width: 1200, height: 800, selectedLayerId: 'current-layer', title: 'Current sketch',
-    layers: [{ id: 'current-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+    image: null, width: 1200, height: 800, selectedLayerId: 'quota-current-layer', title: 'Current sketch',
+    layers: [{ id: 'quota-current-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
   };
   const earlier = {
-    image: null, width: 640, height: 480, selectedLayerId: 'earlier-layer', title: 'Earlier sketch',
-    layers: [{ id: 'earlier-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+    image: null, width: 640, height: 480, selectedLayerId: 'quota-earlier-layer', title: 'Earlier sketch',
+    layers: [{ id: 'quota-earlier-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
   };
   const oldest = {
-    image: null, width: 320, height: 240, selectedLayerId: 'oldest-layer', title: 'Oldest sketch',
-    layers: [{ id: 'oldest-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+    image: null, width: 320, height: 240, selectedLayerId: 'quota-oldest-layer', title: 'Oldest sketch',
+    layers: [{ id: 'quota-oldest-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
   };
   const normalizedOldest = { ...oldest, photoZoom: 1, photoPan: { x: 0, y: 0 } };
   await page.addInitScript(({ project, history }) => {
@@ -343,7 +352,9 @@ test('a full history store leaves the current sketch and saved versions intact w
 
 test('saved sketches keep their own photo framing across switches and reloads', async ({ page }) => {
   const photo = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
-  const layer = { id: 'framing-test-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] };
+
+  const activeLayer = { id: 'legacy-active-layer', name: 'Active layer', visible: true, opacity: 1, strokes: [], redo: [] };
+  const layer = { id: 'malformed-framing-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] };
   const activeSketch = {
     image: photo,
     width: 320,
@@ -394,13 +405,34 @@ test('saved sketches keep their own photo framing across switches and reloads', 
   await expect(page.getByTestId('input-photo-zoom')).toHaveValue('225');
   await expect(stageContent).toHaveAttribute('style', /translate3d\(60px, -34px, 0px\) scale\(2\.25\)/);
   await expect.poll(async () => {
-    const project = await saved(page);
-    return { photoZoom: project?.photoZoom, photoPan: project?.photoPan };
-  }).toEqual({ photoZoom: 2.25, photoPan: { x: 60, y: -34 } });
+  const project = (title: string, photoZoom: unknown, photoPan: unknown) => ({
+    image: photo,
+    width: 320,
+    height: 240,
+    layers: [layer],
+    selectedLayerId: layer.id,
+    title,
+    photoZoom,
+    photoPan,
+  });
+    return {
+      title: project?.title,
+      photoZoom: project?.photoZoom,
+      photoPan: project?.photoPan,
+      layerNames: project?.layers.map((layer: { name: string }) => layer.name),
+    };
+  }).toEqual({
+    title: 'Legacy active sketch',
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    layerNames: ['Active layer', 'Layer 2'],
+  });
 
-  await page.getByRole('button', { name: 'Restore saved sketch: Earlier framing' }).click();
-  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
-  await expect(stageContent).toHaveAttribute('style', /translate3d\(-48px, 30px, 0px\) scale\(1\.5\)/);
+  await page.getByRole('button', { name: 'Restore saved sketch: Legacy recovery sketch' }).click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(0px, 0px, 0px\) scale\(1\)/);
+
+  await page.getByTestId('button-add-layer').click();
   await expect.poll(async () => {
     const project = await saved(page);
     return { title: project?.title, photoZoom: project?.photoZoom, photoPan: project?.photoPan };
@@ -419,6 +451,8 @@ test('saved sketches keep their own photo framing across switches and reloads', 
 
 test('malformed saved photo framing is normalized without disabling the photo or canvas', async ({ page }) => {
   const photo = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+
+  const activeLayer = { id: 'legacy-active-layer', name: 'Active layer', visible: true, opacity: 1, strokes: [], redo: [] };
   const layer = { id: 'malformed-framing-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] };
   const project = (title: string, photoZoom: unknown, photoPan: unknown) => ({
     image: photo,
@@ -497,4 +531,78 @@ test('malformed saved photo framing is normalized without disabling the photo or
 
   await page.getByTestId('button-zoom-in').click();
   await expect(page.getByTestId('input-photo-zoom')).toHaveValue('125');
+});
+
+test('legacy sketches open fitted, remain editable, and save current framing fields', async ({ page }) => {
+  const photo = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+  const activeLayer = { id: 'legacy-active-layer', name: 'Active layer', visible: true, opacity: 1, strokes: [], redo: [] };
+  const recoveryLayer = { id: 'legacy-recovery-layer', name: 'Recovery layer', visible: true, opacity: 1, strokes: [], redo: [] };
+  const legacyActive = {
+    image: photo,
+    width: 320,
+    height: 240,
+    layers: [activeLayer],
+    selectedLayerId: activeLayer.id,
+    title: 'Legacy active sketch',
+  };
+  const legacyRecovery = {
+    image: photo,
+    width: 640,
+    height: 480,
+    layers: [recoveryLayer],
+    selectedLayerId: recoveryLayer.id,
+    title: 'Legacy recovery sketch',
+  };
+  await page.addInitScript(({ storeKey, historyKey, active, history }) => {
+    if (sessionStorage.getItem('cloudpainter-legacy-framing-test-seeded')) return;
+    sessionStorage.setItem('cloudpainter-legacy-framing-test-seeded', '1');
+    localStorage.setItem(storeKey, JSON.stringify(active));
+    localStorage.setItem(historyKey, JSON.stringify(history));
+  }, {
+    storeKey: STORE_KEY,
+    historyKey: PROJECT_HISTORY_KEY,
+    active: legacyActive,
+    history: [legacyRecovery],
+  });
+
+  await page.goto('./');
+  const stageContent = page.locator('.stage-content');
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(0px, 0px, 0px\) scale\(1\)/);
+
+  await page.getByTestId('button-add-layer').click();
+  await expect.poll(async () => {
+    const project = await saved(page);
+    return {
+      title: project?.title,
+      photoZoom: project?.photoZoom,
+      photoPan: project?.photoPan,
+      layerNames: project?.layers.map((layer: { name: string }) => layer.name),
+    };
+  }).toEqual({
+    title: 'Legacy active sketch',
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    layerNames: ['Active layer', 'Layer 2'],
+  });
+
+  await page.getByRole('button', { name: 'Restore saved sketch: Legacy recovery sketch' }).click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(0px, 0px, 0px\) scale\(1\)/);
+
+  await page.getByTestId('button-add-layer').click();
+  await expect.poll(async () => {
+    const project = await saved(page);
+    return {
+      title: project?.title,
+      photoZoom: project?.photoZoom,
+      photoPan: project?.photoPan,
+      layerNames: project?.layers.map((layer: { name: string }) => layer.name),
+    };
+  }).toEqual({
+    title: 'Legacy recovery sketch',
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    layerNames: ['Recovery layer', 'Layer 2'],
+  });
 });
