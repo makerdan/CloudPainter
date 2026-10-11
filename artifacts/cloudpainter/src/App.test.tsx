@@ -713,8 +713,14 @@ test('layer moves preserve selection, artwork, properties and history across rel
 });
 
 test.describe('layer rename regression', () => {
-  for (const firstTarget of ['selected', 'unselected'] as const) {
-    test(`switching rename fields from ${firstTarget} layer commits each draft to its own ID and survives reload`, async ({ page }) => {
+  for (const [firstTarget, secondAction] of [
+    ['selected', 'Enter'], ['unselected', 'Enter'],
+    ['selected', 'Escape'], ['unselected', 'Escape'],
+  ] as const) {
+    const outcome = secondAction === 'Escape'
+      ? 'cancels the second draft without undoing the first saved name'
+      : 'commits each draft to its own ID';
+    test(`switching rename fields from ${firstTarget} layer ${outcome} and survives reload`, async ({ page }) => {
       const photo = await png(page, 'rename-switch-reference.png', 480, 320);
       const ids = ['switch-bottom', 'switch-middle', 'switch-top'];
       const before = {
@@ -791,15 +797,20 @@ test.describe('layer rename regression', () => {
       await expect.poll(() => savedProject(page)).toEqual(firstCommitted);
       await assertIntact();
 
-      await secondInput.fill('  Second committed draft  ');
+      await secondInput.fill(secondAction === 'Escape' ? '  Cancelled second draft  ' : '  Second committed draft  ');
       await page.waitForTimeout(650);
       expect(await savedProject(page)).toEqual(firstCommitted);
-      await secondInput.press('Enter');
+      await secondInput.press(secondAction);
       await expect(secondInput).toHaveCount(0);
       const expected = {
         ...firstCommitted,
-        layers: firstCommitted.layers.map(layer => layer.id === secondId ? { ...layer, name: 'Second committed draft' } : layer),
+        layers: firstCommitted.layers.map(layer => layer.id === secondId && secondAction === 'Enter'
+          ? { ...layer, name: 'Second committed draft' }
+          : layer),
       };
+      // Cancellation must not schedule a delayed save of either the discarded
+      // second draft or the stale project from before the first blur commit.
+      if (secondAction === 'Escape') await page.waitForTimeout(650);
       for (const reload of [false, true]) {
         if (reload) await page.reload();
         await expect(page.locator('.rename-input')).toHaveCount(0);
