@@ -145,6 +145,8 @@ type ExportSize = '1' | '2' | 'letter' | 'a4';
 type PaperOrientation = 'match-sketch' | 'portrait' | 'landscape';
 
 type PdfPaperSize = 'letter' | 'a4';
+
+type PdfSafeMargin = '0.25' | '0.5' | '0.75';
 const PRINT_PAPER_PIXELS = {
   letter: { width: 2550, height: 3300 },
   a4: { width: 2480, height: 3508 },
@@ -297,6 +299,7 @@ function createPrintPdf(
   source: HTMLCanvasElement,
   paperSize: PdfPaperSize,
   orientation: PdfOrientation,
+  safeMargin: PdfSafeMargin,
 ): Blob {
   const portraitPage = paperSize === 'letter'
     ? { width: 612, height: 792 }
@@ -304,11 +307,14 @@ function createPrintPdf(
   const page = orientation === 'landscape'
     ? { width: portraitPage.height, height: portraitPage.width }
     : portraitPage;
-  const scale = Math.min(page.width / source.width, page.height / source.height);
+  const margin = PDF_SAFE_MARGIN_POINTS[safeMargin];
+  const printableWidth = page.width - margin * 2;
+  const printableHeight = page.height - margin * 2;
+  const scale = Math.min(printableWidth / source.width, printableHeight / source.height);
   const artworkWidth = source.width * scale;
   const artworkHeight = source.height * scale;
-  const artworkX = (page.width - artworkWidth) / 2;
-  const artworkY = (page.height - artworkHeight) / 2;
+  const artworkX = margin + (printableWidth - artworkWidth) / 2;
+  const artworkY = margin + (printableHeight - artworkHeight) / 2;
 
   const flattened = document.createElement('canvas');
   flattened.width = source.width;
@@ -397,6 +403,7 @@ function Home() {
   const [paperOrientation, setPaperOrientation] = useState<PaperOrientation>('match-sketch');
   const [pdfPaperSize, setPdfPaperSize] = useState<PdfPaperSize>('letter');
   const [pdfOrientation, setPdfOrientation] = useState<PdfOrientation>('portrait');
+  const [pdfSafeMargin, setPdfSafeMargin] = useState<PdfSafeMargin>('0.5');
   const [panMode, setPanMode] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -873,7 +880,7 @@ function Home() {
   const exportPdf = async () => {
     try {
       const { canvas } = await composeProjectCanvas(project, canvasRefs.current, '1');
-      const pdf = createPrintPdf(canvas, pdfPaperSize, pdfOrientation);
+      const pdf = createPrintPdf(canvas, pdfPaperSize, pdfOrientation, pdfSafeMargin);
       const title = project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea';
       const downloadUrl = URL.createObjectURL(pdf);
       const link = document.createElement('a');
@@ -968,7 +975,15 @@ function Home() {
                 <option value="landscape">Landscape</option>
               </select>
             </label>
-            <TooltipButton description="Download the full sketch centered on the selected Letter or A4 PDF page." className="button" onClick={exportPdf} data-testid="button-export-pdf"><FileDown size={14} /> Export PDF</TooltipButton>
+            <label className="export-size-control">
+              <span>Safe margin</span>
+              <select aria-label="PDF print-safe margin" data-testid="select-pdf-margin" value={pdfSafeMargin} onChange={event => setPdfSafeMargin(event.target.value as PdfSafeMargin)}>
+                <option value="0.25">¼ in</option>
+                <option value="0.5">½ in</option>
+                <option value="0.75">¾ in</option>
+              </select>
+            </label>
+            <TooltipButton description="Download the full sketch centered inside the selected print-safe margin on a Letter or A4 page." className="button" onClick={exportPdf} data-testid="button-export-pdf"><FileDown size={14} /> Export PDF</TooltipButton>
           </div>
         </div>
       </header>
@@ -1332,3 +1347,9 @@ function withSavedProject(history: Project[], project: Project): Project[] {
 }
 
 type PdfOrientation = 'portrait' | 'landscape';
+
+const PDF_SAFE_MARGIN_POINTS: Record<PdfSafeMargin, number> = {
+  '0.25': 18,
+  '0.5': 36,
+  '0.75': 54,
+};
