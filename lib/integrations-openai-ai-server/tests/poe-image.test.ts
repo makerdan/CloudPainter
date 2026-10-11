@@ -5,7 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { generatePoeImage, POE_IMAGE_MODELS, PoeImageError } from "../src/poe/images";
-import { assertPoeMediaUrl, isPublicAddress, validatePoeMedia } from "../src/poe/media";
+import { assertPoeMediaUrl, decodePoeMedia, isPublicAddress, validatePoeMedia } from "../src/poe/media";
 
 const png = await sharp({ create: { width: 16, height: 12, channels: 3, background: "#315d4d" } }).png().toBuffer();
 const jpeg = await sharp(png).jpeg().toBuffer();
@@ -30,6 +30,140 @@ function fixture(response: () => Response = () => json(completion), media = { by
     },
   };
   return { deps, requests, downloads };
+}
+
+function webpChunk(kind: string, payload: Buffer): Buffer {
+  const header = Buffer.alloc(8);
+  header.write(kind, 0, "ascii");
+  header.writeUInt32LE(payload.length, 4);
+  return Buffer.concat([header, payload, Buffer.alloc(payload.length % 2)]);
+}
+
+async function animatedWebp(width: number, height: number): Promise<Buffer> {
+  const extended = Buffer.alloc(10);
+  extended[0] = 0x02; // Animation flag; the canvas is one frame high.
+  extended.writeUIntLE(width - 1, 4, 3);
+  extended.writeUIntLE(height - 1, 7, 3);
+  const frames: Buffer[] = [];
+  for (const background of ["#315d4d", "#d14052"]) {
+    const still = await sharp({ create: { width, height, channels: 3, background } }).webp().toBuffer();
+    // Locate the encoder's actual VP8 chunk, not a magic-string occurrence in pixels.
+    let offset = 12;
+    while (offset + 8 <= still.length && still.toString("ascii", offset, offset + 4) !== "VP8 ") {
+      const size = still.readUInt32LE(offset + 4);
+      offset += 8 + size + size % 2;
+    }
+    assert.equal(still.toString("ascii", offset, offset + 4), "VP8 ");
+    const size = still.readUInt32LE(offset + 4);
+    const frame = Buffer.alloc(16);
+    frame.writeUIntLE(width - 1, 6, 3);
+    frame.writeUIntLE(height - 1, 9, 3);
+    frame.writeUIntLE(80, 12, 3); // Frame duration in milliseconds.
+    frame[15] = 0x02; // Replace the frame rather than blend with previous pixels.
+    frames.push(webpChunk("ANMF", Buffer.concat([frame, still.subarray(offset, offset + 8 + size + size % 2)])));
+  }
+  const body = Buffer.concat([Buffer.from("WEBP"), webpChunk("VP8X", extended), webpChunk("ANIM", Buffer.alloc(6)), ...frames]);
+  const riff = Buffer.alloc(8);
+  riff.write("RIFF", 0, "ascii");
+  riff.writeUInt32LE(body.length, 4);
+  return Buffer.concat([riff, body]);
+}
+
+function assertOnePoeRequest(f: ReturnType<typeof fixture>): void {
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.requests[0].url, "https://api.poe.com/v1/chat/completions");
+  assert.equal(JSON.parse(String(f.requests[0].init.body)).model, input.model);
+  assert.deepEqual(f.downloads, [asset]);
+}
+
+function assertUnusableImage(error: unknown): boolean {
+  assert.ok(error instanceof PoeImageError);
+  assert.equal(error.code, "upstream_error");
+  assert.equal(error.status, 502);
+  assert.equal(error.message, "Poe image generation did not complete. No other model or provider was used.");
+  return true;
+}
+
+test("animated WebP decodes every valid frame and retains exact bytes and MIME", { timeout: 10000 }, async () => {
+  const bytes = await animatedWebp(16, 12);
+  const decoded = await sharp(bytes, { animated: true, failOn: "warning" }).raw().toBuffer({ resolveWithObject: true });
+  assert.equal(decoded.info.pages, 2);
+  assert.equal(decoded.info.pageHeight, 12);
+  assert.deepEqual([decoded.info.width, decoded.info.height], [16, 24]);
+  const frameLength = 16 * 12 * decoded.info.channels;
+  assert.equal(decoded.data.length, frameLength * 2);
+  assert.notDeepEqual(decoded.data.subarray(0, frameLength), decoded.data.subarray(frameLength));
+  // Shared header validation must remain synchronous.
+  assert.deepEqual(validatePoeMedia(bytes, "image/webp"), { bytes, mime: "image/webp" });
+  assert.deepEqual(await decodePoeMedia(bytes, "image/webp", new AbortController().signal), { bytes, mime: "image/webp" });
+  const f = fixture(undefined, { bytes, mime: "image/webp" });
+  const result = await generatePoeImage(input, undefined, f.deps);
+  assert.deepEqual(result, { mime: "image/webp", b64_json: bytes.toString("base64") });
+  assert.deepEqual(Buffer.from(result.b64_json, "base64"), bytes);
+  assertOnePoeRequest(f);
+});
+
+test("corruption isolated to a later WebP frame rejects despite usable first-frame pixels", { timeout: 10000 }, async () => {
+  const valid = await animatedWebp(16, 12);
+  const bytes = Buffer.from(valid);
+  const frameOffsets: number[] = [];
+  for (let offset = 12; offset + 8 <= bytes.length;) {
+    if (bytes.toString("ascii", offset, offset + 4) === "ANMF") frameOffsets.push(offset);
+    const size = bytes.readUInt32LE(offset + 4);
+    offset += 8 + size + size % 2;
+  }
+  assert.equal(frameOffsets.length, 2);
+  const secondPixels = frameOffsets[1] + 8 + 16 + 8;
+  assert.equal(bytes.toString("ascii", secondPixels - 8, secondPixels - 4), "VP8 ");
+  // Break only the later entropy stream, leaving RIFF lengths, canvas, frame
+  // dimensions, the complete VP8 header and the first frame untouched.
+  const entropyStart = secondPixels + 10;
+  const entropyEnd = secondPixels + bytes.readUInt32LE(secondPixels - 4);
+  assert.ok(entropyEnd > entropyStart);
+  bytes.fill(0xff, entropyStart, entropyEnd);
+  assert.deepEqual(bytes.subarray(0, entropyStart), valid.subarray(0, entropyStart));
+  assert.deepEqual(bytes.subarray(entropyEnd), valid.subarray(entropyEnd));
+  assert.deepEqual(validatePoeMedia(bytes, "image/webp"), { bytes, mime: "image/webp" });
+  const metadata = await sharp(bytes, { animated: true, failOn: "warning" }).metadata();
+  assert.deepEqual([metadata.pages, metadata.width, metadata.height, metadata.pageHeight], [2, 16, 24, 12]);
+  const firstFrame = await sharp(bytes, { pages: 1, failOn: "warning" }).raw().toBuffer();
+  assert.deepEqual(firstFrame, await sharp(valid, { pages: 1, failOn: "warning" }).raw().toBuffer());
+  assert.ok(firstFrame.length > 0);
+  await assert.rejects(sharp(bytes, { animated: true, failOn: "warning" }).raw().toBuffer());
+  await assert.rejects(decodePoeMedia(bytes, "image/webp", new AbortController().signal));
+  const f = fixture(undefined, { bytes, mime: "image/webp" });
+  await assert.rejects(generatePoeImage(input, undefined, f.deps), assertUnusableImage);
+  assertOnePoeRequest(f);
+});
+
+for (const [height, accepted] of [[2500, true], [2501, false]] as const) {
+  test(`animated WebP aggregate pixels ${accepted ? "at" : "over"} the 20-million limit`, { timeout: 10000 }, async () => {
+    const width = 4000;
+    const bytes = await animatedWebp(width, height);
+    // Each frame and both decoded dimensions are legal. Only the aggregate
+    // pixel count distinguishes the accepted/rejected cases.
+    assert.ok(width * height < 20_000_000);
+    assert.ok(height * 2 < 8192);
+    assert.deepEqual(validatePoeMedia(bytes, "image/webp"), { bytes, mime: "image/webp" });
+    const metadata = await sharp(bytes, { animated: true, limitInputPixels: 24_000_000 }).metadata();
+    assert.deepEqual([metadata.pages, metadata.width, metadata.height, metadata.pageHeight], [2, width, height * 2, height]);
+    assert.equal(metadata.width! * metadata.height!, accepted ? 20_000_000 : 20_008_000);
+    if (!accepted) {
+      // Prove this is a valid animation, not rejection caused by corrupt pixels.
+      const decoded = await sharp(bytes, { animated: true, failOn: "warning", limitInputPixels: 24_000_000 })
+        .raw().toBuffer({ resolveWithObject: true });
+      assert.equal(decoded.data.length, width * height * 2 * decoded.info.channels);
+    }
+    const f = fixture(undefined, { bytes, mime: "image/webp" });
+    if (accepted) {
+      assert.deepEqual(await decodePoeMedia(bytes, "image/webp", new AbortController().signal), { bytes, mime: "image/webp" });
+      assert.deepEqual(await generatePoeImage(input, undefined, f.deps), { mime: "image/webp", b64_json: bytes.toString("base64") });
+    } else {
+      await assert.rejects(decodePoeMedia(bytes, "image/webp", new AbortController().signal), /pixel limit|dimensions/i);
+      await assert.rejects(generatePoeImage(input, undefined, f.deps), assertUnusableImage);
+    }
+    assertOnePoeRequest(f);
+  });
 }
 
 for (const [mime, bytes] of [["image/png", png], ["image/jpeg", jpeg], ["image/webp", webp]] as const) {
