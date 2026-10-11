@@ -6,7 +6,7 @@ import { chromium } from 'playwright-core';
 const url = process.env.CLOUDPAINTER_TEST_URL;
 if (!url || !/^https?:\/\//.test(url)) throw new Error('Set CLOUDPAINTER_TEST_URL to the running preview.');
 
-test('undo stays in editable controls and still works on the drawing surface', { timeout: 60_000 }, async () => {
+test('undo and redo shortcuts stay native in editable text controls and work on the drawing surface', { timeout: 60_000 }, async () => {
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || execFileSync('which', ['chromium'], { encoding: 'utf8' }).trim(),
     args: ['--no-sandbox'],
@@ -36,6 +36,13 @@ test('undo stays in editable controls and still works on the drawing surface', {
     assert.equal(await redo.isDisabled(), true);
 
     await page.evaluate(() => {
+      window.undoShortcutDefaults = [];
+      window.addEventListener('keydown', event => {
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'y') {
+          window.undoShortcutDefaults.push(event.defaultPrevented);
+        }
+      });
+
       const textarea = document.createElement('textarea');
       textarea.dataset.testid = 'undo-test-textarea';
       textarea.setAttribute('aria-label', 'Undo test textarea');
@@ -71,6 +78,9 @@ test('undo stays in editable controls and still works on the drawing surface', {
     assert.deepEqual(await storedHistory(page), { strokes: 1, redo: 0 });
     assert.equal(await undo.isEnabled(), true);
     assert.equal(await redo.isDisabled(), true);
+    await textarea.press('Control+y');
+    assert.equal(await textarea.inputValue(), 'seed edit', 'textarea redo should remain native');
+    assert.deepEqual(await storedHistory(page), { strokes: 1, redo: 0 });
 
     const input = page.getByTestId('undo-test-input');
     await input.focus();
@@ -128,6 +138,12 @@ test('undo stays in editable controls and still works on the drawing surface', {
     assert.deepEqual(await storedHistory(page), { strokes: 1, redo: 0 });
     assert.equal(await undo.isEnabled(), true);
     assert.equal(await redo.isDisabled(), true);
+    await page.keyboard.press('Control+y');
+    assert.equal(await editable.innerText(), 'seed edit', 'contenteditable redo should remain native');
+    assert.deepEqual(await storedHistory(page), { strokes: 1, redo: 0 });
+    await page.keyboard.press('Meta+y');
+    assert.deepEqual(await storedHistory(page), { strokes: 1, redo: 0 }, 'Cmd+Y in editable text must not change drawing history');
+    assert.deepEqual(await page.evaluate(() => window.undoShortcutDefaults), [false, false, false], 'redo shortcuts in editable text must not be prevented');
 
     // The canvas is not normally keyboard-focusable; make it focusable here to
     // send the workspace shortcut with the drawing surface as its event target.
@@ -141,16 +157,28 @@ test('undo stays in editable controls and still works on the drawing surface', {
     assert.equal(await undo.isDisabled(), true);
     assert.equal(await redo.isEnabled(), true);
 
-    await page.keyboard.press('Control+Shift+z');
+    await page.keyboard.press('Control+y');
     await waitForStoredHistory(page, 1, 0);
     assert.equal(await undo.isEnabled(), true);
     assert.equal(await redo.isDisabled(), true);
+
+    await page.keyboard.press('Control+z');
+    await waitForStoredHistory(page, 0, 1);
+    await page.keyboard.press('Control+Shift+z');
+    await waitForStoredHistory(page, 1, 0);
 
     await page.keyboard.press('Meta+z');
     await waitForStoredHistory(page, 0, 1);
     assert.equal(await undo.isDisabled(), true);
     assert.equal(await redo.isEnabled(), true);
 
+    await page.keyboard.press('Meta+y');
+    await waitForStoredHistory(page, 1, 0);
+    assert.equal(await undo.isEnabled(), true);
+    assert.equal(await redo.isDisabled(), true);
+
+    await page.keyboard.press('Meta+z');
+    await waitForStoredHistory(page, 0, 1);
     await page.keyboard.press('Meta+Shift+z');
     await waitForStoredHistory(page, 1, 0);
     assert.equal(await undo.isEnabled(), true);
