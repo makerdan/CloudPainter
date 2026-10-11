@@ -379,14 +379,21 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
   await expect(page.getByTestId('input-photo')).toHaveAttribute('data-picker-clicks', '2');
 });
 
-test('a delayed earlier photo replaces a later photo and erases its drawing without pending feedback', async ({ page }) => {
+test('a delayed photo shows accessible pending feedback and preserves existing replacement behavior', async ({ page }) => {
   const slowPhoto = await png(page, 'slow-first.png', 160, 100);
   const fastPhoto = await png(page, 'fast-second.png', 240, 120);
   await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
-  await page.evaluate(() => {
+  await page.evaluate(targetImage => {
     const prototype = FileReader.prototype;
     const readAsDataURL = prototype.readAsDataURL;
     prototype.readAsDataURL = function (file) {
+      if (file.name === 'unreadable.png') {
+        const reader = this;
+        (window as Window & { releasePhotoReadFailure?: () => void }).releasePhotoReadFailure = () => {
+          reader.onerror?.call(reader, new ProgressEvent('error'));
+        };
+        return;
+      }
       if (file.name !== 'slow-first.png') {
         readAsDataURL.call(this, file);
         return;
@@ -401,17 +408,33 @@ test('a delayed earlier photo replaces a later photo and erases its drawing with
       }, { once: true });
       readAsDataURL.call(reader, file);
     };
-  });
+    const imagePrototype = HTMLImageElement.prototype;
+    const srcDescriptor = Object.getOwnPropertyDescriptor(imagePrototype, 'src');
+    if (!srcDescriptor?.get || !srcDescriptor.set) throw new Error('Image source descriptor is unavailable.');
+    Object.defineProperty(imagePrototype, 'src', {
+      ...srcDescriptor,
+      set(value: string) {
+        if (!this.isConnected && value === targetImage) {
+          (window as Window & { releaseSlowPhotoDecode?: () => void }).releaseSlowPhotoDecode = () => {
+            srcDescriptor.set!.call(this, value);
+          };
+          return;
+        }
+        srcDescriptor.set!.call(this, value);
+      },
+    });
+  }, `data:image/png;base64,${slowPhoto.buffer.toString('base64')}`);
 
   const input = page.getByTestId('input-photo');
   await input.setInputFiles(slowPhoto);
   await expect.poll(() => page.evaluate(
     () => typeof (window as Window & { releaseSlowPhotoRead?: () => void }).releaseSlowPhotoRead,
   )).toBe('function');
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+  await expect(page.getByTestId('status-photo-import')).toHaveText('Loading reference photo…');
+  await expect(page.getByTestId('status-photo-import')).toHaveAttribute('aria-live', 'polite');
   await expect(page.getByTestId('status-toast')).toHaveCount(0);
   await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
-  const statusMessages = await page.getByRole('status').allTextContents();
-  expect(statusMessages.some(message => /reading|loading|importing photo/i.test(message))).toBe(false);
 
   await input.setInputFiles(fastPhoto);
   await expect.poll(async () => {
@@ -419,6 +442,7 @@ test('a delayed earlier photo replaces a later photo and erases its drawing with
     return project && { title: project.title, width: project.width, height: project.height };
   }).toEqual({ title: 'fast-second', width: 240, height: 120 });
   await expect(page.getByTestId('status-toast')).toHaveText('Photo added. Your original stays untouched.');
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
 
   const surface = page.locator('canvas.draw-surface');
   const box = await surface.boundingBox();
@@ -434,6 +458,13 @@ test('a delayed earlier photo replaces a later photo and erases its drawing with
 
   await page.evaluate(() => {
     (window as Window & { releaseSlowPhotoRead?: () => void }).releaseSlowPhotoRead?.();
+  });
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releaseSlowPhotoDecode?: () => void }).releaseSlowPhotoDecode,
+  )).toBe('function');
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+  await page.evaluate(() => {
+    (window as Window & { releaseSlowPhotoDecode?: () => void }).releaseSlowPhotoDecode?.();
   });
   await expect.poll(async () => {
     const project = await savedProject(page);
@@ -455,9 +486,22 @@ test('a delayed earlier photo replaces a later photo and erases its drawing with
     'src', `data:image/png;base64,${slowPhoto.buffer.toString('base64')}`,
   );
   await expect(page.getByTestId('status-toast')).toHaveText('Photo added. Your original stays untouched.');
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
   await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
 
   const slowProject = await savedProject(page);
+  await input.setInputFiles(await png(page, 'unreadable.png', 40, 30));
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releasePhotoReadFailure?: () => void }).releasePhotoReadFailure,
+  )).toBe('function');
+  await page.evaluate(() => {
+    (window as Window & { releasePhotoReadFailure?: () => void }).releasePhotoReadFailure?.();
+  });
+  await expect(page.getByTestId('status-toast')).toHaveText('Could not read that file. Please try again.');
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect.poll(() => savedProject(page)).toEqual(slowProject);
+
   await page.reload();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', slowProject.image);
   await expect.poll(() => savedProject(page)).toEqual(slowProject);

@@ -488,6 +488,7 @@ function Home() {
   const [savedStatus, setSavedStatus] = useState('Saved in this browser');
   const [storageEstimate, setStorageEstimate] = useState<BrowserStorageEstimate | null>(null);
   const [toast, setToast] = useState('');
+  const [photoLoading, setPhotoLoading] = useState(false);
   const [drawingClipboard, setDrawingClipboard] = useState<DrawingClipboard | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -508,6 +509,7 @@ function Home() {
   const [outline, setOutline] = useState<{ image: string; key: string; photo: string; layerId: string } | null>(null);
   const [outlineOpening, setOutlineOpening] = useState(false);
   const outlineOpenId = useRef(0);
+  const photoImportsInProgress = useRef(0);
   const drawingRef = useRef(false);
   const panningRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const touchPointersRef = useRef(new Map<number, Point>());
@@ -838,6 +840,15 @@ function Home() {
       event.target.value = '';
       return;
     }
+    photoImportsInProgress.current += 1;
+    setPhotoLoading(true);
+    let importFinished = false;
+    const finishImport = () => {
+      if (importFinished) return;
+      importFinished = true;
+      photoImportsInProgress.current = Math.max(0, photoImportsInProgress.current - 1);
+      setPhotoLoading(photoImportsInProgress.current > 0);
+    };
     const reader = new FileReader();
     reader.onload = () => {
       const image = new Image();
@@ -853,13 +864,31 @@ function Home() {
           photoZoom: 1, photoPan: { x: 0, y: 0 },
           referencePhotoVisible: true, referencePhotoOpacity: 100,
         }));
+        finishImport();
         announce('Photo added. Your original stays untouched.');
       };
-      image.onerror = () => announce('That photo could not be opened. Try another image.');
-      image.src = String(reader.result);
+      image.onerror = () => {
+        finishImport();
+        announce('That photo could not be opened. Try another image.');
+      };
+      try {
+        image.src = String(reader.result);
+      } catch {
+        finishImport();
+        announce('That photo could not be opened. Try another image.');
+      }
     };
-    reader.onerror = () => announce('Could not read that file. Please try again.');
-    reader.readAsDataURL(file);
+    const handleReadError = () => {
+      finishImport();
+      announce('Could not read that file. Please try again.');
+    };
+    reader.onerror = handleReadError;
+    reader.onabort = handleReadError;
+    try {
+      reader.readAsDataURL(file);
+    } catch {
+      handleReadError();
+    }
     event.target.value = '';
   };
 
@@ -1318,6 +1347,11 @@ function Home() {
               <TooltipButton description="Start a fresh transparent canvas, replacing the current photo and all drawing layers." className="button" onClick={startBlank} data-testid="button-blank"><Plus size={13} /> Blank canvas</TooltipButton>
               <input ref={fileInput} hidden type="file" accept="image/*" onChange={handleFile} data-testid="input-photo" />
             </div>
+            {photoLoading && (
+              <p className="photo-import-status" role="status" aria-live="polite" data-testid="status-photo-import">
+                Loading reference photo…
+              </p>
+            )}
             {project.image && (
               <div className="reference-photo-display" role="group" aria-label="Reference photo display controls">
                 <TooltipButton
