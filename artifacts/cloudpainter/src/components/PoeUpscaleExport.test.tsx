@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PoeUpscaleExport } from "./PoeUpscaleExport";
 
@@ -101,6 +101,69 @@ describe("Poe Assistant upscale export", () => {
     expect(URL.createObjectURL).not.toHaveBeenCalled();
     expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
     expect((screen.getByRole("button", { name: `Review ${scale}× export` }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it.each(["resolve", "reject"] as const)("aborts Stop request and never downloads when the deferred request later %ss", async outcome => {
+    const user = userEvent.setup();
+    type UpscaleResult = { b64_json: string; mime: string; width: number; height: number };
+    let resolveRequest!: (result: UpscaleResult) => void;
+    let rejectRequest!: (error: Error) => void;
+    const deferredRequest = new Promise<UpscaleResult>((resolve, reject) => {
+      resolveRequest = resolve;
+      rejectRequest = reject;
+    });
+    // Deliberately ignore abort in the mock: a late provider result must still be discarded.
+    mocks.upscale.mockReturnValue(deferredRequest);
+    const { composeImage } = renderExport();
+    const selector = screen.getByRole("combobox", { name: "Poe Assistant upscale factor" }) as HTMLSelectElement;
+    const review = screen.getByRole("button", { name: "Review 4× export" }) as HTMLButtonElement;
+    await user.click(review);
+    await user.click(screen.getByRole("button", { name: "Send and upscale" }));
+    await waitFor(() => expect(mocks.upscale).toHaveBeenCalledOnce());
+    const signal = mocks.upscale.mock.calls[0][1].signal as AbortSignal;
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal.aborted).toBe(false);
+    expect(selector.disabled).toBe(true);
+    expect(review.disabled).toBe(true);
+    expect(screen.getByText("Processing…")).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Stop request" }));
+    expect(signal.aborted).toBe(true);
+    expect(selector.disabled).toBe(true);
+    expect(review.disabled).toBe(true);
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+    expect(mocks.configuration.refetch).not.toHaveBeenCalled();
+
+    await act(async () => {
+      if (outcome === "resolve") {
+        resolveRequest({
+          b64_json: Buffer.from(mergedBytes).toString("base64"),
+          mime: "image/png",
+          width: 480,
+          height: 320,
+        });
+      } else {
+        rejectRequest(new DOMException("The request was aborted.", "AbortError"));
+      }
+      await deferredRequest.catch(() => {});
+    });
+    expect(selector.disabled).toBe(false);
+    expect(review.disabled).toBe(false);
+    expect(screen.queryByText("Processing…")).toBeNull();
+    expect(composeImage).toHaveBeenCalledOnce();
+    expect(mocks.upscale).toHaveBeenCalledOnce();
+    expect(mocks.configuration.refetch).toHaveBeenCalledOnce();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("upscale-error")).toBeNull();
+    if (outcome === "reject") {
+      expect(screen.getByTestId("upscale-status").textContent).toBe(
+        "Request stopped. Poe may have charged points if processing had already started; it was not retried.",
+      );
+    } else {
+      expect(screen.getByTestId("upscale-status").textContent).not.toContain("downloaded");
+    }
   });
 
   it("keeps the project unchanged and creates no download after a safe failure", async () => {
