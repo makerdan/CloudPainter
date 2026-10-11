@@ -24,6 +24,8 @@ async function markedPhoto(page: Page, width: number, height: number, name: stri
 for (const photo of [
   { name: 'portrait', width: 400, height: 600 },
   { name: 'near-square', width: 500, height: 480 },
+  { name: 'wide panorama (8:1)', width: 4800, height: 600 },
+  { name: 'very tall portrait (1:8)', width: 600, height: 4800 },
 ]) {
   test(`photo and sketches stay aligned at every pan limit for a ${photo.name} photo`, async ({ page }) => {
     await page.goto('./');
