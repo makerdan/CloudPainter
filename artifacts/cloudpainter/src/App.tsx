@@ -117,12 +117,18 @@ function readProjectHistory(): Project[] {
 
 type ExportSize = '1' | '2' | 'letter' | 'a4';
 
+type PaperOrientation = 'match-sketch' | 'portrait' | 'landscape';
 const PRINT_PAPER_PIXELS = {
   letter: { width: 2550, height: 3300 },
   a4: { width: 2480, height: 3508 },
 } as const;
 
-function getExportLayout(projectWidth: number, projectHeight: number, exportSize: ExportSize) {
+function getExportLayout(
+  projectWidth: number,
+  projectHeight: number,
+  exportSize: ExportSize,
+  paperOrientation: PaperOrientation,
+) {
   if (exportSize === '1' || exportSize === '2') {
     const scale = Number(exportSize);
     return {
@@ -135,7 +141,10 @@ function getExportLayout(projectWidth: number, projectHeight: number, exportSize
   }
 
   const portraitPaper = PRINT_PAPER_PIXELS[exportSize];
-  const paper = projectWidth > projectHeight
+  const orientation = paperOrientation === 'match-sketch'
+    ? projectWidth > projectHeight ? 'landscape' : 'portrait'
+    : paperOrientation;
+  const paper = orientation === 'landscape'
     ? { width: portraitPaper.height, height: portraitPaper.width }
     : portraitPaper;
   const scale = Math.min(paper.width / projectWidth, paper.height / projectHeight);
@@ -171,6 +180,7 @@ function Home() {
   const [photoZoom, setPhotoZoom] = useState(1);
   const [photoPan, setPhotoPan] = useState({ x: 0, y: 0 });
   const [exportSize, setExportSize] = useState<ExportSize>('1');
+  const [paperOrientation, setPaperOrientation] = useState<PaperOrientation>('match-sketch');
   const [panMode, setPanMode] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -543,7 +553,7 @@ function Home() {
   const exportPng = () => {
     const exportFailed = () => announce('Could not create the PNG export. Try again or use a smaller canvas.');
     try {
-      const layout = getExportLayout(project.width, project.height, exportSize);
+      const layout = getExportLayout(project.width, project.height, exportSize, paperOrientation);
       const canvas = document.createElement('canvas');
       canvas.width = layout.width;
       canvas.height = layout.height;
@@ -579,7 +589,7 @@ function Home() {
           }
           const link = document.createElement('a');
           const title = project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea';
-          const resolutionSuffix = exportScale === 1 ? '' : `-${exportScale}x`;
+          const resolutionSuffix = exportSize === '2' ? '-2x' : '';
           link.download = `${title}${resolutionSuffix}.png`;
           link.href = png;
           link.click();
@@ -657,6 +667,16 @@ function Home() {
                 <option value="a4">A4 · 210 × 297 mm</option>
               </select>
             </label>
+            {(exportSize === 'letter' || exportSize === 'a4') && (
+              <label className="export-size-control">
+                <span>Orientation</span>
+                <select aria-label="Paper orientation" data-testid="select-export-orientation" value={paperOrientation} onChange={event => setPaperOrientation(event.target.value as PaperOrientation)}>
+                  <option value="match-sketch">Match sketch</option>
+                  <option value="portrait">Portrait</option>
+                  <option value="landscape">Landscape</option>
+                </select>
+              </label>
+            )}
             <TooltipButton description="Export the reference photo and visible drawing layers as a PNG." className="button button-primary" onClick={exportPng} data-testid="button-export"><Upload size={14} /> Export PNG</TooltipButton>
           </div>
         </div>

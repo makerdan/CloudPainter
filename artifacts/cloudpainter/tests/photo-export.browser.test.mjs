@@ -198,7 +198,7 @@ async function exportAndInspect(page, name, dimensions, expectedDimensions = dim
   await page.getByTestId('button-export').click();
   await page.waitForFunction(() => typeof window.__cloudPainterExport === 'string');
 
-  const exported = await page.evaluate(async () => {
+  const exported = await page.evaluate(async dimensions => {
     const image = new Image();
     image.src = window.__cloudPainterExport;
     await image.decode();
@@ -207,11 +207,17 @@ async function exportAndInspect(page, name, dimensions, expectedDimensions = dim
     canvas.height = image.naturalHeight;
     const context = canvas.getContext('2d');
     context.drawImage(image, 0, 0);
+    const projectRatio = dimensions.width / dimensions.height;
+    const paperRatio = canvas.width / canvas.height;
+    const contentWidthRatio = projectRatio > paperRatio ? 1 : projectRatio / paperRatio;
+    const contentHeightRatio = projectRatio > paperRatio ? paperRatio / projectRatio : 1;
+    const contentLeft = (1 - contentWidthRatio) / 2;
+    const contentTop = (1 - contentHeightRatio) / 2;
     const locations = [
-      [0.1, 0.1],
-      [0.9, 0.1],
-      [0.1, 0.9],
-      [0.9, 0.9],
+      [contentLeft + contentWidthRatio * 0.1, contentTop + contentHeightRatio * 0.1],
+      [contentLeft + contentWidthRatio * 0.9, contentTop + contentHeightRatio * 0.1],
+      [contentLeft + contentWidthRatio * 0.1, contentTop + contentHeightRatio * 0.9],
+      [contentLeft + contentWidthRatio * 0.9, contentTop + contentHeightRatio * 0.9],
       [0.5, 0.5],
     ];
     const pixels = locations.map(([x, y]) => {
@@ -219,9 +225,9 @@ async function exportAndInspect(page, name, dimensions, expectedDimensions = dim
       return [pixel[0], pixel[1], pixel[2]];
     });
     return { width: canvas.width, height: canvas.height, pixels };
-  });
+  }, dimensions);
 
-  assertClose(exported.width / exported.height, expectedDimensions.width / expectedDimensions.height, `${name}: exported PNG ratio`);
+  assert.deepEqual([exported.width, exported.height], [expectedDimensions.width, expectedDimensions.height], `${name}: exported PNG dimensions`);
   assert.deepEqual(exported.pixels, [
     [229, 57, 53],
     [67, 160, 71],
@@ -366,7 +372,7 @@ test('exports only visible sketch layers and preserves their opacity', async () 
   }
 });
 
-test('exports complete sketches on US Letter and A4 paper without changing the project', async () => {
+test('exports complete sketches in portrait and landscape on US Letter and A4 without changing the project', async () => {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   try {
     await page.goto(appUrl);
@@ -378,33 +384,58 @@ test('exports complete sketches on US Letter and A4 paper without changing the p
     const originalState = await captureProjectState(page);
     const select = page.getByTestId('select-export-size');
 
+    const orientationSelect = page.getByTestId('select-export-orientation');
     for (const paper of [
-      { value: 'letter', name: 'US Letter', dimensions: { width: 3300, height: 2550 } },
-      { value: 'a4', name: 'A4', dimensions: { width: 3508, height: 2480 } },
+      { value: 'letter', name: 'US Letter', portrait: { width: 2550, height: 3300 }, landscape: { width: 3300, height: 2550 } },
+      { value: 'a4', name: 'A4', portrait: { width: 2480, height: 3508 }, landscape: { width: 3508, height: 2480 } },
     ]) {
       await select.selectOption(paper.value);
-      await exportAndInspect(page, paper.name, projectDimensions, paper.dimensions);
-      const stateAfterExport = await captureProjectState(page);
-      assert.deepEqual(stateAfterExport.dimensions, originalState.dimensions, `${paper.name}: displayed project dimensions should remain unchanged`);
-      assert.deepEqual(stateAfterExport.stageRatio, originalState.stageRatio, `${paper.name}: canvas shape should remain unchanged`);
-      assert.deepEqual(stateAfterExport.layers, originalState.layers, `${paper.name}: drawing-layer dimensions should remain unchanged`);
-      assert.deepEqual(
-        [stateAfterExport.project.width, stateAfterExport.project.height],
-        [originalState.project.width, originalState.project.height],
-        `${paper.name}: saved project dimensions should remain unchanged`,
-      );
+      if (paper.value === 'letter') {
+        assert.equal(await orientationSelect.inputValue(), 'match-sketch', `${paper.name}: orientation should initially match the sketch`);
+      }
+      for (const orientation of ['portrait', 'landscape']) {
+        await orientationSelect.selectOption(orientation);
+        await exportAndInspect(
+          page,
+          `${orientation} ${paper.name}`,
+          projectDimensions,
+          paper[orientation],
+        );
+      }
     }
+    const stateAfterExport = await captureProjectState(page);
+    assert.deepEqual(stateAfterExport.dimensions, originalState.dimensions, 'displayed project dimensions should remain unchanged');
+    assert.deepEqual(stateAfterExport.stageRatio, originalState.stageRatio, 'canvas shape should remain unchanged');
+    assert.deepEqual(stateAfterExport.layers, originalState.layers, 'drawing-layer dimensions should remain unchanged');
+    assert.deepEqual(
+      [stateAfterExport.project.width, stateAfterExport.project.height],
+      [originalState.project.width, originalState.project.height],
+      'saved project dimensions should remain unchanged',
+    );
 
     const portraitPage = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     try {
       await portraitPage.goto(appUrl);
       const portraitDimensions = await importPhoto(portraitPage, { width: 640, height: 960 }, 'print-paper-portrait.png');
+      const portraitSelect = portraitPage.getByTestId('select-export-size');
+      const portraitOrientation = portraitPage.getByTestId('select-export-orientation');
       for (const paper of [
-        { value: 'letter', name: 'portrait US Letter', dimensions: { width: 2550, height: 3300 } },
-        { value: 'a4', name: 'portrait A4', dimensions: { width: 2480, height: 3508 } },
+        { value: 'letter', name: 'US Letter', portrait: { width: 2550, height: 3300 }, landscape: { width: 3300, height: 2550 } },
+        { value: 'a4', name: 'A4', portrait: { width: 2480, height: 3508 }, landscape: { width: 3508, height: 2480 } },
       ]) {
-        await portraitPage.getByTestId('select-export-size').selectOption(paper.value);
-        await exportAndInspect(portraitPage, paper.name, portraitDimensions, paper.dimensions);
+        await portraitSelect.selectOption(paper.value);
+        if (paper.value === 'letter') {
+          assert.equal(await portraitOrientation.inputValue(), 'match-sketch', `${paper.name}: orientation should initially match the portrait sketch`);
+        }
+        for (const orientation of ['portrait', 'landscape']) {
+          await portraitOrientation.selectOption(orientation);
+          await exportAndInspect(
+            portraitPage,
+            `${orientation} ${paper.name} portrait sketch`,
+            portraitDimensions,
+            paper[orientation],
+          );
+        }
       }
     } finally {
       await portraitPage.close();
@@ -419,15 +450,24 @@ test('keeps PNG size and export controls on screen on narrow phones', async () =
   try {
     await page.goto(appUrl);
     const select = page.getByTestId('select-export-size');
+    await select.selectOption('letter');
+    const orientationSelect = page.getByTestId('select-export-orientation');
     const exportButton = page.getByTestId('button-export');
     await select.waitFor({ state: 'visible' });
+    await orientationSelect.waitFor({ state: 'visible' });
     await exportButton.waitFor({ state: 'visible' });
     for (const width of [402, 320]) {
       await page.setViewportSize({ width, height: 874 });
       const bounds = await exportButton.boundingBox();
+      const orientationBounds = await orientationSelect.boundingBox();
       const pageWidth = await page.evaluate(() => document.documentElement.clientWidth);
       assert.ok(bounds, `${width}px phone: PNG export button should have visible bounds`);
       assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= pageWidth, `${width}px phone: PNG export button should fit within the viewport`);
+      assert.ok(orientationBounds, `${width}px phone: paper orientation control should have visible bounds`);
+      assert.ok(
+        orientationBounds.x >= 0 && orientationBounds.x + orientationBounds.width <= pageWidth,
+        `${width}px phone: paper orientation control should fit within the viewport`,
+      );
       assert.equal(
         await page.evaluate(() => document.documentElement.scrollWidth),
         pageWidth,
