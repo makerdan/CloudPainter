@@ -319,6 +319,58 @@ resolution, real package hook, browser, build, or remote action was performed.
 This is focused local fixture evidence, not Failure Gate activation or a full CI
 pass. Remote activation, passing status, and merge requirements remain unknown.
 
+## PostgreSQL health-command agreement fixtures (2026-10-11)
+
+The existing service agreement guard now reads only the current PostgreSQL
+service's folded `options: >-` block. It requires exactly the existing
+`--health-cmd "pg_isready -U postgres -d cloudpainter_test"` line, with the user
+and database derived from the pinned disposable URL. Missing or changed shapes
+fail closed. This is narrow text agreement, not generic YAML/shell parsing or
+proof that PostgreSQL authenticates those credentials.
+
+The unchanged workflow is the positive control. Seven in-memory fixtures remove
+the command, remove either flag and its value, leave either flag without its
+value, or substitute a mismatched user or database. Each verifies that its
+mutation changed exactly the existing command and left the database step
+unchanged, then requires `ERR_ASSERTION` with the health-command-specific
+message. These fixtures call only the text guard; they never execute
+`pg_isready`, PostgreSQL, or shell stubs.
+
+The owner explicitly authorized one focused offline launch with Failure Gate
+inactive for this task only; no checked tier or project-wide activation is
+claimed. On source baseline `8e0d13a4ce0d6d098734d0145ea1604fba57bfc3` plus the
+health-command test edits, the command
+`node --test --test-timeout=10000 --test-concurrency=1 scripts/ci/api-test-coverage.test.mjs`
+exited **0**, with **53/53 tests passing**, **0 failures**, **0 skipped**, and
+**0 cancelled**, in approximately **0.80 seconds** of supervised execution.
+
+An independent Python monotonic supervisor enforced **60 seconds execution**,
+**10 seconds cleanup/termination verification**, and **64 KiB combined output**,
+with one attempt and no retries. Tests have 10-second limits, existing stubbed
+shell children have 5-second limits with SIGKILL and 64-KiB output caps, and
+there are no test hooks. Only PATH was inherited by Node; no credential,
+database configuration or NODE_OPTIONS was inherited. The owned process group
+was confirmed empty, with no timeout, output overflow or retained process.
+Before/after input hashes matched:
+
+- Test: `3498f3d1388e0d25b817eb027fe76ac71e468aeea076a04e8254077e25f94ae0`.
+- Workflow: `bc476645a9fe73f5f72eef28f76b58deab6e9db3d799873fa2803b80e257f2ab`.
+
+Supervisor source, captured output and raw result/hash records are retained in
+ignored `generated-artifacts/ci-health-command/` as `supervise.py`, `output.tap`
+and `result.json`. This directory is local generated evidence, not a committed
+or remotely verified artifact; the result and snapshot identity above are the
+durable handoff.
+
+**CI coverage decision:** extend the existing guard, directly invoked by
+`validation` on pull requests and `main` pushes. No duplicate command or new
+workflow is needed. Workflow settings, service options, package commands,
+permissions and action pins remain unchanged. No database was started or
+connected to, no real package suite, provider, browser or build was launched,
+and no remote Actions operation occurred. This is focused local fixture
+evidence, not a full CI pass or Failure Gate activation. Remote activation,
+passing status and required-check policy remain **unknown**.
+
 ## Event scopes and security
 
 - Events: `pull_request` and `push` limited to `main`.

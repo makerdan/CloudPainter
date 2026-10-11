@@ -138,6 +138,11 @@ function assertDisposableService(source) {
   const ports = service.match(/^        ports:\n((?:          [^\n]*\n)+)/m)?.[1];
   assert.equal(ports, `          - ${target.port}:5432\n`,
     'PostgreSQL service ports must map the disposable URL port to PostgreSQL port 5432');
+  const options = service.match(/^        options: >-\n((?:          [^\n]*\n)+)/m)?.[1];
+  const healthCommands = options?.split('\n').filter(line => line.trimStart().startsWith('--health-cmd'));
+  assert.deepEqual(healthCommands, [
+    `          --health-cmd "pg_isready -U ${target.username} -d ${target.pathname.slice(1)}"`,
+  ], 'PostgreSQL health command must use pg_isready with the disposable URL user and database');
 }
 
 function databaseScript(source) {
@@ -222,6 +227,31 @@ test('the executable database stage selects all three API suites', { timeout: 10
 test('the unchanged PostgreSQL service agrees with the disposable URL as text', { timeout: 10000 }, () => {
   assertDisposableService(workflow);
 });
+
+for (const [label, replacement] of [
+  ['missing command', ''],
+  ['missing user flag and value', '          --health-cmd "pg_isready -d cloudpainter_test"\n'],
+  ['missing user value', '          --health-cmd "pg_isready -U -d cloudpainter_test"\n'],
+  ['mismatched user', '          --health-cmd "pg_isready -U fixture_user -d cloudpainter_test"\n'],
+  ['missing database flag and value', '          --health-cmd "pg_isready -U postgres"\n'],
+  ['missing database value', '          --health-cmd "pg_isready -U postgres -d"\n'],
+  ['mismatched database', '          --health-cmd "pg_isready -U postgres -d fixture_database"\n'],
+]) {
+  test(`PostgreSQL health ${label} is rejected by its intended assertion`, { timeout: 10000 }, () => {
+    const original = '          --health-cmd "pg_isready -U postgres -d cloudpainter_test"\n';
+    assert.equal(workflow.split(original).length, 2,
+      'Health fixture must target exactly one existing command');
+    const mutated = workflow.replace(original, replacement);
+    assert.notEqual(mutated, workflow, 'Health fixture must change the workflow text');
+    assert.equal(stepBody(mutated, databaseStep), stepBody(workflow, databaseStep),
+      'Health fixture must leave the database step unchanged');
+    // Text parsing only: never spawn pg_isready, PostgreSQL or shell stubs.
+    assert.throws(() => databaseScript(mutated), {
+      code: 'ERR_ASSERTION',
+      message: /^PostgreSQL health command must use pg_isready with the disposable URL user and database/,
+    });
+  });
+}
 
 for (const [label, original, replacement, expected] of [
   ['missing service', '      postgres:\n', '      removed-postgres:\n',
