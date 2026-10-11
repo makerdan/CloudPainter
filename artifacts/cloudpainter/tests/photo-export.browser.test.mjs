@@ -189,7 +189,7 @@ async function captureProjectState(page) {
   });
 }
 
-async function exportAndInspect(page, name, dimensions, expectedDimensions = dimensions) {
+async function exportAndInspect(page, name, dimensions, expectedDimensions = dimensions, expectedPaperSizeMm) {
   await page.evaluate(() => {
     window.__cloudPainterExport = null;
     HTMLAnchorElement.prototype.click = function capturePngDownload() {
@@ -225,7 +225,26 @@ async function exportAndInspect(page, name, dimensions, expectedDimensions = dim
       const pixel = context.getImageData(Math.floor(canvas.width * x), Math.floor(canvas.height * y), 1, 1).data;
       return [pixel[0], pixel[1], pixel[2]];
     });
-    return { width: canvas.width, height: canvas.height, pixels };
+    const pngBytes = Uint8Array.from(atob(window.__cloudPainterExport.slice('data:image/png;base64,'.length)), character => character.charCodeAt(0));
+    const readUint32 = offset => pngBytes[offset] * 0x1000000
+      + (pngBytes[offset + 1] << 16)
+      + (pngBytes[offset + 2] << 8)
+      + pngBytes[offset + 3];
+    let physicalResolution = null;
+    for (let offset = 8; offset + 12 <= pngBytes.length;) {
+      const length = readUint32(offset);
+      const type = String.fromCharCode(...pngBytes.subarray(offset + 4, offset + 8));
+      if (type === 'pHYs') {
+        physicalResolution = {
+          pixelsPerMeterX: readUint32(offset + 8),
+          pixelsPerMeterY: readUint32(offset + 12),
+          unit: pngBytes[offset + 16],
+        };
+        break;
+      }
+      offset += length + 12;
+    }
+    return { width: canvas.width, height: canvas.height, pixels, physicalResolution };
   }, dimensions);
 
   assert.deepEqual([exported.width, exported.height], [expectedDimensions.width, expectedDimensions.height], `${name}: exported PNG dimensions`);
@@ -236,6 +255,19 @@ async function exportAndInspect(page, name, dimensions, expectedDimensions = dim
     [253, 216, 53],
     [171, 71, 188],
   ], `${name}: export should retain all four photo corners and its center without cropping`);
+  if (expectedPaperSizeMm) {
+    assert.deepEqual(exported.physicalResolution, {
+      pixelsPerMeterX: 11_811,
+      pixelsPerMeterY: 11_811,
+      unit: 1,
+    }, `${name}: PNG should encode 300-dpi print resolution in its pHYs chunk`);
+    const paperSizeMm = [
+      exported.width / exported.physicalResolution.pixelsPerMeterX * 1000,
+      exported.height / exported.physicalResolution.pixelsPerMeterY * 1000,
+    ];
+    assert.ok(Math.abs(paperSizeMm[0] - expectedPaperSizeMm.width) < 0.03, `${name}: expected printed width ${expectedPaperSizeMm.width} mm, received ${paperSizeMm[0]} mm`);
+    assert.ok(Math.abs(paperSizeMm[1] - expectedPaperSizeMm.height) < 0.03, `${name}: expected printed height ${expectedPaperSizeMm.height} mm, received ${paperSizeMm[1]} mm`);
+  }
 }
 
 async function drawStroke(page, { startX, endX, y }) {
@@ -387,8 +419,8 @@ test('exports complete sketches in portrait and landscape on US Letter and A4 wi
 
     const orientationSelect = page.getByTestId('select-export-orientation');
     for (const paper of [
-      { value: 'letter', name: 'US Letter', portrait: { width: 2550, height: 3300 }, landscape: { width: 3300, height: 2550 } },
-      { value: 'a4', name: 'A4', portrait: { width: 2480, height: 3508 }, landscape: { width: 3508, height: 2480 } },
+      { value: 'letter', name: 'US Letter', portrait: { width: 2550, height: 3300 }, landscape: { width: 3300, height: 2550 }, paperPortraitMm: { width: 215.9, height: 279.4 } },
+      { value: 'a4', name: 'A4', portrait: { width: 2480, height: 3508 }, landscape: { width: 3508, height: 2480 }, paperPortraitMm: { width: 210, height: 297 } },
     ]) {
       await select.selectOption(paper.value);
       if (paper.value === 'letter') {
@@ -401,6 +433,9 @@ test('exports complete sketches in portrait and landscape on US Letter and A4 wi
           `${orientation} ${paper.name}`,
           projectDimensions,
           paper[orientation],
+          orientation === 'portrait'
+            ? paper.paperPortraitMm
+            : { width: paper.paperPortraitMm.height, height: paper.paperPortraitMm.width },
         );
       }
     }
@@ -421,8 +456,8 @@ test('exports complete sketches in portrait and landscape on US Letter and A4 wi
       const portraitSelect = portraitPage.getByTestId('select-export-size');
       const portraitOrientation = portraitPage.getByTestId('select-export-orientation');
       for (const paper of [
-        { value: 'letter', name: 'US Letter', portrait: { width: 2550, height: 3300 }, landscape: { width: 3300, height: 2550 } },
-        { value: 'a4', name: 'A4', portrait: { width: 2480, height: 3508 }, landscape: { width: 3508, height: 2480 } },
+        { value: 'letter', name: 'US Letter', portrait: { width: 2550, height: 3300 }, landscape: { width: 3300, height: 2550 }, paperPortraitMm: { width: 215.9, height: 279.4 } },
+        { value: 'a4', name: 'A4', portrait: { width: 2480, height: 3508 }, landscape: { width: 3508, height: 2480 }, paperPortraitMm: { width: 210, height: 297 } },
       ]) {
         await portraitSelect.selectOption(paper.value);
         if (paper.value === 'letter') {
@@ -435,6 +470,9 @@ test('exports complete sketches in portrait and landscape on US Letter and A4 wi
             `${orientation} ${paper.name} portrait sketch`,
             portraitDimensions,
             paper[orientation],
+            orientation === 'portrait'
+              ? paper.paperPortraitMm
+              : { width: paper.paperPortraitMm.height, height: paper.paperPortraitMm.width },
           );
         }
       }

@@ -144,6 +144,72 @@ const PRINT_PAPER_PIXELS = {
   letter: { width: 2550, height: 3300 },
   a4: { width: 2480, height: 3508 },
 } as const;
+const PRINT_PIXELS_PER_METER = 11_811;
+
+function setPngResolution(dataUrl: string, pixelsPerMeter: number): string {
+  const prefix = 'data:image/png;base64,';
+  if (!dataUrl.startsWith(prefix)) throw new Error('Could not create the PNG export. Try again or use a smaller canvas.');
+
+  const source = Uint8Array.from(atob(dataUrl.slice(prefix.length)), character => character.charCodeAt(0));
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (source.length < 33 || signature.some((byte, index) => source[index] !== byte)) {
+    throw new Error('Could not create the PNG export. Try again or use a smaller canvas.');
+  }
+
+  const readUint32 = (bytes: Uint8Array, offset: number) =>
+    bytes[offset] * 0x1000000 + (bytes[offset + 1] << 16) + (bytes[offset + 2] << 8) + bytes[offset + 3];
+  const writeUint32 = (bytes: Uint8Array, offset: number, value: number) => {
+    bytes[offset] = value >>> 24;
+    bytes[offset + 1] = value >>> 16;
+    bytes[offset + 2] = value >>> 8;
+    bytes[offset + 3] = value;
+  };
+  let ihdrEnd = 0;
+  const retainedChunks: Uint8Array[] = [];
+  for (let offset = signature.length; offset + 12 <= source.length;) {
+    const length = readUint32(source, offset);
+    const end = offset + 12 + length;
+    if (end > source.length) throw new Error('Could not create the PNG export. Try again or use a smaller canvas.');
+    const type = String.fromCharCode(...source.subarray(offset + 4, offset + 8));
+    if (type === 'IHDR') {
+      if (offset !== signature.length || length !== 13) throw new Error('Could not create the PNG export. Try again or use a smaller canvas.');
+      ihdrEnd = end;
+    } else if (type !== 'pHYs') {
+      retainedChunks.push(source.subarray(offset, end));
+    }
+    offset = end;
+    if (type === 'IEND') break;
+  }
+  if (!ihdrEnd) throw new Error('Could not create the PNG export. Try again or use a smaller canvas.');
+
+  const physicalResolutionChunk = new Uint8Array(21);
+  writeUint32(physicalResolutionChunk, 0, 9);
+  physicalResolutionChunk.set([112, 72, 89, 115], 4); // pHYs
+  writeUint32(physicalResolutionChunk, 8, pixelsPerMeter);
+  writeUint32(physicalResolutionChunk, 12, pixelsPerMeter);
+  physicalResolutionChunk[16] = 1; // Pixels per meter
+  let crc = 0xffffffff;
+  for (let index = 4; index < 17; index += 1) {
+    crc ^= physicalResolutionChunk[index];
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  writeUint32(physicalResolutionChunk, 17, (crc ^ 0xffffffff) >>> 0);
+
+  const remainingLength = retainedChunks.reduce((total, chunk) => total + chunk.length, 0);
+  const output = new Uint8Array(ihdrEnd + physicalResolutionChunk.length + remainingLength);
+  output.set(source.subarray(0, ihdrEnd));
+  output.set(physicalResolutionChunk, ihdrEnd);
+  let outputOffset = ihdrEnd + physicalResolutionChunk.length;
+  for (const chunk of retainedChunks) {
+    output.set(chunk, outputOffset);
+    outputOffset += chunk.length;
+  }
+  let binary = '';
+  for (let offset = 0; offset < output.length; offset += 0x8000) {
+    binary += String.fromCharCode(...output.subarray(offset, offset + 0x8000));
+  }
+  return `${prefix}${btoa(binary)}`;
+}
 
 function getExportLayout(
   projectWidth: number,
@@ -616,7 +682,10 @@ function Home() {
   const exportPng = async () => {
     try {
       const { canvas } = await composeProjectCanvas(project, canvasRefs.current, exportSize, paperOrientation);
-      const png = canvas.toDataURL('image/png');
+      const encodedPng = canvas.toDataURL('image/png');
+      const png = exportSize === 'letter' || exportSize === 'a4'
+        ? setPngResolution(encodedPng, PRINT_PIXELS_PER_METER)
+        : encodedPng;
       const pngDataUrlPrefix = 'data:image/png;base64,';
       if (!png.startsWith(pngDataUrlPrefix) || png.length === pngDataUrlPrefix.length) {
         announce('Could not create the PNG export. Try again or use a smaller canvas.');
