@@ -75,6 +75,24 @@ async function addSyntheticStroke(page: Page) {
   await expect(page.getByTestId('button-undo')).toBeEnabled();
 }
 
+async function drawNormalizedLine(page: Page, start: { x: number; y: number }, end: { x: number; y: number }) {
+  const bounds = await page.locator('canvas.draw-surface').boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.mouse.move(bounds!.x + bounds!.width * start.x, bounds!.y + bounds!.height * start.y);
+  await page.mouse.down();
+  await page.mouse.move(bounds!.x + bounds!.width * end.x, bounds!.y + bounds!.height * end.y, { steps: 8 });
+  await page.mouse.up();
+}
+
+async function normalizedDrawingPixel(page: Page, point: { x: number; y: number }) {
+  return page.locator('canvas.draw-surface').evaluate((canvas, point) => {
+    const surface = canvas as HTMLCanvasElement;
+    const x = Math.round(point.x * (surface.width - 1));
+    const y = Math.round(point.y * (surface.height - 1));
+    return Array.from(surface.getContext('2d')!.getImageData(x, y, 1, 1).data);
+  }, point);
+}
+
 async function png(page: Page, name: string, width: number, height: number, color = '#87a6c0') {
   const data = await page.evaluate(({ width, height, color }) => {
     const canvas = document.createElement('canvas');
@@ -2335,6 +2353,175 @@ test(`undo and redo preserve ${referencePhotoVisible ? 'visible' : 'hidden'} ref
   await assertCurrentProject(settingsProject);
 });
 }
+
+test('undo restores an erased mark and redo removes it without changing the zoomed photo view', async ({ page }) => {
+  const photo = await png(page, 'eraser-history.png', 600, 400);
+  await page.getByTestId('input-photo').setInputFiles(photo);
+  const preview = page.getByTestId('img-reference');
+  await expect(preview).toBeVisible();
+  const photoSource = await preview.getAttribute('src');
+
+  await drawNormalizedLine(page, { x: 0.28, y: 0.5 }, { x: 0.72, y: 0.5 });
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  const beforeErase = await savedProject(page);
+  expect(beforeErase.layers[0].redo).toEqual([]);
+  const mark = beforeErase.layers[0].strokes[0];
+  const markPixel = await normalizedDrawingPixel(page, { x: 0.5, y: 0.5 });
+  const preservedPixel = await normalizedDrawingPixel(page, { x: 0.34, y: 0.5 });
+  expect(markPixel[3]).toBeGreaterThan(0);
+  expect(preservedPixel[3]).toBeGreaterThan(0);
+
+  await page.getByTestId('button-tool-eraser').click();
+  await expect(page.getByTestId('button-tool-eraser')).toHaveAttribute('aria-pressed', 'true');
+  await drawNormalizedLine(page, { x: 0.5, y: 0.34 }, { x: 0.5, y: 0.66 });
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(2);
+  const erasedProject = await savedProject(page);
+  const eraserStroke = erasedProject.layers[0].strokes[1];
+  expect(eraserStroke.tool).toBe('eraser');
+  expect(erasedProject).toEqual({
+    ...beforeErase,
+    layers: beforeErase.layers.map((layer: unknown, index: number) => index === 0
+      ? { ...beforeErase.layers[0], strokes: [mark, eraserStroke], redo: [] }
+      : layer),
+  });
+  await expect.poll(() => normalizedDrawingPixel(page, { x: 0.5, y: 0.5 }).then(pixel => pixel[3])).toBe(0);
+  expect(await normalizedDrawingPixel(page, { x: 0.34, y: 0.5 })).toEqual(preservedPixel);
+
+  await zoomAndPan(page);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return { photoZoom: project?.photoZoom, photoPan: project?.photoPan };
+  }).toEqual({ photoZoom: 1.5, photoPan: { x: 42, y: -26 } });
+  const transformedProject = await savedProject(page);
+  expect(transformedProject.layers[0].strokes).toEqual([mark, eraserStroke]);
+  await page.getByTestId('button-pan-mode').click();
+  const viewBefore = await photoView(page);
+  const renderedPhoto = page.locator('.base-photo');
+  const photoBounds = await renderedPhoto.boundingBox();
+  expect(viewBefore.content!.width / viewBefore.stage!.width).toBeCloseTo(1.5, 2);
+
+  const assertPhotoViewUnchanged = async () => {
+    await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
+    await expect(page.getByTestId('button-pan-mode')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('button-reset-photo-view')).toBeEnabled();
+    await expect(preview).toHaveAttribute('src', photoSource!);
+    await expect(renderedPhoto).toHaveAttribute('src', photoSource!);
+    expect(await photoView(page)).toEqual(viewBefore);
+    expect(await renderedPhoto.boundingBox()).toEqual(photoBounds);
+  };
+
+  const afterUndo = {
+    ...transformedProject,
+    layers: transformedProject.layers.map((layer: unknown, index: number) => index === 0
+      ? { ...transformedProject.layers[0], strokes: [mark], redo: [eraserStroke] }
+      : layer),
+  };
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+  await page.getByTestId('button-undo').click();
+  await expect.poll(() => savedProject(page)).toEqual(afterUndo);
+  await expect(page.getByTestId('button-redo')).toBeEnabled();
+  await expect.poll(() => normalizedDrawingPixel(page, { x: 0.5, y: 0.5 }).then(pixel => pixel[3])).toBeGreaterThan(0);
+  expect(await normalizedDrawingPixel(page, { x: 0.34, y: 0.5 })).toEqual(preservedPixel);
+  await assertPhotoViewUnchanged();
+
+  await page.getByTestId('button-redo').click();
+  await expect.poll(() => savedProject(page)).toEqual(transformedProject);
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+  await expect.poll(() => normalizedDrawingPixel(page, { x: 0.5, y: 0.5 }).then(pixel => pixel[3])).toBe(0);
+  expect(await normalizedDrawingPixel(page, { x: 0.34, y: 0.5 })).toEqual(preservedPixel);
+  await assertPhotoViewUnchanged();
+});
+
+test('drawing after multiple undos discards the old redo branch and keeps the photo view', async ({ page }) => {
+  const photo = await png(page, 'redo-branch.png', 600, 400);
+  await page.getByTestId('input-photo').setInputFiles(photo);
+  const preview = page.getByTestId('img-reference');
+  await expect(preview).toBeVisible();
+  const photoSource = await preview.getAttribute('src');
+  const paths = [
+    { start: { x: 0.2, y: 0.25 }, end: { x: 0.4, y: 0.25 } },
+    { start: { x: 0.2, y: 0.5 }, end: { x: 0.4, y: 0.5 } },
+    { start: { x: 0.2, y: 0.75 }, end: { x: 0.4, y: 0.75 } },
+  ];
+  for (let index = 0; index < paths.length; index += 1) {
+    await drawNormalizedLine(page, paths[index].start, paths[index].end);
+    await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(index + 1);
+  }
+  const originalProject = await savedProject(page);
+  const [firstStroke, secondStroke, abandonedStroke] = originalProject.layers[0].strokes;
+  expect(originalProject.layers[0].redo).toEqual([]);
+  for (const [index, stroke] of originalProject.layers[0].strokes.entries()) {
+    expect(stroke.points[0].x).toBeCloseTo(paths[index].start.x, 2);
+    expect(stroke.points[0].y).toBeCloseTo(paths[index].start.y, 2);
+    expect(stroke.points.at(-1)!.x).toBeCloseTo(paths[index].end.x, 2);
+    expect(stroke.points.at(-1)!.y).toBeCloseTo(paths[index].end.y, 2);
+  }
+
+  await zoomAndPan(page);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return { photoZoom: project?.photoZoom, photoPan: project?.photoPan };
+  }).toEqual({ photoZoom: 1.5, photoPan: { x: 42, y: -26 } });
+  await page.getByTestId('button-pan-mode').click();
+  const viewBefore = await photoView(page);
+  const renderedPhoto = page.locator('.base-photo');
+  const photoBounds = await renderedPhoto.boundingBox();
+  expect(viewBefore.content!.width / viewBefore.stage!.width).toBeCloseTo(1.5, 2);
+  const transformedProject = await savedProject(page);
+  expect(transformedProject.layers[0].strokes).toEqual([firstStroke, secondStroke, abandonedStroke]);
+
+  const assertPhotoViewUnchanged = async () => {
+    await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
+    await expect(page.getByTestId('button-pan-mode')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('button-reset-photo-view')).toBeEnabled();
+    await expect(preview).toHaveAttribute('src', photoSource!);
+    await expect(renderedPhoto).toHaveAttribute('src', photoSource!);
+    expect(await photoView(page)).toEqual(viewBefore);
+    expect(await renderedPhoto.boundingBox()).toEqual(photoBounds);
+  };
+
+  await page.getByTestId('button-undo').click();
+  const afterFirstUndo = {
+    ...transformedProject,
+    layers: transformedProject.layers.map((layer: unknown, index: number) => index === 0
+      ? { ...transformedProject.layers[0], strokes: [firstStroke, secondStroke], redo: [abandonedStroke] }
+      : layer),
+  };
+  await expect.poll(() => savedProject(page)).toEqual(afterFirstUndo);
+
+  await page.getByTestId('button-undo').click();
+  const afterSecondUndo = {
+    ...transformedProject,
+    layers: transformedProject.layers.map((layer: unknown, index: number) => index === 0
+      ? { ...transformedProject.layers[0], strokes: [firstStroke], redo: [abandonedStroke, secondStroke] }
+      : layer),
+  };
+  await expect.poll(() => savedProject(page)).toEqual(afterSecondUndo);
+  expect((await normalizedDrawingPixel(page, { x: 0.3, y: 0.25 }))[3]).toBeGreaterThan(0);
+  expect((await normalizedDrawingPixel(page, { x: 0.3, y: 0.5 }))[3]).toBe(0);
+  expect((await normalizedDrawingPixel(page, { x: 0.3, y: 0.75 }))[3]).toBe(0);
+
+  await drawNormalizedLine(page, { x: 0.62, y: 0.5 }, { x: 0.72, y: 0.5 });
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(2);
+  const branchedProject = await savedProject(page);
+  const replacementStroke = branchedProject.layers[0].strokes[1];
+  const expectedBranch = {
+    ...afterSecondUndo,
+    layers: afterSecondUndo.layers.map((layer: unknown, index: number) => index === 0
+      ? { ...afterSecondUndo.layers[0], strokes: [firstStroke, replacementStroke], redo: [] }
+      : layer),
+  };
+  expect(branchedProject).toEqual(expectedBranch);
+  expect(replacementStroke.points[0].x).toBeCloseTo(0.62, 2);
+  expect(replacementStroke.points.at(-1)!.x).toBeCloseTo(0.72, 2);
+  expect(replacementStroke.points[0].y).toBeCloseTo(0.5, 2);
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+  expect((await normalizedDrawingPixel(page, { x: 0.3, y: 0.25 }))[3]).toBeGreaterThan(0);
+  expect((await normalizedDrawingPixel(page, { x: 0.3, y: 0.5 }))[3]).toBe(0);
+  expect((await normalizedDrawingPixel(page, { x: 0.3, y: 0.75 }))[3]).toBe(0);
+  expect((await normalizedDrawingPixel(page, { x: 0.7, y: 0.5 }))[3]).toBeGreaterThan(0);
+  await assertPhotoViewUnchanged();
+});
 
 test('reference photo display defaults, legacy projects, replacements, and saved-sketch restoration', async ({ page }) => {
   const original = await png(page, 'photo-display-legacy.png', 600, 400);
