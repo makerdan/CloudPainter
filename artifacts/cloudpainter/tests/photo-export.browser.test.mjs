@@ -300,6 +300,8 @@ test('exports only visible sketch layers and preserves their opacity', async () 
     await drawStroke(page, { startX: 0.65, endX: 0.85, y: 0.75 });
     await waitForStrokeCount(page, 2, 1);
 
+    assert.equal(await page.getByTestId('select-export-size').inputValue(), '1', 'original size should be the default export size');
+    const originalState = await captureProjectState(page);
     const exported = await inspectExportedPixels(page, [
       [0.25, 0.25],
       [0.5, 0.5],
@@ -314,6 +316,51 @@ test('exports only visible sketch layers and preserves their opacity', async () 
       `visible translucent layer should retain its stroke color; received ${translucentColor}`,
     );
     assert.ok(Math.abs(exported.pixels[2][3] - 102) <= 1, `40% layer opacity should export at about 40% alpha; received ${exported.pixels[2][3]}`);
+
+    await page.getByTestId('select-export-size').selectOption('2');
+    const highResolution = await inspectExportedPixels(page, [
+      [0.25, 0.25],
+      [0.5, 0.5],
+      [0.75, 0.75],
+    ]);
+    assert.deepEqual([highResolution.width, highResolution.height], [2400, 1600], '2× export should double the PNG dimensions');
+    assert.deepEqual(highResolution.pixels[0], [49, 93, 77, 255], '2× export should retain fully opaque visible strokes');
+    assert.deepEqual(highResolution.pixels[1], [0, 0, 0, 0], '2× export should keep hidden layers transparent');
+    assert.ok(Math.abs(highResolution.pixels[2][3] - 102) <= 1, '2× export should preserve visible layer opacity');
+    const exportedState = await captureProjectState(page);
+    assert.deepEqual(exportedState.dimensions, originalState.dimensions, 'export size should not change the displayed project dimensions');
+    assert.deepEqual(exportedState.stageRatio, originalState.stageRatio, 'export size should not change the canvas shape');
+    assert.deepEqual(exportedState.layers, originalState.layers, 'export size should not resize drawing layers');
+    assert.deepEqual(
+      [exportedState.project.width, exportedState.project.height],
+      [originalState.project.width, originalState.project.height],
+      'export size should not change the saved project dimensions',
+    );
+  } finally {
+    await page.close();
+  }
+});
+
+test('keeps PNG size and export controls on screen on narrow phones', async () => {
+  const page = await browser.newPage({ viewport: { width: 402, height: 874 } });
+  try {
+    await page.goto(appUrl);
+    const select = page.getByTestId('select-export-size');
+    const exportButton = page.getByTestId('button-export');
+    await select.waitFor({ state: 'visible' });
+    await exportButton.waitFor({ state: 'visible' });
+    for (const width of [402, 320]) {
+      await page.setViewportSize({ width, height: 874 });
+      const bounds = await exportButton.boundingBox();
+      const pageWidth = await page.evaluate(() => document.documentElement.clientWidth);
+      assert.ok(bounds, `${width}px phone: PNG export button should have visible bounds`);
+      assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= pageWidth, `${width}px phone: PNG export button should fit within the viewport`);
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+        pageWidth,
+        `${width}px phone: the page should not scroll horizontally`,
+      );
+    }
   } finally {
     await page.close();
   }

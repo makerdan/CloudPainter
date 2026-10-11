@@ -117,6 +117,7 @@ function Home() {
   const [renameValue, setRenameValue] = useState('');
   const [photoZoom, setPhotoZoom] = useState(1);
   const [photoPan, setPhotoPan] = useState({ x: 0, y: 0 });
+  const [exportScale, setExportScale] = useState(1);
   const [panMode, setPanMode] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -489,13 +490,14 @@ function Home() {
     const exportFailed = () => announce('Could not create the PNG export. Try again or use a smaller canvas.');
     try {
       const canvas = document.createElement('canvas');
-      canvas.width = project.width;
-      canvas.height = project.height;
+      canvas.width = project.width * exportScale;
+      canvas.height = project.height * exportScale;
       const context = canvas.getContext('2d');
       if (!context) {
         exportFailed();
         return;
       }
+      context.setTransform(exportScale, 0, 0, exportScale, 0, 0);
       const finish = () => {
         try {
           project.layers.forEach(layer => {
@@ -581,6 +583,13 @@ function Home() {
           <span className="save-state" data-testid="status-save">{savedStatus}</span>
           <div className="top-actions">
               <ActionTooltip description="View five CloudPainter logo design directions."><Link href="/logo-options" className="button button-quiet logo-options-link" data-testid="link-logo-options">Logo directions</Link></ActionTooltip>
+            <label className="export-size-control">
+              <span>PNG size</span>
+              <select aria-label="PNG export size" data-testid="select-export-size" value={exportScale} onChange={event => setExportScale(Number(event.target.value))}>
+                <option value={1}>Original size</option>
+                <option value={2}>2× high resolution</option>
+              </select>
+            </label>
             <TooltipButton description="Export the reference photo and visible drawing layers as a PNG." className="button button-primary" onClick={exportPng} data-testid="button-export"><Upload size={14} /> Export PNG</TooltipButton>
           </div>
         </div>
