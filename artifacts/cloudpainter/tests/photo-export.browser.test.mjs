@@ -484,17 +484,20 @@ test('exports complete sketches in portrait and landscape on US Letter and A4 wi
   }
 });
 
-test('downloads centered Letter and A4 PDFs in portrait and landscape without changing the sketch', async () => {
+test('downloads complete Letter and A4 PDFs in portrait and landscape without changing the sketch', async () => {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   try {
     await page.goto(appUrl);
-    await page.waitForFunction(() => JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null')?.width > 0);
+    await importPhoto(page, { width: 960, height: 640 }, 'pdf-artwork.png');
+    await drawStroke(page, { startX: 0.4, endX: 0.6, y: 0.45 });
+    await waitForStrokeCount(page, 0, 1);
     const before = await captureProjectState(page);
     const pdfPaper = page.getByTestId('select-pdf-paper');
     const pdfOrientation = page.getByTestId('select-pdf-orientation');
     const pdfMargin = page.getByTestId('select-pdf-margin');
     const sourceRatio = before.project.width / before.project.height;
     assert.equal(await pdfMargin.inputValue(), '0.5', 'PDF safe margin should default to a common printer-safe inset');
+    const title = before.project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea';
 
     for (const paper of [
       { value: 'letter', name: 'US Letter', portrait: { width: 612, height: 792 }, landscape: { width: 792, height: 612 } },
@@ -515,10 +518,11 @@ test('downloads centered Letter and A4 PDFs in portrait and landscape without ch
           ]);
           assert.equal(
             download.suggestedFilename(),
-            `Untitled-idea-${paper.value}-${orientation}.pdf`,
+            `${title}-${paper.value}-${orientation}.pdf`,
             `${paper.name} ${orientation}: PDF filename`,
           );
-          const pdf = (await readFile(await download.path())).toString('latin1');
+          const pdfBytes = await readFile(await download.path());
+          const pdf = pdfBytes.toString('latin1');
           const pageBox = pdf.match(/\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/);
           assert.ok(pageBox, `${paper.name} ${orientation}: PDF page should have a MediaBox`);
           const pageWidth = Number(pageBox[1]);
@@ -541,6 +545,57 @@ test('downloads centered Letter and A4 PDFs in portrait and landscape without ch
               && artworkY + artworkHeight <= pageHeight - margin.points + 0.01,
             `${paper.name} ${orientation}: artwork should stay within the selected ${margin.value}-inch print-safe margin`,
           );
+
+          const imageStart = pdf.indexOf('/Subtype /Image /Width');
+          assert.ok(imageStart >= 0, `${paper.name} ${orientation}: PDF should embed the sketch artwork`);
+          const streamStart = pdf.indexOf('\nstream\n', imageStart);
+          assert.ok(streamStart >= 0, `${paper.name} ${orientation}: embedded artwork should have an image stream`);
+          const imageHeader = pdf.slice(imageStart, streamStart);
+          const imageLength = Number(imageHeader.match(/\/Length (\d+)/)?.[1]);
+          assert.ok(Number.isInteger(imageLength) && imageLength > 0, `${paper.name} ${orientation}: embedded artwork should have a valid length`);
+          const jpegStart = streamStart + '\nstream\n'.length;
+          const jpeg = pdfBytes.subarray(jpegStart, jpegStart + imageLength);
+          assert.equal(jpeg.length, imageLength, `${paper.name} ${orientation}: embedded artwork bytes should be complete`);
+          const artwork = await page.evaluate(async jpegBase64 => {
+            const image = new Image();
+            image.src = `data:image/jpeg;base64,${jpegBase64}`;
+            await image.decode();
+            const canvas = document.createElement('canvas');
+            canvas.width = image.naturalWidth;
+            canvas.height = image.naturalHeight;
+            const context = canvas.getContext('2d');
+            if (!context) throw new Error('Could not inspect the PDF artwork image.');
+            context.drawImage(image, 0, 0);
+            return {
+              width: canvas.width,
+              height: canvas.height,
+              pixels: [
+                [0.1, 0.1],
+                [0.9, 0.1],
+                [0.1, 0.9],
+                [0.9, 0.9],
+                [0.5, 0.5],
+                [0.5, 0.45],
+              ].map(([x, y]) => [
+                ...context.getImageData(Math.floor(canvas.width * x), Math.floor(canvas.height * y), 1, 1).data.slice(0, 3),
+              ]),
+            };
+          }, jpeg.toString('base64'));
+          assertClose(artwork.width / artwork.height, sourceRatio, `${paper.name} ${orientation}: embedded image should retain the sketch aspect ratio`);
+          const expectedColors = [
+            [229, 57, 53],
+            [67, 160, 71],
+            [30, 136, 229],
+            [253, 216, 53],
+            [171, 71, 188],
+            [49, 93, 77],
+          ];
+          for (const [index, expected] of expectedColors.entries()) {
+            assert.ok(
+              artwork.pixels[index].every((channel, channelIndex) => Math.abs(channel - expected[channelIndex]) < 45),
+              `${paper.name} ${orientation}: embedded image should preserve artwork marker ${index + 1}; received ${artwork.pixels[index]}`,
+          );
+          }
         }
       }
     }
