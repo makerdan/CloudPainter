@@ -534,7 +534,7 @@ function Home() {
             exportFailed();
           }
         };
-        photo.onerror = () => finish();
+        photo.onerror = () => announce('Could not include the reference photo in the PNG export. Try again or remove the photo before exporting.');
         photo.src = project.image;
       } else {
         finish();

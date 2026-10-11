@@ -354,6 +354,43 @@ test('reports PNG export failures without announcing a download', async () => {
   }
 });
 
+test('does not download a sketch-only PNG when the photo fails to decode during export', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await page.goto(appUrl);
+    await importPhoto(page, { width: 360, height: 240 }, 'photo-that-will-fail-during-export.png');
+    await page.waitForFunction(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null');
+      return typeof project?.image === 'string' && project.image.startsWith('data:image/');
+    });
+    await page.reload();
+    await page.evaluate(() => {
+      window.__cloudPainterDownloadClicks = 0;
+      HTMLAnchorElement.prototype.click = function countDownloadClick() {
+        window.__cloudPainterDownloadClicks += 1;
+      };
+      const NativeImage = window.Image;
+      window.Image = function SimulatedImageDecodeFailure() {
+        const image = new NativeImage();
+        Object.defineProperty(image, 'src', {
+          configurable: true,
+          set: () => queueMicrotask(() => image.dispatchEvent(new Event('error'))),
+        });
+        return image;
+      };
+    });
+
+    await page.getByTestId('button-export').click();
+    const status = page.getByTestId('status-toast');
+    await status.waitFor({ state: 'visible' });
+    assert.match(await status.textContent(), /Could not include the reference photo/i);
+    assert.doesNotMatch(await status.textContent(), /PNG exported/);
+    assert.equal(await page.evaluate(() => window.__cloudPainterDownloadClicks), 0);
+  } finally {
+    await page.close();
+  }
+});
+
 for (const photo of [
   { name: 'landscape photo', width: 960, height: 480 },
   { name: 'portrait photo', width: 480, height: 960 },
