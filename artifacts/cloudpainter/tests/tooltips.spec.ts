@@ -75,9 +75,9 @@ test('every workspace button explains its action by hover and focus, including d
   await page.getByTestId('button-tool-eraser').click();
   const swatch = page.getByTestId('button-color-2');
   await swatch.hover();
-  await expect(page.getByRole('tooltip')).toContainText('switch from erasing to drawing');
+  await expect(page.getByRole('tooltip')).toContainText('return to your last drawing instrument');
   await swatch.click();
-  await expect(page.getByTestId('button-tool-pen')).toHaveClass(/selected/);
+  await expect(page.getByTestId('button-tool-brush')).toHaveClass(/selected/);
   await focusAgain(page, swatch);
   await expect(page.getByRole('tooltip')).toContainText('Current drawing color');
   await page.keyboard.press('Escape');
@@ -146,7 +146,7 @@ test('touch taps perform actions without leaving hover tooltips over controls', 
     await page.getByTestId('button-tool-eraser').tap();
     await expect(page.getByTestId('button-tool-eraser')).toHaveClass(/selected/);
     await page.getByTestId('button-color-2').tap();
-    await expect(page.getByTestId('button-tool-pen')).toHaveClass(/selected/);
+    await expect(page.getByTestId('button-tool-brush')).toHaveClass(/selected/);
     await expect(page.getByRole('tooltip')).toHaveCount(0);
   } finally {
     await context.close();

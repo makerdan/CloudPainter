@@ -83,8 +83,11 @@ A browser-based creativity app for drawing imagined shapes over photographs with
 
 ## Product
 
-- Import a photo or start with a blank canvas, draw using a pen or eraser, and manage transparent layers.
+- Import a photo or start with a blank canvas, draw using Brush, Pencil, Pen or Eraser, and manage transparent layers.
 - Undo and redo edits, autosave and restore browser-local projects, and export the visible composition as PNG.
+- Each instrument remembers its size; color selection preserves the active drawing instrument or returns from Eraser to the last drawing instrument. Brush style remains separate from Pencil and Pen.
+- Legacy saved `pen` strokes retain their original brush appearance. New pencil and ink records pin their instrument recipe and seed for stable redraw/export.
+- See `docs/validation/drawing-instruments.md` for scoped, bounded instrument regression checks.
 
 ## Gotchas
 

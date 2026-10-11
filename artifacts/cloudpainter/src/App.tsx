@@ -10,6 +10,8 @@ import {
   ImagePlus,
   Layers,
   Paintbrush,
+  Pencil,
+  PenTool,
   Minus,
   Plus,
   Redo2,
@@ -35,7 +37,8 @@ import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions
 import { ImageGenerator } from '@/components/ImageGenerator';
 import { DrawingColorControl } from '@/components/DrawingColorControl';
 import { BrushStyleControl } from '@/components/BrushStyleControl';
-import { BRUSH_STYLES, renderStroke, type BrushStyle, type Point, type Stroke } from '@/lib/strokeRenderer';
+import { BRUSH_STYLES, renderStroke, type BrushStyle, type DrawingTool, type Point, type Stroke } from '@/lib/strokeRenderer';
+import { createInstrumentStroke, toolAfterColorSelection, TOOL_GUIDANCE, type DrawingInstrument } from '@/lib/drawingTools';
 import { AccountProvider, AccountControls, SignInPage, SignUpPage } from '@/components/Account';
 
 type PaintLayer = {
@@ -82,9 +85,15 @@ function Home() {
   const [project, setProject] = useState<Project>(readProject);
   const latestProject = useRef(project);
   latestProject.current = project;
-  const [tool, setTool] = useState<'pen' | 'eraser'>('pen');
+  const [tool, setTool] = useState<DrawingTool>('brush');
+  const lastDrawingTool = useRef<DrawingInstrument>('brush');
   const [color, setColor] = useState('#315d4d');
-  const [brushSize, setBrushSize] = useState(8);
+  const [toolSizes, setToolSizes] = useState<Record<DrawingTool, number>>({ brush: 8, pencil: 3, pen: 3, eraser: 16 });
+  const brushSize = toolSizes[tool];
+  const selectTool = (nextTool: DrawingTool) => {
+    if (nextTool !== 'eraser') lastDrawingTool.current = nextTool;
+    setTool(nextTool);
+  };
   const [brushStyle, setBrushStyle] = useState<BrushStyle>('round');
   const [draft, setDraft] = useState<{ layerId: string; stroke: Stroke } | null>(null);
   const [savedStatus, setSavedStatus] = useState('Saved in this browser');
@@ -266,10 +275,7 @@ function Home() {
     const point = pointFromEvent(event);
     setDraft({
       layerId: layer.id,
-      stroke: {
-        points: [point], color, size: brushSize * (project.width / stageSize.width), tool,
-        ...(tool === 'pen' ? { brush: { style: brushStyle, version: 1 as const, seed: Math.floor(Math.random() * 4294967296) } } : {}),
-      },
+      stroke: createInstrumentStroke(tool, point, color, brushSize * (project.width / stageSize.width), brushStyle, Math.floor(Math.random() * 4294967296)),
     });
   };
   const beginPhotoPan = (event: PointerEvent<HTMLDivElement>) => {
@@ -605,8 +611,14 @@ function Home() {
           <section className="editor" aria-label="Drawing workspace">
             <div className="panel toolbar">
               <div className="tool-group">
-                <TooltipButton description="Draw strokes on the selected visible layer using the current color and brush size." className={`tool-button ${tool === 'pen' ? 'selected' : ''}`} aria-label="Pen tool" onClick={() => setTool('pen')} data-testid="button-tool-pen"><Paintbrush size={17} /></TooltipButton>
-                <TooltipButton description="Erase drawings from the selected visible layer without changing the photo or other layers." className={`tool-button ${tool === 'eraser' ? 'selected' : ''}`} aria-label="Eraser tool" onClick={() => setTool('eraser')} data-testid="button-tool-eraser"><Eraser size={17} /></TooltipButton>
+                {([
+                  ['brush', 'Brush', Paintbrush], ['pencil', 'Pencil', Pencil],
+                  ['pen', 'Pen', PenTool], ['eraser', 'Eraser', Eraser],
+                ] as const).map(([instrument, label, Icon]) => (
+                  <TooltipButton key={instrument} description={TOOL_GUIDANCE[instrument]} className={`tool-button instrument-button ${tool === instrument ? 'selected' : ''}`} aria-label={`${label} tool`} aria-pressed={tool === instrument} onClick={() => selectTool(instrument)} data-testid={`button-tool-${instrument}`}>
+                    <Icon size={17} /><span>{label}</span>
+                  </TooltipButton>
+                ))}
                 <span className="tool-divider" />
                 <TooltipButton description={selectedLayer?.strokes.length ? 'Undo the most recent drawing or erasing stroke on the selected layer.' : 'Nothing to undo: the selected layer has no strokes.'} className="tool-button" aria-label="Undo" onClick={undo} disabled={!selectedLayer?.strokes.length} data-testid="button-undo"><Undo2 size={17} /></TooltipButton>
                 <TooltipButton description={selectedLayer?.redo.length ? 'Restore the last undone stroke on the selected layer.' : 'Nothing to redo: undo a stroke on the selected layer first.'} className="tool-button" aria-label="Redo" onClick={redo} disabled={!selectedLayer?.redo.length} data-testid="button-redo"><Redo2 size={17} /></TooltipButton>
@@ -684,23 +696,25 @@ function Home() {
             </div>
             <div className="statusbar">
               <span className="hint"><span className="keyboard-key">⌘ Z</span> undo <span className="keyboard-key">⇧ ⌘ Z</span> redo</span>
-              <span>{panMode ? 'Drag the photo to reposition it; your drawing stays unchanged.' : tool === 'pen' ? 'Draw over the photo; your original stays put.' : 'Erase only from the selected layer.'}</span>
+              <span>{panMode ? 'Drag the photo to reposition it; your drawing stays unchanged.' : TOOL_GUIDANCE[tool]}</span>
             </div>
           </section>
 
           <aside className="panel right-panel">
-            <div className="panel-title-row"><h2 className="panel-title">Brush & feel</h2><span className="panel-kicker">02</span></div>
+            <div className="panel-title-row"><h2 className="panel-title">Drawing & feel</h2><span className="panel-kicker">02</span></div>
+            <div hidden={tool !== 'brush'}>
             <BrushDisclosure title="Brush style" id="style" defaultOpen summary={BRUSH_STYLES.find(brush => brush.style === brushStyle)?.label}>
-              <BrushStyleControl embedded value={brushStyle} color={color} onChange={style => { setBrushStyle(style); setTool('pen'); }} />
+              <BrushStyleControl embedded value={brushStyle} color={color} onChange={setBrushStyle} />
             </BrushDisclosure>
+            </div>
             <BrushDisclosure title="Color" id="color" defaultOpen summary={<>
               <span className="header-color-preview" style={{ background: color }} aria-hidden="true" />
-              <span>{color.toUpperCase()} · {tool === 'eraser' ? 'ERASER' : 'INK'}</span>
+              <span>{color.toUpperCase()} · {tool.toUpperCase()}</span>
             </>}>
-              <DrawingColorControl color={color} tool={tool} onChange={nextColor => { setColor(nextColor); setTool('pen'); }} />
+              <DrawingColorControl color={color} tool={tool} onChange={nextColor => { setColor(nextColor); selectTool(toolAfterColorSelection(tool, lastDrawingTool.current)); }} />
             </BrushDisclosure>
-            <BrushDisclosure title="Brush size" id="size" summary={`${brushSize} px`}>
-              <input className="range-input" type="range" min="1" max="48" value={brushSize} onChange={event => setBrushSize(Number(event.target.value))} aria-label="Brush size" data-testid="input-brush-size" />
+            <BrushDisclosure title={`${tool[0].toUpperCase()}${tool.slice(1)} size`} id="size" summary={`${brushSize} px`}>
+              <input className="range-input" type="range" min="1" max="48" value={brushSize} onChange={event => setToolSizes(current => ({ ...current, [tool]: Number(event.target.value) }))} aria-label={`${tool[0].toUpperCase()}${tool.slice(1)} size`} data-testid="input-brush-size" />
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9aa097', fontSize: 9, marginTop: 7 }}><span>Fine</span><span>Bold</span></div>
             </BrushDisclosure>
             <BrushDisclosure title="Layer opacity" id="opacity" summary={`${Math.round((selectedLayer?.opacity ?? 1) * 100)}%`}>

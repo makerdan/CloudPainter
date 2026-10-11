@@ -63,7 +63,7 @@ export async function checkPaletteDisclosure(browser, url) {
     assert.equal(writes, 2);
     await page.getByTestId('button-tool-eraser').click();
     await page.getByRole('button', { name: 'Use Pine (#315D4D)', exact: true }).click();
-    assert.match(await page.getByTestId('button-tool-pen').getAttribute('class'), /selected/);
+    assert.match(await page.getByTestId('button-tool-brush').getAttribute('class'), /selected/);
     await page.getByRole('button', { name: 'Rename Pine', exact: true }).click();
     await page.getByLabel('Rename saved color').fill('Evergreen');
     await header.click();

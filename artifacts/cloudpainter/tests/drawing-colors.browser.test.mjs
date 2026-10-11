@@ -57,7 +57,7 @@ test('preset and custom colors survive drawing, undo/redo, reload and PNG export
     await hexDraft.fill('AbC');
     await page.getByTestId('button-apply-color').click();
     assert.equal(await hexDraft.inputValue(), '#AABBCC');
-    assert.match(await disclosure('color').innerText(), /#AABBCC.*INK/);
+    assert.match(await disclosure('color').innerText(), /#AABBCC.*BRUSH/);
     await page.keyboard.press('Tab');
     await disclosure('color').focus();
     assert.equal(await disclosure('color').evaluate(button => getComputedStyle(button).outlineStyle), 'solid');
@@ -103,7 +103,7 @@ test('preset and custom colors survive drawing, undo/redo, reload and PNG export
     assert.match(await disclosure('color').innerText(), /ERASER/);
     await page.getByRole('button', { name: 'Choose White (#FFFFFF)', exact: true }).click();
     assert.equal(await page.getByRole('button', { name: 'Choose White (#FFFFFF)', exact: true }).getAttribute('aria-pressed'), 'true');
-    assert.match(await page.getByTestId('button-tool-pen').getAttribute('class'), /selected/);
+    assert.match(await page.getByTestId('button-tool-brush').getAttribute('class'), /selected/);
 
     const colors = ['#ffffff', '#dc2626', '#12abcf', '#445566'];
     const points = [];

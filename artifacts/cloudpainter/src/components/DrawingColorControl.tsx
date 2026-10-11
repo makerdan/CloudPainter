@@ -4,7 +4,7 @@ import { ActionTooltip, TooltipButton } from '@/components/tooltip-button';
 import { COLOR_GROUPS, normalizeHexColor } from '@/lib/drawingColors';
 import { AccountPalette } from './AccountPalette';
 
-type Props = { color: string; tool: 'pen' | 'eraser'; onChange: (color: string) => void };
+type Props = { color: string; tool: 'brush' | 'pencil' | 'pen' | 'eraser'; onChange: (color: string) => void };
 
 export function DrawingColorControl({ color, tool, onChange }: Props) {
   const [hex, setHex] = useState(color.toUpperCase());
@@ -30,7 +30,7 @@ export function DrawingColorControl({ color, tool, onChange }: Props) {
             {group.colors.map((swatch, index) => (
               <TooltipButton
                 key={swatch.hex}
-                description={`${color === swatch.hex && tool === 'pen' ? 'Current drawing color' : 'Use drawing color'}: ${swatch.name.toLowerCase()} (${swatch.hex.toUpperCase()})${tool === 'eraser' ? ' and switch from erasing to drawing' : ''}.`}
+                description={`${color === swatch.hex && tool !== 'eraser' ? 'Current drawing color' : 'Use drawing color'}: ${swatch.name.toLowerCase()} (${swatch.hex.toUpperCase()})${tool === 'eraser' ? ' and return to your last drawing instrument' : ''}.`}
                 className={`swatch ${color === swatch.hex ? 'active' : ''}`}
                 style={{ background: swatch.hex }}
                 aria-label={`Choose ${swatch.name} (${swatch.hex.toUpperCase()})`}

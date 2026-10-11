@@ -1,12 +1,15 @@
 export type Point = { x: number; y: number };
 export type BrushStyle = 'round' | 'chisel' | 'soft' | 'dry';
+export type DrawingTool = 'brush' | 'pencil' | 'pen' | 'eraser';
 export type Stroke = {
   points: Point[];
   color: string;
   size: number;
-  tool: 'pen' | 'eraser';
+  tool: DrawingTool;
   // Absent on legacy projects. Version pins the recipe for future renderer changes.
   brush?: { style: BrushStyle; version: 1; seed: number };
+  // Legacy "pen" records have no instrument: keep their old brush recipe.
+  instrument?: { kind: 'pencil' | 'pen'; version: 1; seed: number };
 };
 
 export const BRUSH_STYLES: { style: BrushStyle; label: string; description: string }[] = [
@@ -19,6 +22,7 @@ export const BRUSH_STYLES: { style: BrushStyle; label: string; description: stri
 // Fixed pass counts bound work to O(points), even at size 1 or on long touch strokes.
 export const SOFT_PASSES = 8;
 export const DRY_PASSES = 12;
+export const PENCIL_PASSES = 8;
 
 function roundPath(ctx: CanvasRenderingContext2D, stroke: Stroke, width: number, height: number, offsetX = 0, offsetY = 0) {
   const first = stroke.points[0];
@@ -56,7 +60,27 @@ export function renderStroke(ctx: CanvasRenderingContext2D, stroke: Stroke, widt
     ctx.lineJoin = 'round';
     const style = stroke.brush?.style ?? 'round';
     // Preserve the original operations exactly for metadata-free strokes and erasers.
-    if (stroke.tool === 'eraser' || style === 'round') {
+    if (stroke.tool !== 'eraser' && stroke.instrument?.kind === 'pencil') {
+      const random = seededRandom(stroke.instrument.seed);
+      const alpha = ctx.globalAlpha;
+      ctx.globalAlpha = alpha * 0.16;
+      ctx.lineWidth = stroke.size * 0.75;
+      roundPath(ctx, stroke, width, height);
+      for (let pass = 0; pass < PENCIL_PASSES; pass++) {
+        const spread = (pass / (PENCIL_PASSES - 1) - 0.5) * stroke.size * 0.8;
+        ctx.globalAlpha = alpha * (0.07 + random() * 0.06);
+        ctx.lineWidth = Math.max(0.15, stroke.size * (0.06 + random() * 0.06));
+        ctx.setLineDash([stroke.size * (0.3 + random()), stroke.size * (0.1 + random() * 0.3)]);
+        ctx.lineDashOffset = random() * stroke.size * 3;
+        roundPath(ctx, stroke, width, height, spread, (random() - 0.5) * stroke.size * 0.2);
+      }
+    } else if (stroke.tool !== 'eraser' && stroke.instrument?.kind === 'pen') {
+      // Uniform ink with sharp ends/corners, distinct from a rounded brush tip.
+      ctx.lineCap = 'butt';
+      ctx.lineJoin = 'miter';
+      ctx.miterLimit = 2;
+      roundPath(ctx, stroke, width, height);
+    } else if (stroke.tool === 'eraser' || style === 'round') {
       roundPath(ctx, stroke, width, height);
     } else if (style === 'chisel') {
       // Sweep a fixed 45-degree nib along the entire path, with a thin edge.
