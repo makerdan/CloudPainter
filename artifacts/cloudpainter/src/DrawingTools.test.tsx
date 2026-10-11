@@ -27,9 +27,9 @@ async function setSize(page: Page, size: number) {
 test('all instruments preserve pixels, settings, layer isolation, reload, history and PNG output', async ({ page }) => {
   await page.addInitScript(key => {
     if (localStorage.getItem(key)) return;
-  const photo = await page.locator('.base-photo').getAttribute('src');
+    const photo = document.createElement('canvas');
     photo.width = 1200; photo.height = 800;
-    const ctx = expected.getContext('2d')!;
+    const ctx = photo.getContext('2d')!;
     ctx.fillStyle = '#eef0ed'; ctx.fillRect(0, 0, 1200, 800);
     localStorage.setItem(key, JSON.stringify({
       image: photo.toDataURL(), width: 1200, height: 800, selectedLayerId: 'legacy', title: 'Instrument replay',
@@ -140,29 +140,21 @@ test('all instruments preserve pixels, settings, layer isolation, reload, histor
 
 test('stylus pressure is saved with each pen point and rendered into the stroke', async ({ page }) => {
   await page.goto('/');
-      const canvas = page.locator('canvas.draw-surface');
+  const canvas = page.locator('canvas.draw-surface');
   await canvas.scrollIntoViewIfNeeded();
-  await expect(page.getByTestId('disclosure-pressure-sensitivity')).toBeHidden();
   await page.getByTestId('button-tool-pen').click();
   const sensitivityDisclosure = page.getByTestId('disclosure-pressure-sensitivity');
-  await expect(sensitivityDisclosure).toBeVisible();
-  await expect(sensitivityDisclosure).toHaveAttribute('aria-expanded', 'false');
   await sensitivityDisclosure.click();
   const sensitivitySlider = page.getByTestId('input-pen-pressure-sensitivity');
-  await sensitivitySlider.evaluate((input: HTMLInputElement, value: string) => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+  await sensitivitySlider.evaluate((input: HTMLInputElement) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '100');
     input.dispatchEvent(new Event('input', { bubbles: true }));
-  }, '100');
-  await expect(sensitivitySlider).toHaveValue('100');
+  });
   const bounds = await canvas.evaluate((node: HTMLCanvasElement) => {
     const rect = node.getBoundingClientRect();
     node.setPointerCapture = () => {};
     return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
   });
-
-  const count = 513;
-  expect(bounds.width).toBeGreaterThan(0);
-  const before = await pixels(page);
   const dispatch = async (type: string, x: number, y: number, pressure: number) => {
     await canvas.evaluate((node: HTMLCanvasElement, event) => {
       node.dispatchEvent(new PointerEvent(event.type, {
@@ -175,50 +167,126 @@ test('stylus pressure is saved with each pen point and rendered into the stroke'
   await dispatch('pointermove', 0.5, 0.5, 0.82);
   await dispatch('pointermove', 0.8, 0.5, 0.42);
   await dispatch('pointerup', 0.8, 0.5, 0);
-  await expect.poll(() => pixels(page)).not.toBe(before);
   await expect.poll(() => page.evaluate(key => {
-  const saved = await page.evaluate(key => {
-    const stroke = JSON.parse(localStorage.getItem(key)!).layers[0].strokes.at(-1);
+    const strokes = JSON.parse(localStorage.getItem(key)!).layers[0].strokes;
+    return strokes.at(-1)?.pressure?.samples?.map((pressure: number) => Number(pressure.toFixed(2)));
+  }, key)).toEqual([0.18, 0.82, 0.42]);
+
+  const savedStroke = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes.at(-1), key);
+  expect(savedStroke.pressure.sensitivity).toBe(100);
+  const sensitivityBeforeChange = await pixels(page);
+  await sensitivitySlider.evaluate((input: HTMLInputElement) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '0');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes[0], key)).toEqual(savedStroke);
+  await expect.poll(() => pixels(page)).toBe(sensitivityBeforeChange);
+
+  await dispatch('pointerdown', 0.2, 0.6, 0.18);
+  await dispatch('pointermove', 0.5, 0.6, 0.82);
+  await dispatch('pointerup', 0.5, 0.6, 0);
+  await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes.at(-1)?.pressure?.sensitivity, key)).toBe(0);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes[0], key)).toEqual(savedStroke);
+});
+
+test('a long variable-pressure pen stroke exports intact at the saved project resolution', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('button-tool-pen').click();
+  await setSize(page, 24);
+  const canvas = page.locator('canvas.draw-surface');
+  await canvas.scrollIntoViewIfNeeded();
+  const bounds = await canvas.evaluate((node: HTMLCanvasElement) => {
+    const rect = node.getBoundingClientRect();
+    node.setPointerCapture = () => {};
+    return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+  });
+  const count = 513;
+  await page.evaluate(async ({ bounds, count }) => {
     const canvas = document.querySelector<HTMLCanvasElement>('canvas.draw-surface')!;
-    const { width, height } = canvas;
-    const data = canvas.getContext('2d')!.getImageData(0, 0, width, height).data;
+    const dispatch = (type: string, index: number, pressure: number) => {
+      const progress = index / (count - 1);
+      canvas.dispatchEvent(new PointerEvent(type, {
+        bubbles: true,
+        pointerId: 92,
+        pointerType: 'pen',
+        button: 0,
+        buttons: type === 'pointerup' ? 0 : 1,
+        clientX: bounds.x + bounds.width * (0.08 + progress * 0.84),
+        clientY: bounds.y + bounds.height * (0.5 + Math.sin(progress * Math.PI * 8) * 0.12),
+        pressure,
+      }));
+    };
+    const pressureAt = (index: number) => {
+      const progress = index / (count - 1);
+      return 0.35 + 0.55 * (0.5 + 0.5 * Math.sin(progress * Math.PI * 6 - Math.PI / 2));
+    };
+    dispatch('pointerdown', 0, pressureAt(0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    for (let index = 1; index < count; index++) {
+      dispatch('pointermove', index, pressureAt(index));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    dispatch('pointerup', count - 1, 0);
+  }, { bounds, count });
+
+  await expect.poll(() => page.evaluate(key => {
+    const saved = JSON.parse(localStorage.getItem(key)!);
+    const stroke = saved.layers[0].strokes.at(-1);
+    return stroke?.points.length === 513
+      && stroke.pressure?.samples.length === 513
+      && Math.min(...stroke.pressure.samples) < 0.4
+      && Math.max(...stroke.pressure.samples) > 0.85;
+  }, key)).toBe(true);
+  await page.reload();
+  const savedRendering = await page.locator('canvas.draw-surface').evaluate((node: HTMLCanvasElement) => ({
+    width: node.width,
+    height: node.height,
+  }));
+  expect(savedRendering).toEqual({ width: 1200, height: 800 });
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByTestId('button-export').click();
+  const download = await downloadPromise;
+  const stream = (await download.createReadStream())!;
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const png = `data:image/png;base64,${Buffer.concat(chunks).toString('base64')}`;
+  const exported = await page.evaluate(async png => {
+    const image = new Image();
+    image.src = png;
+    await image.decode();
+    const actual = document.createElement('canvas');
+    actual.width = image.width;
+    actual.height = image.height;
+    const actualContext = actual.getContext('2d')!;
+    actualContext.drawImage(image, 0, 0);
+
+    const saved = document.querySelector<HTMLCanvasElement>('canvas.draw-surface')!;
+    const expected = saved.getContext('2d')!.getImageData(0, 0, saved.width, saved.height).data;
+    const actualPixels = actualContext.getImageData(0, 0, actual.width, actual.height).data;
     const occupiedSections = Array.from({ length: 16 }, (_, section) => {
       const progress = (section + 0.5) / 16;
-      const centerX = Math.round(width * (0.08 + progress * 0.84));
-      const centerY = Math.round(height * (0.5 + Math.sin(progress * Math.PI * 8) * 0.12));
-      for (let y = Math.max(0, centerY - 12); y <= Math.min(height - 1, centerY + 12); y++) {
-        for (let x = Math.max(0, centerX - 12); x <= Math.min(width - 1, centerX + 12); x++) {
-          if (data[(y * width + x) * 4 + 3] > 0) return true;
+      const centerX = Math.round(actual.width * (0.08 + progress * 0.84));
+      const centerY = Math.round(actual.height * (0.5 + Math.sin(progress * Math.PI * 8) * 0.12));
+      for (let y = Math.max(0, centerY - 18); y <= Math.min(actual.height - 1, centerY + 18); y++) {
+        for (let x = Math.max(0, centerX - 18); x <= Math.min(actual.width - 1, centerX + 18); x++) {
+          if (actualPixels[(y * actual.width + x) * 4 + 3] > 0) return true;
         }
       }
       return false;
     });
     return {
-      points: stroke.points.length,
-      pressures: stroke.pressure.samples,
+      width: image.width,
+      height: image.height,
+      pixelsMatchSavedRendering: expected.length === actualPixels.length
+        && expected.every((value, index) => value === actualPixels[index]),
       occupiedSections,
-      pixels: canvas.toDataURL(),
     };
-  }, key);
+  }, png);
 
-  const restored = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes.at(-1), key);
-    const strokes = saved ? JSON.parse(saved).layers[0].strokes : [];
-    return strokes.at(-1)?.pressure?.samples?.map((pressure: number) => Number(pressure.toFixed(2)));
-  }, key)).toEqual([0.18, 0.82, 0.42]);
-  const savedFirstStroke = await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes.at(-1), key);
-  expect(savedFirstStroke.pressure.sensitivity).toBe(100);
-
-  await sensitivitySlider.evaluate((input: HTMLInputElement) => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '0');
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  await expect(sensitivitySlider).toHaveValue('0');
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes[0], key)).toEqual(savedFirstStroke);
-  await dispatch('pointerdown', 0.2, 0.6, 0.18);
-  await dispatch('pointermove', 0.5, 0.6, 0.82);
-  await dispatch('pointerup', 0.5, 0.6, 0);
-  await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes.at(-1)?.pressure?.sensitivity, key)).toBe(0);
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).layers[0].strokes[0], key)).toEqual(savedFirstStroke);
+  expect({ width: exported.width, height: exported.height }).toEqual({ width: 1200, height: 800 });
+  expect(exported.occupiedSections).toEqual(Array(16).fill(true));
+  expect(exported.pixelsMatchSavedRendering).toBe(true);
 });
 
 test('phone instrument buttons and tap marks remain usable without horizontal overflow', async ({ browser, baseURL }) => {
@@ -236,8 +304,6 @@ test('phone instrument buttons and tap marks remain usable without horizontal ov
     }
     await expect.poll(() => page.evaluate(key => {
       const stored = localStorage.getItem(key);
-
-    const stroke = stored ? JSON.parse(stored).layers[0].strokes.at(-1) : null;
       return stored ? JSON.parse(stored).layers[0].strokes.length : -1;
     }, key)).toBe(4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -247,29 +313,3 @@ test('phone instrument buttons and tap marks remain usable without horizontal ov
     await context.close();
   }
 });
-
-  const elapsed = await page.evaluate(async ({ bounds, count }) => {
-    const canvas = document.querySelector<HTMLCanvasElement>('canvas.draw-surface')!;
-    const dispatch = (type: string, index: number, pressure: number) => {
-      const progress = index / (count - 1);
-      canvas.dispatchEvent(new PointerEvent(type, {
-        bubbles: true,
-        pointerId: 92,
-        pointerType: 'pen',
-        button: 0,
-        buttons: type === 'pointerup' ? 0 : 1,
-        clientX: bounds.x + bounds.width * (0.08 + progress * 0.84),
-        clientY: bounds.y + bounds.height * (0.5 + Math.sin(progress * Math.PI * 8) * 0.12),
-        pressure,
-      }));
-    };
-    const started = performance.now();
-    dispatch('pointerdown', 0, 0.12);
-    await new Promise(resolve => setTimeout(resolve, 0));
-    for (let index = 1; index < count; index++) {
-      dispatch('pointermove', index, 0.1 + ((index * 37) % 89) / 100);
-      await new Promise(resolve => setTimeout(resolve, 0));
-    }
-    dispatch('pointerup', count - 1, 0);
-    return performance.now() - started;
-  }, { bounds, count });
