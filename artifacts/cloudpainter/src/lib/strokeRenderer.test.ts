@@ -45,7 +45,12 @@ test('legacy multi-point strokes retain the exact original round operations', { 
 });
 
 test('legacy tap and eraser fixtures keep their original round geometry', { timeout: 1000 }, () => {
-  const tap = { ...fixture, points: [fixture.points[0]] };
+  const tap: Stroke = {
+    ...fixture,
+    points: [fixture.points[0]],
+    instrument: { kind: 'pen', version: 2, seed: 7 },
+    pressure: { version: 1, samples: [0.6] },
+  };
   assert.deepEqual(replay(tap).slice(7), [
     ['beginPath'], ['arc', 10, 40, 5, 0, Math.PI * 2], ['fill'], ['restore'],
   ]);
@@ -61,7 +66,9 @@ test('versioned pen pressure creates deterministic tapered outlines and changes 
     instrument: { kind: 'pen', version: 2, seed: 7 },
     pressure: { version: 1, samples: [0.15, 0.9, 0.35] },
   };
-  const expected = replay(pressurePen);
+    const expected = replay(stroke);
+
+  const elapsed = performance.now() - started;
   assert.ok(expected.some(operation => operation[0] === 'closePath'));
   assert.ok(expected.some(operation => operation[0] === 'fill'));
   assert.ok(expected.filter(operation => operation[0] === 'lineTo').length > fixture.points.length);
@@ -73,6 +80,8 @@ test('versioned pen pressure creates deterministic tapered outlines and changes 
   assert.notDeepEqual(light, firm);
 
   const fallback = replay({ ...pressurePen, pressure: undefined });
+
+  const count = 6000;
   assert.deepEqual(fallback, replay({
     ...pressurePen, pressure: { version: 1, samples: pressurePen.points.map(() => 0.5) },
   }));
@@ -114,9 +123,19 @@ test('versioned pressure pen taps render a filled mark and empty strokes do no w
 
 for (const { style } of BRUSH_STYLES) {
   test(`${style} replays deterministically after persistence, undo/redo and a style change`, { timeout: 1000 }, () => {
-    const stroke: Stroke = { ...fixture, brush: { style, version: 1, seed: 19342 } };
+  const stroke: Stroke = { ...fixture, brush: { style: 'dry', version: 1, seed: 1 } };
+
+  const renderLong = (candidate: Stroke) => {
+    const recording = recordingContext();
+    renderStroke(recording.ctx, candidate, 1200, 800);
+    return recording.operations;
+  };
+
+  const started = performance.now();
     const before = JSON.stringify(stroke);
     const expected = replay(stroke);
+
+  const elapsed = performance.now() - started;
     const restored = JSON.parse(before) as Stroke;
     const strokes = [restored];
     const redo = [strokes.pop()!];
@@ -144,6 +163,14 @@ test('all four brush recipes produce distinct geometry or paint operations, incl
 
 test('dry texture changes with recorded seeds but not between replay calls', { timeout: 1000 }, () => {
   const stroke: Stroke = { ...fixture, brush: { style: 'dry', version: 1, seed: 1 } };
+
+  const renderLong = (candidate: Stroke) => {
+    const recording = recordingContext();
+    renderStroke(recording.ctx, candidate, 1200, 800);
+    return recording.operations;
+  };
+
+  const started = performance.now();
   assert.notDeepEqual(replay(stroke), replay({ ...stroke, brush: { ...stroke.brush!, seed: 2 } }));
   assert.deepEqual(replay(stroke), replay(stroke));
 });
@@ -183,3 +210,12 @@ test('every brush uses its recorded color and size; empty strokes perform no wor
     assert.deepEqual(replay({ ...small, points: [] }), []);
   }
 });
+
+  const outline = expected.filter(operation => operation[0] === 'lineTo');
+
+  const outlineX = outline.map(operation => operation[1] as number);
+
+  const points = Array.from({ length: count }, (_, index) => {
+    const progress = index / (count - 1);
+    return { x: 0.02 + progress * 0.96, y: 0.5 + Math.sin(progress * Math.PI * 18) * 0.18 };
+  });

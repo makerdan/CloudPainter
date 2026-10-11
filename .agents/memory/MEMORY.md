@@ -19,3 +19,4 @@
 - [On-device outline fixtures](on-device-outline-fixtures.md) — validate public animal fixtures against the actual local model; labels and photo contents alone do not guarantee usable masks.
 - [Pointer pressure precision](pointer-pressure-precision.md) — browser pointer pressure is floating-point input; test it approximately without rounding persisted samples.
 - [Disposable Postgres on Nix](nix-disposable-postgres.md) — local ephemeral clusters may need a temporary Unix-socket directory because `/run/postgresql` may not exist.
+- [Long-stroke browser tests](long-stroke-browser-tests.md) — pace synthetic continuous pointer events across tasks so React commits drafts before pointer-up.
