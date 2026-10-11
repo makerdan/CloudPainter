@@ -47,6 +47,34 @@ it is not a validation workflow and is not part of the CI workflow or its
 permission boundary described here. The new CloudPainter CI workflow itself
 still has only pull-request and `main`-push triggers.
 
+
+## Aggregate CLI regression evidence (2026-10-11)
+
+The owner authorized a task-scoped local run with Failure Gate inactive for
+this operation only. Ran only `node --test --test-timeout=10000
+--test-concurrency=1 scripts/ci/check-required-results.test.mjs`: exit 0,
+32/32 tests passed, no skips or cancellations, about 1.1 seconds elapsed.
+An independent Python monotonic supervisor enforced a 60-second execution
+deadline, a 10-second cleanup allowance and a 64-KiB captured-output limit.
+Every test has a 10-second limit; each actual CLI child has a 5-second timeout,
+SIGKILL on timeout and a 64-KiB output limit. There are no test hooks.
+
+CLI fixtures inherit no environment variables and use only synthetic
+`NEEDS_CONTEXT` values. They verify normal zero exits with exact success
+output, and normal exit 1 with failure diagnostics for invalid/missing JSON,
+non-object context, empty/duplicate required-job lists, unsuccessful results,
+and missing jobs/results after another job succeeds. A killed or failed-to-start
+child cannot satisfy a negative test.
+
+The checker, test file and workflow hashes were unchanged during the run;
+the owned process group was empty afterward. Local logs and snapshot hashes
+are in the ignored `generated-artifacts/aggregate-cli-validation/` directory.
+The existing workflow already directly selects this suite, so these portable
+cases receive configured remote coverage without another workflow or command.
+Checker behavior, workflow and merge rules remain unchanged. No remote run
+was initiated or inspected; current remote passing/required status remains
+unknown. This result is not Failure Gate activation or a full CI pass.
+
 ## Changed files
 
 - `.github/workflows/cloudpainter-ci.yml` — PR and `main` push workflow,
@@ -84,7 +112,7 @@ a 45-minute timeout. The aggregate job has a five-minute timeout.
 | --- | --- |
 | `pnpm --filter @workspace/api-spec run codegen` | Included before compilation. Then `git diff --exit-code -- lib/api-client-react/src/generated lib/api-zod/src/generated` and an untracked-file check fail if generated outputs are stale or newly emitted. |
 | `pnpm run build` with `PORT=4173 BASE_PATH=/` | Included; this root command runs `pnpm run typecheck` and all package builds. Covers `artifacts/api-server`, `artifacts/cloudpainter`, and `artifacts/mockup-sandbox` build/typecheck scripts, plus the workspace TypeScript project build. |
-| `node --test scripts/ci/check-required-results.test.mjs` | Included; directly tests the aggregator contract. |
+| `node --test scripts/ci/check-required-results.test.mjs` | Included; tests both the exported classifier and actual CLI exits, JSON parsing, required-job argument validation, and fail-closed results with synthetic environments. |
 | `node --test scripts/ci/api-test-coverage.test.mjs` | Included in the existing validation job; asserts the exact step-scoped disposable database URL before running local command stubs, rejects shared/secret-backed URL substitutions, checks effective image-access/palettes/settings selection, rejects a comment-only settings mention, and preserves nonzero suite results. No database, live auth, provider, or real package command is used by this guard. |
 | `pnpm run test:regression-guard` | Included; tests the regression-guard checker and local task-plan runner using temporary fixtures. |
 | `pnpm --filter @workspace/api-server run test:outline` | Included; local Express tests use fixtures and stubbed provider dependencies. |
