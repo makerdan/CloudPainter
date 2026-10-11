@@ -65,6 +65,32 @@ paths:
         "401": { description: Sign in required or session changed }
         "404": { description: Page not found for accounts without dashboard access }
         "503": { description: Account information is temporarily unavailable }
+  /admin/audit-events:
+    get:
+      operationId: listAdminAuditEvents
+      tags: [admin]
+      summary: Page through account status changes for authorized CloudPainter administrators
+      parameters:
+        - in: header
+          name: X-Admin-Session
+          required: true
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 25 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, maximum: 10000, default: 0 }
+      responses:
+        "200":
+          description: Bounded status-change history containing only actor, target, action, outcome, and time
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminAuditEventPage" }
+        "400": { description: Invalid pagination }
+        "401": { description: Sign in required or session changed }
+        "404": { description: Page not found for accounts without dashboard access }
+        "503": { description: Account history is temporarily unavailable }
   /admin/accounts/{userId}/status:
     put:
       operationId: setAdminAccountStatus
@@ -455,6 +481,28 @@ components:
           type: array
           maxItems: 50
           items: { $ref: "#/components/schemas/AdminAccount" }
+        totalCount: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1, maximum: 50 }
+        offset: { type: integer, minimum: 0, maximum: 10000 }
+    AdminAuditEvent:
+      type: object
+      additionalProperties: false
+      required: [actorId, targetId, action, outcome, createdAt]
+      properties:
+        actorId: { type: string }
+        targetId: { type: string }
+        action: { type: string, enum: [suspend, reactivate] }
+        outcome: { type: string, enum: [pending, succeeded, failed] }
+        createdAt: { type: string, format: date-time }
+    AdminAuditEventPage:
+      type: object
+      additionalProperties: false
+      required: [events, totalCount, limit, offset]
+      properties:
+        events:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/AdminAuditEvent" }
         totalCount: { type: integer, minimum: 0 }
         limit: { type: integer, minimum: 1, maximum: 50 }
         offset: { type: integer, minimum: 0, maximum: 10000 }

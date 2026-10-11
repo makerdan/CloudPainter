@@ -33,6 +33,17 @@
 .admin-total-foot { display:flex; align-items:center; gap:6px; color:#8a9992; font-size:10px; }
 .admin-live-dot { width:6px; height:6px; border-radius:50%; background:#438d72; }
 .admin-directory { max-width:1320px; margin:0 auto; padding:24px 25px 0; border:1px solid #cfdbd2; border-radius:16px; background:var(--admin-paper); box-shadow:0 14px 34px rgba(37,62,57,.045); }
+.admin-audit { margin-top:22px; }
+.admin-audit-table { width:100%; margin-top:18px; overflow-x:auto; }
+.admin-audit-labels,.admin-audit-row { min-width:720px; display:grid; grid-template-columns:minmax(135px,1fr) minmax(135px,1fr) minmax(90px,.65fr) minmax(100px,.7fr) minmax(170px,1.1fr); align-items:center; gap:12px; padding:0 14px; }
+.admin-audit-labels { min-height:37px; border-top:1px solid #e4ebe5; border-bottom:1px solid #e4ebe5; color:#91a09a; font:10px var(--font-mono); letter-spacing:.11em; }
+.admin-audit-row { min-height:53px; border-bottom:1px solid #e9eeea; color:#677b75; font-size:11px; }
+.admin-audit-id { overflow:hidden; color:#586d66; font:10px var(--font-mono); text-overflow:ellipsis; white-space:nowrap; }
+.admin-audit-outcome { width:max-content; display:inline-block; padding:4px 7px; border-radius:999px; background:#edf2ed; color:#62766e; font-size:9px; font-weight:700; text-transform:capitalize; }
+.admin-audit-outcome.succeeded { background:#e7f2e9; color:#38775e; }
+.admin-audit-outcome.failed { background:#f8ebe6; color:#9c5d4e; }
+.admin-audit-outcome.pending { background:#f4f0df; color:#897741; }
+.admin-audit-row time { color:#677b75; font:10px var(--font-mono); }
 .admin-directory-head { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; }
 .admin-directory-head h2 { margin:0; color:#294341; font-size:16px; font-weight:700; letter-spacing:-.3px; }
 .admin-directory-head p { margin:5px 0 0; color:#879590; font-size:12px; }
@@ -133,6 +144,7 @@
   .admin-total-card strong { grid-column:2; grid-row:1 / span 2; }
   .admin-total-foot { grid-column:1; }
   .admin-directory { padding:19px 15px 0; }
+  .admin-audit-labels,.admin-audit-row { padding-left:4px; padding-right:4px; }
   .admin-directory-head { align-items:flex-start; flex-direction:column; gap:8px; }
   .admin-count { font-size:10px; }
   .admin-search-form { margin:16px 0; }

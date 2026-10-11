@@ -3,10 +3,13 @@ import { useAuth } from '@clerk/react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   getGetAdminOverviewQueryKey,
+  getListAdminAuditEventsQueryKey,
   getListAdminAccountsQueryKey,
   useGetAdminOverview,
+  useListAdminAuditEvents,
   useListAdminAccounts,
   useSetAdminAccountStatus,
+  type ListAdminAuditEventsParams,
   type ListAdminAccountsParams,
 } from '@workspace/api-client-react';
 import { ArrowLeft, ArrowRight, Check, CircleAlert, Search, ShieldCheck, UserRound, X } from 'lucide-react';
@@ -28,6 +31,12 @@ function dateLabel(value: string): string {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 }
 
+function dateTimeLabel(value: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return 'Date unavailable';
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
 function AdminLoading() {
   return <main className="admin-shell" aria-label="Loading account administration">
     <div className="admin-topline"><span className="admin-brand-mark" aria-hidden="true">C</span><span>CloudPainter <b>·</b> Admin</span></div>
@@ -47,6 +56,7 @@ export default function AdminAccountsPage() {
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
+  const [auditOffset, setAuditOffset] = useState(0);
   const [confirming, setConfirming] = useState<{ id: string; name: string; next: 'active' | 'suspended' } | null>(null);
   const [notice, setNotice] = useState('');
   const [denied, setDenied] = useState(false);
@@ -56,7 +66,7 @@ export default function AdminAccountsPage() {
       queryClient.removeQueries({
         predicate: query => {
           const key = query.queryKey[0];
-          return key === '/api/admin/overview' || key === '/api/admin/accounts';
+          return key === '/api/admin/overview' || key === '/api/admin/accounts' || key === '/api/admin/audit-events';
         },
       });
       setDenied(false);
@@ -78,6 +88,11 @@ export default function AdminAccountsPage() {
     ...(search ? { query: search } : {}),
   }), [offset, search]);
   const listKey = useMemo(() => [...getListAdminAccountsQueryKey(params), sessionId ?? ''], [params, sessionId]);
+  const auditParams = useMemo<ListAdminAuditEventsParams>(() => ({
+    limit: PAGE_SIZE,
+    offset: auditOffset,
+  }), [auditOffset]);
+  const auditKey = useMemo(() => [...getListAdminAuditEventsQueryKey(auditParams), sessionId ?? ''], [auditParams, sessionId]);
 
   const overview = useGetAdminOverview({
     request,
@@ -87,23 +102,37 @@ export default function AdminAccountsPage() {
     request,
     query: { enabled, queryKey: listKey, staleTime: 0, retry: false },
   });
+  const auditPage = useListAdminAuditEvents(auditParams, {
+    request,
+    query: { enabled, queryKey: auditKey, staleTime: 0, retry: false },
+  });
   const statusMutation = useSetAdminAccountStatus({ request });
 
   useEffect(() => {
     if (errorStatus(overview.error) === 401 || errorStatus(overview.error) === 404
-      || errorStatus(page.error) === 401 || errorStatus(page.error) === 404) setDenied(true);
-  }, [overview.error, page.error]);
+      || errorStatus(page.error) === 401 || errorStatus(page.error) === 404
+      || errorStatus(auditPage.error) === 401 || errorStatus(auditPage.error) === 404) setDenied(true);
+  }, [overview.error, page.error, auditPage.error]);
 
   if (!isLoaded) return <AdminLoading />;
   if (!isSignedIn || !sessionId || denied
     || errorStatus(overview.error) === 401 || errorStatus(overview.error) === 404
-    || errorStatus(page.error) === 401 || errorStatus(page.error) === 404) return <NotFound />;
+    || errorStatus(page.error) === 401 || errorStatus(page.error) === 404
+    || errorStatus(auditPage.error) === 401 || errorStatus(auditPage.error) === 404) return <NotFound />;
 
   const totalCount = page.data?.totalCount ?? 0;
   const maxOffset = Math.min(10_000, Math.max(0, (Math.ceil(totalCount / PAGE_SIZE) - 1) * PAGE_SIZE));
   const first = totalCount === 0 ? 0 : offset + 1;
   const last = Math.min(offset + (page.data?.accounts.length ?? 0), totalCount);
   const fatalError = [overview.error, page.error].find(error => errorStatus(error) !== 401 && errorStatus(error) !== 404);
+  const auditFatalError = auditPage.error && errorStatus(auditPage.error) !== 401 && errorStatus(auditPage.error) !== 404
+    ? auditPage.error
+    : undefined;
+  const auditTotalCount = auditPage.data?.totalCount ?? 0;
+  const auditReady = auditPage.isFetchedAfterMount;
+  const auditMaxOffset = Math.min(10_000, Math.max(0, (Math.ceil(auditTotalCount / PAGE_SIZE) - 1) * PAGE_SIZE));
+  const auditFirst = auditTotalCount === 0 ? 0 : auditOffset + 1;
+  const auditLast = Math.min(auditOffset + (auditPage.data?.events.length ?? 0), auditTotalCount);
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -115,6 +144,7 @@ export default function AdminAccountsPage() {
   const refreshAdminData = () => {
     void queryClient.invalidateQueries({ queryKey: getGetAdminOverviewQueryKey() });
     void queryClient.invalidateQueries({ queryKey: getListAdminAccountsQueryKey() });
+    void queryClient.invalidateQueries({ queryKey: getListAdminAuditEventsQueryKey() });
   };
 
   const confirmStatusChange = () => {
@@ -239,6 +269,54 @@ export default function AdminAccountsPage() {
             <span className="admin-page-index" data-testid="text-page-number">{totalCount ? `${Math.floor(offset / PAGE_SIZE) + 1} / ${Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}` : '—'}</span>
             <button type="button" className="admin-page-button" data-testid="button-next-page" disabled={offset >= maxOffset || page.isFetching}
               onClick={() => setOffset(current => Math.min(maxOffset, current + PAGE_SIZE))}>Next <ArrowRight size={15} /></button>
+          </div>
+        </footer>
+      </>}
+    </section>
+    <section className="admin-directory admin-audit" aria-labelledby="audit-heading">
+      <div className="admin-directory-head">
+        <div>
+          <h2 id="audit-heading">Account status history</h2>
+          <p>Recent suspend and reactivate decisions.</p>
+        </div>
+        <div className="admin-count">{auditPage.isLoading ? 'Loading history' : `${auditTotalCount.toLocaleString()} ${auditTotalCount === 1 ? 'event' : 'events'}`}</div>
+      </div>
+      {auditFatalError && <div className="admin-error" role="alert" data-testid="status-audit-error">
+        <CircleAlert size={18} />
+        <div><strong>Account history could not be loaded.</strong><p>Check the connection and try again.</p></div>
+        <button type="button" className="admin-retry" data-testid="button-retry-audit" onClick={() => { void auditPage.refetch(); }}>Retry</button>
+      </div>}
+      {!auditFatalError && (!auditReady || auditPage.isLoading) && <div className="admin-table-skeleton" aria-label="Loading account history" aria-busy="true">
+        {[0, 1, 2, 3].map(item => <i key={item} />)}
+      </div>}
+      {!auditFatalError && auditReady && !auditPage.isLoading && auditPage.data?.events.length === 0 && <div className="admin-empty" data-testid="status-audit-empty">
+        <span className="admin-empty-icon"><ShieldCheck size={20} /></span>
+        <strong>No account status changes yet</strong>
+        <p>Suspends and reactivations will appear here.</p>
+      </div>}
+      {!auditFatalError && auditReady && !auditPage.isLoading && (auditPage.data?.events.length ?? 0) > 0 && <>
+        <div className="admin-audit-table" role="table" aria-label="Account status changes">
+          <div className="admin-audit-labels" role="row">
+            <span role="columnheader">ACTOR ID</span><span role="columnheader">TARGET ID</span>
+            <span role="columnheader">ACTION</span><span role="columnheader">OUTCOME</span><span role="columnheader">TIME</span>
+          </div>
+          {auditPage.data?.events.map((event, index) => <div className="admin-audit-row" role="row"
+            key={`${event.createdAt}:${event.actorId}:${event.targetId}:${index}`}>
+            <span role="cell" className="admin-audit-id">{event.actorId}</span>
+            <span role="cell" className="admin-audit-id">{event.targetId}</span>
+            <span role="cell">{event.action === 'suspend' ? 'Suspend' : 'Reactivate'}</span>
+            <span role="cell"><span className={`admin-audit-outcome ${event.outcome}`}>{event.outcome}</span></span>
+            <time role="cell" dateTime={event.createdAt}>{dateTimeLabel(event.createdAt)}</time>
+          </div>)}
+        </div>
+        <footer className="admin-pagination">
+          <span data-testid="text-audit-pagination-range">{auditTotalCount ? `Showing ${auditFirst}–${auditLast} of ${auditTotalCount.toLocaleString()}` : 'No events'}</span>
+          <div className="admin-page-controls">
+            <button type="button" className="admin-page-button" data-testid="button-audit-previous-page" disabled={auditOffset <= 0 || auditPage.isFetching}
+              onClick={() => setAuditOffset(current => Math.max(0, current - PAGE_SIZE))}><ArrowLeft size={15} /> Previous</button>
+            <span className="admin-page-index" data-testid="text-audit-page-number">{auditTotalCount ? `${Math.floor(auditOffset / PAGE_SIZE) + 1} / ${Math.max(1, Math.ceil(auditTotalCount / PAGE_SIZE))}` : '—'}</span>
+            <button type="button" className="admin-page-button" data-testid="button-audit-next-page" disabled={auditOffset >= auditMaxOffset || auditPage.isFetching}
+              onClick={() => setAuditOffset(current => Math.min(auditMaxOffset, current + PAGE_SIZE))}>Next <ArrowRight size={15} /></button>
           </div>
         </footer>
       </>}

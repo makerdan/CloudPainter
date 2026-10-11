@@ -48,6 +48,21 @@ test("PostgreSQL admin permissions deny missing or disabled rows and retain mini
     await store.finishAction(auditId, "succeeded");
     const completed = await client.query("SELECT outcome FROM cloudpainter_admin_audit WHERE id = $1", [auditId]);
     assert.equal(completed.rows[0]?.outcome, "succeeded");
+    const secondAuditId = await store.startAction("active-admin", "another-target", "reactivate");
+    await store.finishAction(secondAuditId, "failed");
+    const latestPage = await store.listAuditEvents({ limit: 1, offset: 0 });
+    assert.equal(latestPage.totalCount, 2);
+    assert.deepEqual(latestPage.events, [{
+      actorId: "active-admin",
+      targetId: "another-target",
+      action: "reactivate",
+      outcome: "failed",
+      createdAt: latestPage.events[0]?.createdAt,
+    }]);
+    assert.deepEqual(Object.keys(latestPage.events[0] ?? {}).sort(), ["action", "actorId", "createdAt", "outcome", "targetId"]);
+    const previousPage = await store.listAuditEvents({ limit: 1, offset: 1 });
+    assert.equal(previousPage.events[0]?.targetId, "target-account");
+    assert.equal(previousPage.events[0]?.outcome, "succeeded");
     await assert.rejects(
       client.query("INSERT INTO cloudpainter_admin_audit (actor_user_id, target_user_id, action) VALUES ('a', 'b', 'delete')"),
     );

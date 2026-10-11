@@ -18,12 +18,30 @@ const mocks = vi.hoisted(() => ({
     error: null,
     isLoading: false,
     isFetching: false,
+    isFetchedAfterMount: true,
+    refetch: vi.fn(),
+  },
+  auditPage: {
+    data: {
+      totalCount: 26,
+      limit: 25,
+      offset: 0,
+      events: [
+        { actorId: "user_admin123", targetId: "user_target123456", action: "suspend", outcome: "succeeded", createdAt: "2024-01-02T12:30:00.000Z" },
+        { actorId: "user_other456", targetId: "user_target987654", action: "reactivate", outcome: "failed", createdAt: "2024-01-01T12:30:00.000Z" },
+      ],
+    },
+    error: null,
+    isLoading: false,
+    isFetching: false,
+    isFetchedAfterMount: true,
     refetch: vi.fn(),
   },
   mutate: vi.fn(),
   queryClient: { removeQueries: vi.fn(), invalidateQueries: vi.fn() },
   listHook: vi.fn(),
   overviewHook: vi.fn(),
+  auditHook: vi.fn(),
   mutationHook: vi.fn(),
 }));
 
@@ -35,6 +53,7 @@ vi.mock("@tanstack/react-query", async importOriginal => {
 vi.mock("@workspace/api-client-react", () => ({
   getGetAdminOverviewQueryKey: () => ["/api/admin/overview"],
   getListAdminAccountsQueryKey: () => ["/api/admin/accounts"],
+  getListAdminAuditEventsQueryKey: () => ["/api/admin/audit-events"],
   useGetAdminOverview: (...args: unknown[]) => {
     mocks.overviewHook(...args);
     return mocks.overview;
@@ -42,6 +61,10 @@ vi.mock("@workspace/api-client-react", () => ({
   useListAdminAccounts: (...args: unknown[]) => {
     mocks.listHook(...args);
     return mocks.page;
+  },
+  useListAdminAuditEvents: (...args: unknown[]) => {
+    mocks.auditHook(...args);
+    return mocks.auditPage;
   },
   useSetAdminAccountStatus: (...args: unknown[]) => {
     mocks.mutationHook(...args);
@@ -66,6 +89,23 @@ describe("CloudPainter admin account console", () => {
       error: null,
       isLoading: false,
       isFetching: false,
+      isFetchedAfterMount: true,
+      refetch: vi.fn(),
+    };
+    mocks.auditPage = {
+      data: {
+        totalCount: 26,
+        limit: 25,
+        offset: 0,
+        events: [
+          { actorId: "user_admin123", targetId: "user_target123456", action: "suspend", outcome: "succeeded", createdAt: "2024-01-02T12:30:00.000Z" },
+          { actorId: "user_other456", targetId: "user_target987654", action: "reactivate", outcome: "failed", createdAt: "2024-01-01T12:30:00.000Z" },
+        ],
+      },
+      error: null,
+      isLoading: false,
+      isFetching: false,
+      isFetchedAfterMount: true,
       refetch: vi.fn(),
     };
     mocks.mutate.mockReset();
@@ -73,6 +113,7 @@ describe("CloudPainter admin account console", () => {
     mocks.queryClient.invalidateQueries.mockReset();
     mocks.listHook.mockReset();
     mocks.overviewHook.mockReset();
+    mocks.auditHook.mockReset();
     mocks.mutationHook.mockReset();
   });
   afterEach(() => cleanup());
@@ -82,7 +123,8 @@ describe("CloudPainter admin account console", () => {
     const overviewOptions = mocks.overviewHook.mock.calls[0]?.[0] as { request?: RequestInit };
     const listOptions = mocks.listHook.mock.calls[0]?.[1] as { request?: RequestInit };
     const mutationOptions = mocks.mutationHook.mock.calls[0]?.[0] as { request?: RequestInit };
-    for (const options of [overviewOptions, listOptions, mutationOptions]) {
+    const auditOptions = mocks.auditHook.mock.calls[0]?.[1] as { request?: RequestInit };
+    for (const options of [overviewOptions, listOptions, auditOptions, mutationOptions]) {
       expect(options.request?.headers).toEqual({ "X-Admin-Session": "session-admin" });
       expect(options.request?.credentials).toBe("same-origin");
     }
@@ -91,12 +133,19 @@ describe("CloudPainter admin account console", () => {
     expect(screen.getByTestId("status-account-user_target123456").textContent).toContain("Active");
     expect(screen.getByText("Current admin")).toBeTruthy();
     expect(screen.queryByTestId("button-suspend-user_admin123")).toBeNull();
+    expect(screen.getByText("Account status history")).toBeTruthy();
+    expect(screen.getByText("user_admin123")).toBeTruthy();
+    expect(screen.getByText("user_target123456")).toBeTruthy();
+    expect(screen.getByText("succeeded")).toBeTruthy();
+    expect(screen.getByTestId("text-audit-pagination-range").textContent).toContain("26");
 
     fireEvent.change(screen.getByTestId("input-account-search"), { target: { value: "river" } });
     fireEvent.click(screen.getByTestId("button-search"));
     expect(mocks.listHook.mock.calls.some(([params]) => (params as { query?: string }).query === "river")).toBe(true);
     fireEvent.click(screen.getByTestId("button-next-page"));
     expect(mocks.listHook.mock.calls.some(([params]) => (params as { offset?: number }).offset === 25)).toBe(true);
+    fireEvent.click(screen.getByTestId("button-audit-next-page"));
+    expect(mocks.auditHook.mock.calls.some(([params]) => (params as { offset?: number }).offset === 25)).toBe(true);
   });
 
   it("requires explicit confirmation before changing status", () => {
@@ -125,5 +174,13 @@ describe("CloudPainter admin account console", () => {
     render(<AdminAccountsPage />);
     expect(screen.getByText("404 Page Not Found")).toBeTruthy();
     expect(screen.queryByText("River Stone")).toBeNull();
+  });
+
+  it("hides cached account history when the server denies the current session", () => {
+    mocks.auditPage.error = { status: 404 };
+    render(<AdminAccountsPage />);
+    expect(screen.getByText("404 Page Not Found")).toBeTruthy();
+    expect(screen.queryByText("Account status history")).toBeNull();
+    expect(screen.queryByText("user_target123456")).toBeNull();
   });
 });

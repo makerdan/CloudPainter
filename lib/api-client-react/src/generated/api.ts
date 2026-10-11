@@ -23,12 +23,14 @@ import type {
   AdminAccountPage,
   AdminAccountStatus,
   AdminAccountStatusResult,
+  AdminAuditEventPage,
   AdminOverview,
   CloudPainterSettings,
   GetImageGenerationConfig200,
   HealthStatus,
   ImageGenerationError,
   ListAdminAccountsParams,
+  ListAdminAuditEventsParams,
   LogoImageErrorResponse,
   LogoImageRequest,
   LogoImageResult,
@@ -218,6 +220,90 @@ export function useListAdminAccounts<TData = Awaited<ReturnType<typeof listAdmin
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListAdminAccountsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListAdminAuditEventsUrl = (params?: ListAdminAuditEventsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/audit-events?${stringifiedParams}` : `/api/admin/audit-events`
+}
+
+/**
+ * @summary Page through account status changes for authorized CloudPainter administrators
+ */
+export const listAdminAuditEvents = async (params?: ListAdminAuditEventsParams, options?: Parameters<typeof customFetch>[1]): Promise<AdminAuditEventPage> => {
+
+  return customFetch<AdminAuditEventPage>(getListAdminAuditEventsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminAuditEventsQueryKey = (params?: ListAdminAuditEventsParams,) => {
+    return [
+    `/api/admin/audit-events`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAdminAuditEventsQueryOptions = <TData = Awaited<ReturnType<typeof listAdminAuditEvents>>, TError = ErrorType<void>>(params?: ListAdminAuditEventsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminAuditEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminAuditEventsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminAuditEvents>>> = ({ signal }) => listAdminAuditEvents(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminAuditEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminAuditEventsQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminAuditEvents>>>
+export type ListAdminAuditEventsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Page through account status changes for authorized CloudPainter administrators
+ */
+
+export function useListAdminAuditEvents<TData = Awaited<ReturnType<typeof listAdminAuditEvents>>, TError = ErrorType<void>>(
+ params?: ListAdminAuditEventsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminAuditEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminAuditEventsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -3,6 +3,7 @@ import { getAuth } from "@clerk/express";
 import { clerkClient } from "@clerk/express";
 import {
   GetAdminOverviewResponse,
+  ListAdminAuditEventsResponse,
   ListAdminAccountsResponse,
   SetAdminAccountStatusBody,
   SetAdminAccountStatusParams,
@@ -11,8 +12,19 @@ import {
 
 export type AdminAction = "suspend" | "reactivate";
 export type AdminActionOutcome = "succeeded" | "failed";
+export interface AdminAuditEvent {
+  actorId: string;
+  targetId: string;
+  action: AdminAction;
+  outcome: AdminActionOutcome | "pending";
+  createdAt: Date;
+}
 export interface AdminStore {
   isEnabledAdmin(userId: string): Promise<boolean>;
+  listAuditEvents(params: { limit: number; offset: number }): Promise<{
+    events: AdminAuditEvent[];
+    totalCount: number;
+  }>;
   startAction(actorUserId: string, targetUserId: string, action: AdminAction): Promise<string>;
   finishAction(auditId: string, outcome: AdminActionOutcome): Promise<void>;
 }
@@ -97,6 +109,36 @@ export function createAdminRouter(store: AdminStore, provider: AdminAccountProvi
       }));
     } catch {
       res.status(503).json({ error: "Could not load accounts. Please retry." });
+    }
+  });
+
+  router.get("/admin/audit-events", async (req, res): Promise<void> => {
+    const rawLimit = req.query.limit === undefined ? "25" : String(req.query.limit);
+    const rawOffset = req.query.offset === undefined ? "0" : String(req.query.offset);
+    const limit = Number(rawLimit);
+    const offset = Number(rawOffset);
+    if (!/^\d+$/.test(rawLimit) || !/^\d+$/.test(rawOffset)
+      || !Number.isInteger(limit) || limit < 1 || limit > 50
+      || !Number.isInteger(offset) || offset < 0 || offset > 10_000) {
+      res.status(400).json({ error: "Use a page size from 1 to 50 and an offset up to 10,000." });
+      return;
+    }
+    try {
+      const result = await store.listAuditEvents({ limit, offset });
+      res.json(ListAdminAuditEventsResponse.parse({
+        events: result.events.map(event => ({
+          actorId: event.actorId,
+          targetId: event.targetId,
+          action: event.action,
+          outcome: event.outcome,
+          createdAt: event.createdAt.toISOString(),
+        })),
+        totalCount: result.totalCount,
+        limit,
+        offset,
+      }));
+    } catch {
+      res.status(503).json({ error: "Could not load account history. Please retry." });
     }
   });
 

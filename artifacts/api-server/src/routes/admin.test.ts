@@ -27,6 +27,7 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
     ["disabled-admin", false],
   ]);
   let listCalls: { limit: number; offset: number; query?: string }[] = [];
+  let auditListCalls: { limit: number; offset: number }[] = [];
   let providerMutations: string[] = [];
   let audit: { actor: string; target: string; action: AdminAction; outcome: "pending" | "succeeded" | "failed" }[] = [];
   let failProvider = false;
@@ -71,6 +72,19 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
   }));
   app.use("/api", createAdminRouter({
     async isEnabledAdmin(userId) { return adminPermissions.get(userId) === true; },
+    async listAuditEvents(params) {
+      auditListCalls.push(params);
+      return {
+        events: audit.slice(params.offset, params.offset + params.limit).map(event => ({
+          actorId: event.actor,
+          targetId: event.target,
+          action: event.action,
+          outcome: event.outcome,
+          createdAt: new Date("2024-02-03T04:05:06.000Z"),
+        })),
+        totalCount: audit.length,
+      };
+    },
     async startAction(actor, target, action) {
       if (failAuditStart) throw new Error("database details must not leak");
       const id = String(audit.length + 1);
@@ -103,12 +117,22 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
     assert.equal((await request("/accounts", "ordinary-user")).status, 404);
     assert.equal((await request("/accounts", "quota-admin-only")).status, 404);
     assert.equal((await request("/accounts", "disabled-admin")).status, 404);
+    assert.equal((await request("/audit-events")).status, 401);
+    assert.equal((await request("/audit-events", "ordinary-user")).status, 404);
+    assert.equal((await request("/audit-events", "quota-admin-only")).status, 404);
+    assert.equal((await request("/audit-events", "disabled-admin")).status, 404);
     assert.equal((await request("/accounts", "admin-user", "session-a", {
       headers: { Authorization: `Bearer ${token("admin-user", "session-a", true)}` },
     })).status, 401);
     assert.equal((await request("/accounts", "admin-user", "mismatched-session", {
       headers: { Authorization: `Bearer ${token("admin-user", "session-a")}` },
     })).status, 401);
+    assert.equal((await request("/audit-events", "admin-user", "session-a", {
+      headers: { Authorization: `Bearer ${token("admin-user", "session-a", true)}` },
+    })).status, 401, "expired sessions cannot read account history");
+    assert.equal((await request("/audit-events", "admin-user", "mismatched-session", {
+      headers: { Authorization: `Bearer ${token("admin-user", "session-a")}` },
+    })).status, 401, "stale session IDs cannot read account history");
     for (const [user, expectedStatus] of [
       [undefined, 401],
       ["ordinary-user", 404],
@@ -127,6 +151,13 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
     assert.equal(summary.status, 200);
     assert.deepEqual(await summary.json(), { totalAccounts: 87 });
     assert.equal(summary.headers.get("cache-control"), "private, no-store");
+    const emptyAudit = await request("/audit-events?limit=2&offset=0", "admin-user");
+    assert.equal(emptyAudit.status, 200);
+    assert.equal(emptyAudit.headers.get("cache-control"), "private, no-store");
+    assert.deepEqual(await emptyAudit.json(), { events: [], totalCount: 0, limit: 2, offset: 0 });
+    assert.deepEqual(auditListCalls.at(-1), { limit: 2, offset: 0 });
+    assert.equal((await request("/audit-events?limit=51", "admin-user")).status, 400);
+    assert.equal((await request("/audit-events?offset=10001", "admin-user")).status, 400);
 
     const page = await request("/accounts?limit=2&offset=4&query=river", "admin-user");
     assert.equal(page.status, 200);
@@ -178,6 +209,23 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
       { actor: "admin-user", target: "user_target123456", action: "suspend", outcome: "succeeded" },
       { actor: "admin-user", target: "user_target123456", action: "reactivate", outcome: "succeeded" },
     ]);
+    const historyResponse = await request("/audit-events?limit=1&offset=1", "admin-user");
+    assert.equal(historyResponse.status, 200);
+    const history = await historyResponse.json() as { events: Record<string, unknown>[]; totalCount: number };
+    assert.deepEqual(history, {
+      events: [{
+        actorId: "admin-user",
+        targetId: "user_target123456",
+        action: "reactivate",
+        outcome: "succeeded",
+        createdAt: "2024-02-03T04:05:06.000Z",
+      }],
+      totalCount: 2,
+      limit: 1,
+      offset: 1,
+    });
+    assert.deepEqual(Object.keys(history.events[0] ?? {}).sort(), ["action", "actorId", "createdAt", "outcome", "targetId"]);
+    assert.deepEqual(auditListCalls.at(-1), { limit: 1, offset: 1 });
 
     const beforeFailure = initialProviderCalls();
     failProvider = true;

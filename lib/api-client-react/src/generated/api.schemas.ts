@@ -45,6 +45,48 @@ export interface AdminAccountPage {
   offset: number;
 }
 
+export type AdminAuditEventAction = typeof AdminAuditEventAction[keyof typeof AdminAuditEventAction];
+
+
+export const AdminAuditEventAction = {
+  suspend: 'suspend',
+  reactivate: 'reactivate',
+} as const;
+
+export type AdminAuditEventOutcome = typeof AdminAuditEventOutcome[keyof typeof AdminAuditEventOutcome];
+
+
+export const AdminAuditEventOutcome = {
+  pending: 'pending',
+  succeeded: 'succeeded',
+  failed: 'failed',
+} as const;
+
+export interface AdminAuditEvent {
+  actorId: string;
+  targetId: string;
+  action: AdminAuditEventAction;
+  outcome: AdminAuditEventOutcome;
+  createdAt: string;
+}
+
+export interface AdminAuditEventPage {
+  /** @maxItems 50 */
+  events: AdminAuditEvent[];
+  /** @minimum 0 */
+  totalCount: number;
+  /**
+     * @minimum 1
+     * @maximum 50
+     */
+  limit: number;
+  /**
+     * @minimum 0
+     * @maximum 10000
+     */
+  offset: number;
+}
+
 export type AdminAccountStatusStatus = typeof AdminAccountStatusStatus[keyof typeof AdminAccountStatusStatus];
 
 
@@ -365,6 +407,19 @@ offset?: number;
  * @maxLength 100
  */
 query?: string;
+};
+
+export type ListAdminAuditEventsParams = {
+/**
+ * @minimum 1
+ * @maximum 50
+ */
+limit?: number;
+/**
+ * @minimum 0
+ * @maximum 10000
+ */
+offset?: number;
 };
 
 export type GetImageGenerationConfig200 = {

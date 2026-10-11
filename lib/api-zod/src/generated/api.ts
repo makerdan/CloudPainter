@@ -82,6 +82,56 @@ export const ListAdminAccountsResponse = zod.object({
 
 
 /**
+ * @summary Page through account status changes for authorized CloudPainter administrators
+ */
+export const listAdminAuditEventsQueryLimitDefault = 25;
+export const listAdminAuditEventsQueryLimitMax = 50;
+
+export const listAdminAuditEventsQueryOffsetDefault = 0;
+export const listAdminAuditEventsQueryOffsetMin = 0;
+export const listAdminAuditEventsQueryOffsetMax = 10000;
+
+
+
+export const ListAdminAuditEventsQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(listAdminAuditEventsQueryLimitMax).default(listAdminAuditEventsQueryLimitDefault),
+  "offset": zod.coerce.number().int().min(listAdminAuditEventsQueryOffsetMin).max(listAdminAuditEventsQueryOffsetMax).default(listAdminAuditEventsQueryOffsetDefault)
+})
+
+export const listAdminAuditEventsHeaderXAdminSessionMax = 256;
+
+
+
+export const ListAdminAuditEventsHeader = zod.object({
+  "X-Admin-Session": zod.string().max(listAdminAuditEventsHeaderXAdminSessionMax)
+})
+
+export const listAdminAuditEventsResponseEventsMax = 50;
+
+export const listAdminAuditEventsResponseTotalCountMin = 0;
+
+export const listAdminAuditEventsResponseLimitMax = 50;
+
+export const listAdminAuditEventsResponseOffsetMin = 0;
+export const listAdminAuditEventsResponseOffsetMax = 10000;
+
+
+
+export const ListAdminAuditEventsResponse = zod.object({
+  "events": zod.array(zod.object({
+  "actorId": zod.string(),
+  "targetId": zod.string(),
+  "action": zod.enum(['suspend', 'reactivate']),
+  "outcome": zod.enum(['pending', 'succeeded', 'failed']),
+  "createdAt": zod.coerce.date()
+})).max(listAdminAuditEventsResponseEventsMax),
+  "totalCount": zod.number().int().min(listAdminAuditEventsResponseTotalCountMin),
+  "limit": zod.number().int().min(1).max(listAdminAuditEventsResponseLimitMax),
+  "offset": zod.number().int().min(listAdminAuditEventsResponseOffsetMin).max(listAdminAuditEventsResponseOffsetMax)
+})
+
+
+/**
  * @summary Suspend or reactivate a CloudPainter account
  */
 export const setAdminAccountStatusPathUserIdRegExp = new RegExp('^user_[A-Za-z0-9]{5,}$');
