@@ -404,6 +404,78 @@ for (const action of ['undo', 'redo'] as const) {
   });
 }
 
+for (const action of ['undo', 'redo'] as const) {
+  test(`${action} survives an immediate reload before debounced autosave`, async ({ page }) => {
+    const photo = await png(page, 'immediate-history.png', 480, 320);
+    const stroke = (color: string, y: number) => ({
+      points: [{ x: 0.2, y }, { x: 0.7, y }],
+      color, size: 8, tool: 'pen',
+    });
+    const before = {
+      image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
+      width: 480, height: 320, title: 'Immediate history reload',
+      selectedLayerId: 'immediate-middle',
+      layers: [
+        { id: 'immediate-bottom', name: 'Background', visible: true, opacity: 0.65,
+          strokes: [stroke('#e53935', 0.2)], redo: [stroke('#ff9800', 0.25)] },
+        { id: 'immediate-middle', name: 'Main drawing', visible: true, opacity: 0.45,
+          strokes: [stroke('#1e88e5', 0.4), stroke('#8e24aa', 0.45)],
+          redo: [stroke('#00acc1', 0.5), stroke('#d81b60', 0.55)] },
+        { id: 'immediate-top', name: 'Hidden details', visible: false, opacity: 0.8,
+          strokes: [stroke('#43a047', 0.65)],
+          redo: [stroke('#3949ab', 0.7), stroke('#6d4c41', 0.75)] },
+      ],
+    };
+    await page.addInitScript(({ key, project }) => {
+      const marker = `${key}-immediate-history-seeded`;
+      if (sessionStorage.getItem(marker)) return;
+      localStorage.setItem(key, JSON.stringify(project));
+      sessionStorage.setItem(marker, 'true');
+    }, { key: STORE_KEY, project: before });
+    await page.reload();
+    await expect(page.getByTestId('img-reference')).toBeVisible();
+    await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
+    // Settle initial mount only. Never wait for persistence after the action.
+    await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible();
+    expect(await savedProject(page)).toEqual(before);
+
+    const expected = {
+      ...before,
+      layers: before.layers.map(layer => {
+        if (layer.id !== before.selectedLayerId) return layer;
+        return action === 'undo'
+          ? { ...layer, strokes: layer.strokes.slice(0, -1),
+            redo: [...layer.redo, layer.strokes[layer.strokes.length - 1]] }
+          : { ...layer, strokes: [...layer.strokes, layer.redo[layer.redo.length - 1]],
+            redo: layer.redo.slice(0, -1) };
+      }),
+    };
+    // Freeze time so even a slow test runner cannot accidentally let the
+    // 500ms debounce save first and mask a broken pagehide flush.
+    const frozenTime = new Date('2026-10-11T12:00:00Z');
+    await page.clock.install({ time: frozenTime });
+    await page.clock.pauseAt(frozenTime);
+    await page.getByTestId(`button-${action}`).click();
+    await page.reload();
+
+    // Read immediately: polling here could hide a missing unload save behind
+    // the next mount's autosave. Whole-project equality checks both stack
+    // orders, the selected layer, and all untouched layers and photo data.
+    expect(await savedProject(page)).toEqual(expected);
+    await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
+    await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+    await expect(page.getByTestId('button-undo')).toBeEnabled();
+    await expect(page.getByTestId('button-redo')).toBeEnabled();
+
+    // Verify the rehydrated stack is usable: the inverse action must restore
+    // every original entry, including the pre-existing redo history.
+    await page.getByTestId(`button-${action === 'undo' ? 'redo' : 'undo'}`).click();
+    await page.reload();
+    expect(await savedProject(page)).toEqual(before);
+    await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
+  });
+}
+
 for (const redoOnly of [false, true]) {
 test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, remains safe when already empty,' : 'strokes and redo history'} and persists after reload`, async ({ page }) => {
   const photo = await png(page, 'clear-layer-reference.png', 480, 320);
