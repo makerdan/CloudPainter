@@ -8,7 +8,8 @@
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "validate:task-plans": "node scripts/validate-task-plans.mjs",
-    "test:regression-guard": "node --test scripts/tests/check-regression-guard.test.mjs"
+    "test:regression-guard": "node --test scripts/tests/check-regression-guard.test.mjs",
+    "test:readme-sync": "node --test scripts/tests/daily-readme-sync.test.mjs"
   },
   "private": true,
   "dependencies": {

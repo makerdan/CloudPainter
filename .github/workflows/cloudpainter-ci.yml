@@ -65,6 +65,9 @@ jobs:
       - name: Test task-plan regression guard
         run: pnpm run test:regression-guard
 
+      - name: Test daily README sync race handling
+        run: pnpm run test:readme-sync
+
       - name: Run portable unit and mocked-provider suites
         run: |
           set +e
