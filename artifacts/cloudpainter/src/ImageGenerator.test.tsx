@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '../tests/browser-safety-fixtures';
 
 const STORE_KEY = 'cloudpainter-project-v1';
 const PROJECT_HISTORY_KEY = 'cloudpainter-project-history-v1';
@@ -29,13 +29,8 @@ async function failProjectHistoryWrites(page: Page) {
   await page.evaluate(key => sessionStorage.setItem(key, 'true'), keys.failureKey);
 }
 
-const signedInStorageState = process.env.CLOUDPAINTER_AUTH_STATE;
-
 test.describe('signed-in generation (provider always stubbed; requires authorized state)', () => {
-test.use({ storageState: signedInStorageState || { cookies: [], origins: [] } });
-
 test.beforeEach(async ({ page }) => {
-  if (!signedInStorageState) throw new Error('Set CLOUDPAINTER_AUTH_STATE to a signed-in Clerk Playwright storage-state file. No paid inference is used.');
   await page.route('**/api/images/config', route => route.fulfill({ json: approvedConfig }));
   await page.goto('./');
   await page.getByTestId('button-add-layer').click();

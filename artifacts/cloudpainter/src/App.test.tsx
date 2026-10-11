@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import { expect, test, type Browser, type Download, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Download, type Page } from '../tests/browser-safety-fixtures';
+import { installProviderRequestGuard } from '../tests/provider-request-guard.mjs';
 
 const STORE_KEY = 'cloudpainter-project-v1';
 const PROJECT_HISTORY_KEY = 'cloudpainter-project-history-v1';
@@ -41,6 +42,7 @@ async function openSyntheticProjectTabs(browser: Browser, project: object) {
   const baseURL = process.env.CLOUDPAINTER_TEST_URL;
   if (!baseURL) throw new Error('Set CLOUDPAINTER_TEST_URL to the running CloudPainter preview URL.');
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const assertNoProviderRequests = await installProviderRequestGuard(context);
   await context.route('**/api/images/config', route => route.fulfill({
     json: { configured: false, signedIn: false, allowed: false, dailyLimit: 0, remaining: 0, globalRemaining: 0 },
   }));
@@ -62,7 +64,7 @@ async function openSyntheticProjectTabs(browser: Browser, project: object) {
     await expect(tab.getByTestId('status-save')).toHaveText('Saved in this browser');
     await expect.poll(() => savedProject(tab)).toEqual(project);
   }
-  return { context, tabA, tabB };
+  return { context, tabA, tabB, assertNoProviderRequests };
 }
 
 async function addSyntheticStroke(page: Page) {
@@ -193,7 +195,7 @@ const syntheticMultiTabProject = {
 
 for (const firstWriter of ['A', 'B'] as const) {
   test(`tab ${firstWriter} then the other tab cannot silently overwrite a newer sketch`, async ({ browser }) => {
-    const { context, tabA, tabB } = await openSyntheticProjectTabs(browser, syntheticMultiTabProject);
+    const { context, tabA, tabB, assertNoProviderRequests } = await openSyntheticProjectTabs(browser, syntheticMultiTabProject);
     try {
       const first = firstWriter === 'A' ? tabA : tabB;
       const stale = firstWriter === 'A' ? tabB : tabA;
@@ -216,13 +218,17 @@ for (const firstWriter of ['A', 'B'] as const) {
       await expect(stale.getByTestId('status-save')).toHaveText(PROJECT_CONFLICT_STATUS);
       await expect(first.getByTestId('button-undo')).toBeEnabled();
     } finally {
-      await context.close();
+      try {
+        assertNoProviderRequests();
+      } finally {
+        await context.close();
+      }
     }
   });
 }
 
 test('a stale tab pagehide and reload cannot replace the newer saved sketch', async ({ browser }) => {
-  const { context, tabA, tabB } = await openSyntheticProjectTabs(browser, syntheticMultiTabProject);
+  const { context, tabA, tabB, assertNoProviderRequests } = await openSyntheticProjectTabs(browser, syntheticMultiTabProject);
   try {
     await tabA.bringToFront();
     await addSyntheticStroke(tabA);
@@ -244,7 +250,11 @@ test('a stale tab pagehide and reload cannot replace the newer saved sketch', as
     expect(await savedProject(tabB)).toEqual(newerProject);
     await expect(tabB.getByTestId('button-undo')).toBeEnabled();
   } finally {
-    await context.close();
+    try {
+      assertNoProviderRequests();
+    } finally {
+      await context.close();
+    }
   }
 });
 

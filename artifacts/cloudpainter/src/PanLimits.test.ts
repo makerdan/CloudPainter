@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '../tests/browser-safety-fixtures';
 
 const STORE_KEY = 'cloudpainter-project-v1';
 

@@ -61,11 +61,25 @@ disabled-account check and durable limits. This task does not deploy the app.
 - `pnpm --filter @workspace/integrations-openai-ai-server test:poe` — unchanged four-model
   registry and provider-contract checks using fake credentials/stub transport.
 - `pnpm run typecheck` — canonical workspace typecheck.
-- `CLOUDPAINTER_TEST_URL=<running-preview> CLOUDPAINTER_AUTH_STATE=<signed-in-state-file>
-  pnpm --filter @workspace/cloudpainter test:poe-images` — browser checks with mocked
-  generation/config responses. Clerk sign-in is real; no Poe request is sent.
-  Keep session-state files only in ignored `generated-artifacts/`, never commit them.
-  The suite fails explicitly when its signed-in fixture is missing.
+- `CLOUDPAINTER_TEST_URL=<running-preview>
+  pnpm --filter @workspace/cloudpainter test:anonymous-photo-and-images` — anonymous
+  browser lane with an empty session and local API fixtures. Missing provider-capable
+  route fixtures are blocked before dispatch and fail the test.
+- `CLOUDPAINTER_TEST_URL=<running-preview>
+  CLOUDPAINTER_AUTH_STATE=generated-artifacts/<owner-approved-state-file>
+  pnpm --filter @workspace/cloudpainter test:poe-images` — signed-in lane with mocked
+  generation/config responses. Run only when an owner-approved disposable Clerk test
+  identity is already provisioned; no identity is created or substituted, and no Poe
+  request is sent. Keep state files in ignored `generated-artifacts/`, never commit
+  them. The suite fails explicitly when its signed-in fixture is missing.
+- `timeout --signal=TERM --kill-after=5s 60s node --test --test-timeout=10000
+  scripts/tests/browser-safety-lanes.test.mjs` — local regression checks for lane
+  isolation and fail-closed provider-route interception.
+
+The Playwright lane command is currently blocked before test execution because
+`artifacts/cloudpainter/src/PanLimits.test.ts` has a syntax error. Repair that test
+before treating the anonymous browser suite as validated. The signed-in lane also
+remains gated on an owner-approved disposable Clerk state file; do not fabricate one.
 
 The browser covers signed-out drawing, sign-in gating, disabled access, account
 and shared exhaustion, exact model choices, explicit reference-image application,
