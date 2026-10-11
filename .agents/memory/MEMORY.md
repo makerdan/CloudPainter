@@ -20,3 +20,4 @@
 - [Pointer pressure precision](pointer-pressure-precision.md) — browser pointer pressure is floating-point input; test it approximately without rounding persisted samples.
 - [Disposable Postgres on Nix](nix-disposable-postgres.md) — local ephemeral clusters may need a temporary Unix-socket directory because `/run/postgresql` may not exist.
 - [Long-stroke browser tests](long-stroke-browser-tests.md) — pace synthetic continuous pointer events across tasks so React commits drafts before pointer-up.
+- [PDF export browser fixtures](pdf-export-browser-fixtures.md) — object-URL capture hooks should preserve non-PDF URLs and wait specifically for PDF blobs.

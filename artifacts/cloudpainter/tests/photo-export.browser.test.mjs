@@ -40,6 +40,21 @@ async function waitForApp(url) {
   throw new Error(`CloudPainter did not start at ${url}.\n${serverOutput}\n${lastError ?? ''}`);
 }
 
+async function openExportMenu(page) {
+  const trigger = page.getByTestId('button-export-menu');
+  if (await trigger.getAttribute('aria-expanded') !== 'true') await trigger.click();
+}
+
+async function exportControl(page, testId) {
+  await openExportMenu(page);
+  return page.getByTestId(testId);
+}
+
+async function clickExportAction(page, testId) {
+  await openExportMenu(page);
+  await page.getByTestId(testId).click();
+}
+
 before(async () => {
   const port = await findAvailablePort();
   appUrl = `http://127.0.0.1:${port}/`;
@@ -286,7 +301,7 @@ async function exportAndInspect(page, name, dimensions, expectedDimensions = dim
       window.__cloudPainterExport = this.href;
     };
   });
-  await page.getByTestId('button-export').click();
+  await clickExportAction(page, 'button-export');
   await page.waitForFunction(() => typeof window.__cloudPainterExport === 'string');
 
   const exported = await page.evaluate(async dimensions => {
@@ -365,6 +380,7 @@ async function inspectPdfArtwork(page, locations) {
     window.__cloudPainterPdfBlob = null;
     window.__cloudPainterNativeCreateObjectURL = URL.createObjectURL.bind(URL);
     URL.createObjectURL = blob => {
+      if (blob.type !== 'application/pdf') return window.__cloudPainterNativeCreateObjectURL(blob);
       window.__cloudPainterPdfBlob = blob;
       return 'blob:cloudpainter-captured-pdf';
     };
@@ -372,8 +388,8 @@ async function inspectPdfArtwork(page, locations) {
       window.__cloudPainterPdfDownload = this.href;
     };
   });
-  await page.getByTestId('button-export-pdf').click();
-  await page.waitForFunction(() => window.__cloudPainterPdfBlob instanceof Blob);
+  await clickExportAction(page, 'button-export-pdf');
+  await page.waitForFunction(() => window.__cloudPainterPdfBlob instanceof Blob && window.__cloudPainterPdfBlob.type === 'application/pdf');
 
   const pdfBase64 = await page.evaluate(async () => {
     const bytes = new Uint8Array(await window.__cloudPainterPdfBlob.arrayBuffer());
@@ -432,7 +448,7 @@ async function inspectExportedPixels(page, locations) {
       window.__cloudPainterExport = this.href;
     };
   });
-  await page.getByTestId('button-export').click();
+  await clickExportAction(page, 'button-export');
   await page.waitForFunction(() => typeof window.__cloudPainterExport === 'string');
 
   return page.evaluate(async locations => {
@@ -458,20 +474,20 @@ test('uses distinct filenames for original-size and high-resolution PNG exports'
   const page = await browser.newPage();
   try {
     await page.goto(appUrl);
-    const exportButton = page.getByTestId('button-export');
-    const exportSize = page.getByTestId('select-export-size');
+    await openExportMenu(page);
+    const exportSize = await exportControl(page, 'select-export-size');
 
     assert.equal(await exportSize.inputValue(), '1', 'original size should be the default export size');
     const [originalDownload] = await Promise.all([
       page.waitForEvent('download'),
-      exportButton.click(),
+      clickExportAction(page, 'button-export'),
     ]);
     assert.equal(originalDownload.suggestedFilename(), 'Untitled-idea.png');
 
-    await exportSize.selectOption('2');
+    await (await exportControl(page, 'select-export-size')).selectOption('2');
     const [highResolutionDownload] = await Promise.all([
       page.waitForEvent('download'),
-      exportButton.click(),
+      clickExportAction(page, 'button-export'),
     ]);
     assert.equal(highResolutionDownload.suggestedFilename(), 'Untitled-idea-2x.png');
   } finally {
@@ -502,7 +518,7 @@ test('exports only visible sketch layers and preserves their opacity', async () 
     await drawStroke(page, { startX: 0.65, endX: 0.85, y: 0.75 });
     await waitForStrokeCount(page, 2, 1);
 
-    assert.equal(await page.getByTestId('select-export-size').inputValue(), '1', 'original size should be the default export size');
+    assert.equal(await (await exportControl(page, 'select-export-size')).inputValue(), '1', 'original size should be the default export size');
     const originalState = await captureProjectState(page);
     const exported = await inspectExportedPixels(page, [
       [0.25, 0.25],
@@ -519,7 +535,7 @@ test('exports only visible sketch layers and preserves their opacity', async () 
     );
     assert.ok(Math.abs(exported.pixels[2][3] - 102) <= 1, `40% layer opacity should export at about 40% alpha; received ${exported.pixels[2][3]}`);
 
-    await page.getByTestId('select-export-size').selectOption('2');
+    await (await exportControl(page, 'select-export-size')).selectOption('2');
     const highResolution = await inspectExportedPixels(page, [
       [0.25, 0.25],
       [0.5, 0.5],
@@ -621,7 +637,7 @@ test('keeps fine sketch marks in the PDF image and reports effective print resol
     assert.ok(exported.pixels[2].slice(0, 3).every(channel => channel < 180), `small detail should remain visible in the embedded PDF image; received ${exported.pixels[2]}`);
     assert.ok(exported.pixels[3].slice(0, 3).every(channel => channel > 225), `small detail should remain distinct from blank paper; received ${exported.pixels[3]}`);
 
-    await page.getByTestId('select-pdf-orientation').selectOption('landscape');
+    await (await exportControl(page, 'select-pdf-orientation')).selectOption('landscape');
     assert.match(await resolutionStatus.innerText(), /120 PPI.*Fine details may soften/);
   } finally {
     await page.close();
@@ -650,19 +666,16 @@ test('exports complete sketches in portrait and landscape on US Letter and A4 wi
       return project?.width > 0 && project?.height > 0 && typeof project?.image === 'string';
     });
     const originalState = await captureProjectState(page);
-    const select = page.getByTestId('select-export-size');
-
-    const orientationSelect = page.getByTestId('select-export-orientation');
     for (const paper of [
       { value: 'letter', name: 'US Letter', portrait: { width: 2550, height: 3300 }, landscape: { width: 3300, height: 2550 }, paperPortraitMm: { width: 215.9, height: 279.4 } },
       { value: 'a4', name: 'A4', portrait: { width: 2480, height: 3508 }, landscape: { width: 3508, height: 2480 }, paperPortraitMm: { width: 210, height: 297 } },
     ]) {
-      await select.selectOption(paper.value);
+      await (await exportControl(page, 'select-export-size')).selectOption(paper.value);
       if (paper.value === 'letter') {
-        assert.equal(await orientationSelect.inputValue(), 'match-sketch', `${paper.name}: orientation should initially match the sketch`);
+        assert.equal(await (await exportControl(page, 'select-export-orientation')).inputValue(), 'match-sketch', `${paper.name}: orientation should initially match the sketch`);
       }
       for (const orientation of ['portrait', 'landscape']) {
-        await orientationSelect.selectOption(orientation);
+        await (await exportControl(page, 'select-export-orientation')).selectOption(orientation);
         await exportAndInspect(
           page,
           `${orientation} ${paper.name}`,
@@ -688,18 +701,16 @@ test('exports complete sketches in portrait and landscape on US Letter and A4 wi
     try {
       await portraitPage.goto(appUrl);
       const portraitDimensions = await importPhoto(portraitPage, { width: 640, height: 960 }, 'print-paper-portrait.png');
-      const portraitSelect = portraitPage.getByTestId('select-export-size');
-      const portraitOrientation = portraitPage.getByTestId('select-export-orientation');
       for (const paper of [
         { value: 'letter', name: 'US Letter', portrait: { width: 2550, height: 3300 }, landscape: { width: 3300, height: 2550 }, paperPortraitMm: { width: 215.9, height: 279.4 } },
         { value: 'a4', name: 'A4', portrait: { width: 2480, height: 3508 }, landscape: { width: 3508, height: 2480 }, paperPortraitMm: { width: 210, height: 297 } },
       ]) {
-        await portraitSelect.selectOption(paper.value);
+        await (await exportControl(portraitPage, 'select-export-size')).selectOption(paper.value);
         if (paper.value === 'letter') {
-          assert.equal(await portraitOrientation.inputValue(), 'match-sketch', `${paper.name}: orientation should initially match the portrait sketch`);
+          assert.equal(await (await exportControl(portraitPage, 'select-export-orientation')).inputValue(), 'match-sketch', `${paper.name}: orientation should initially match the portrait sketch`);
         }
         for (const orientation of ['portrait', 'landscape']) {
-          await portraitOrientation.selectOption(orientation);
+          await (await exportControl(portraitPage, 'select-export-orientation')).selectOption(orientation);
           await exportAndInspect(
             portraitPage,
             `${orientation} ${paper.name} portrait sketch`,
@@ -727,29 +738,26 @@ test('downloads complete Letter and A4 PDFs in portrait and landscape without ch
     await drawStroke(page, { startX: 0.4, endX: 0.6, y: 0.45 });
     await waitForStrokeCount(page, 0, 1);
     const before = await captureProjectState(page);
-    const pdfPaper = page.getByTestId('select-pdf-paper');
-    const pdfOrientation = page.getByTestId('select-pdf-orientation');
-    const pdfMargin = page.getByTestId('select-pdf-margin');
     const sourceRatio = before.project.width / before.project.height;
-    assert.equal(await pdfMargin.inputValue(), '0.5', 'PDF safe margin should default to a common printer-safe inset');
+    assert.equal(await (await exportControl(page, 'select-pdf-margin')).inputValue(), '0.5', 'PDF safe margin should default to a common printer-safe inset');
     const title = before.project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea';
 
     for (const paper of [
       { value: 'letter', name: 'US Letter', portrait: { width: 612, height: 792 }, landscape: { width: 792, height: 612 } },
       { value: 'a4', name: 'A4', portrait: { width: 595.28, height: 841.89 }, landscape: { width: 841.89, height: 595.28 } },
     ]) {
-      await pdfPaper.selectOption(paper.value);
+      await (await exportControl(page, 'select-pdf-paper')).selectOption(paper.value);
       for (const orientation of ['portrait', 'landscape']) {
-        await pdfOrientation.selectOption(orientation);
+        await (await exportControl(page, 'select-pdf-orientation')).selectOption(orientation);
         for (const margin of [
           { value: '0.25', points: 18 },
           { value: '0.5', points: 36 },
           { value: '0.75', points: 54 },
         ]) {
-          await pdfMargin.selectOption(margin.value);
+          await (await exportControl(page, 'select-pdf-margin')).selectOption(margin.value);
           const [download] = await Promise.all([
             page.waitForEvent('download'),
-            page.getByTestId('button-export-pdf').click(),
+            clickExportAction(page, 'button-export-pdf'),
           ]);
           assert.equal(
             download.suggestedFilename(),
@@ -874,9 +882,9 @@ test('keeps PNG size and export controls on screen on narrow phones', async () =
   const page = await browser.newPage({ viewport: { width: 402, height: 874 } });
   try {
     await page.goto(appUrl);
-    const select = page.getByTestId('select-export-size');
+    const select = await exportControl(page, 'select-export-size');
     await select.selectOption('letter');
-    const orientationSelect = page.getByTestId('select-export-orientation');
+    const orientationSelect = await exportControl(page, 'select-export-orientation');
     const exportButton = page.getByTestId('button-export');
     await select.waitFor({ state: 'visible' });
     await orientationSelect.waitFor({ state: 'visible' });
@@ -896,7 +904,12 @@ test('keeps PNG size and export controls on screen on narrow phones', async () =
       assert.equal(
         await page.evaluate(() => document.documentElement.scrollWidth),
         pageWidth,
-        `${width}px phone: the page should not scroll horizontally`,
+        `${width}px phone: the page should not scroll horizontally; overflowing elements: ${JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('*')].flatMap(element => {
+          const bounds = element.getBoundingClientRect();
+          return bounds.left < -1 || bounds.right > window.innerWidth + 1
+            ? [{ tag: element.tagName, className: typeof element.className === 'string' ? element.className : '', left: bounds.left, right: bounds.right, width: bounds.width }]
+            : [];
+        })))}`,
       );
     }
     await orientationSelect.selectOption('landscape');
@@ -934,6 +947,9 @@ test('keeps ordinary PNG export local and unchanged unless the explicit Poe conf
       json: { configured: true, signedIn: true, allowed: true, dailyLimit: 15, remaining: 15, globalRemaining: 20 },
     }));
     await page.route('**/api/palette', route => route.fulfill({ json: { revision: 0, colors: [] } }));
+    await page.route('**/api/settings*', route => route.fulfill({
+      json: { textSize: 100, drawingTool: 'brush', brushStyle: 'round', brushSize: 8 },
+    }));
     await page.route('**/api/images/upscale', async route => {
       const submitted = route.request().postDataJSON();
       upscaleRequests.push(submitted);
@@ -972,28 +988,49 @@ test('keeps ordinary PNG export local and unchanged unless the explicit Poe conf
     assert.doesNotMatch(panelText, /Assistant chooses the image provider|Please upscale the attached image|2880 × 1920 pixels|merged photo and visible layers are sent to Poe|may use Poe points|Sign in with an approved account/i);
     assert.equal(await upscalePanel.getByRole('link', { name: 'Sign in' }).count(), 0, 'the panel should not show the removed sign-in prompt');
     await page.waitForFunction(() => !document.querySelector('[data-testid="button-upscale-export"]').disabled);
+    assert.equal(await page.getByTestId('button-upscale-export').innerText(), 'Review 8× export');
 
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByTestId('button-export').click(),
+      clickExportAction(page, 'button-export'),
     ]);
     assert.equal(download.suggestedFilename(), 'local-only-reference.png');
+    assert.equal(await page.getByTestId('button-export-menu').getAttribute('aria-expanded'), 'false', 'an export should dismiss its menu');
     const localPng = await readFile(await download.path());
     await page.waitForTimeout(600);
     assert.deepEqual(await captureProjectState(page), before, 'choosing a scale and exporting locally must not change the project');
     assert.deepEqual(upscaleRequests, [], 'choosing a scale or ordinary PNG export may not call the upscale endpoint');
     for (const factor of [4, 8]) {
+      await page.waitForFunction(() => {
+        const button = document.querySelector('[data-testid="button-upscale-export"]');
+        return button && !button.disabled;
+      });
       await scale.selectOption(String(factor));
-      await page.getByTestId('button-upscale-export').click();
-      const dialog = page.getByRole('dialog', { name: 'Send this composition to Poe?' });
-      await dialog.waitFor({ state: 'visible' });
-      assert.match(await dialog.textContent(), /This sends the merged photo and visible layers to Poe Assistant and may use Poe points/i);
-      assert.match(await dialog.textContent(), new RegExp(`Please upscale the attached image to be ${factor}x`));
-      assert.match(await dialog.textContent(), new RegExp(`exactly ${360 * factor} × ${240 * factor} pixels`));
+      assert.equal(await scale.inputValue(), String(factor), `${factor}× should be selected before review`);
+      const reviewButton = page.getByTestId('button-upscale-export');
+      await reviewButton.click();
       assert.equal(upscaleRequests.length, factor === 4 ? 0 : 1, 'reviewing the disclosure must not transfer artwork');
+      const dialog = page.getByRole('dialog', { name: 'Send this composition to Poe?' });
+      const confirmation = dialog;
+      try {
+        await confirmation.waitFor({ state: 'visible', timeout: 5_000 });
+      } catch {
+        const state = await page.evaluate(() => ({
+          exportMenuOpen: document.querySelector('[data-testid="button-export-menu"]')?.getAttribute('aria-expanded'),
+          reviewButton: document.querySelector('[data-testid="button-upscale-export"]')?.outerHTML,
+          dialogs: [...document.querySelectorAll('[role="dialog"]')].map(dialog => ({
+            visible: !!(dialog.offsetWidth || dialog.offsetHeight || dialog.getClientRects().length),
+            text: dialog.textContent,
+          })),
+        }));
+        throw new Error(`${factor}× review did not open: ${JSON.stringify(state)}`);
+      }
+      assert.match(await dialog.textContent(), /This sends the merged photo and visible layers to Poe Assistant and may use Poe points/i);
+      assert.match(await dialog.textContent(), new RegExp(`exactly ${360 * factor} × ${240 * factor} pixels`));
+      assert.match(await confirmation.textContent(), new RegExp(`Please upscale the attached image to be ${factor}x`));
       const [upscaledDownload] = await Promise.all([
         page.waitForEvent('download', { timeout: 10_000 }).catch(async () => {
-          throw new Error(`${factor}x upscale did not download. Requests: ${upscaleRequests.length}; feedback: ${await page.locator('.upscale-export').innerText()}`);
+          throw new Error(`${factor}x upscale did not download. Requests: ${JSON.stringify(upscaleRequests.map(request => request.scale))}; feedback: ${await page.locator('.upscale-export').innerText()}; review: ${await confirmation.textContent()}`);
         }),
         dialog.getByTestId('button-confirm-upscale').click(),
       ]);
@@ -1003,6 +1040,10 @@ test('keeps ordinary PNG export local and unchanged unless the explicit Poe conf
       assert.equal(submitted.scale, factor);
       assert.equal(submitted.pngBase64, localPng.toString('base64'), 'Poe receives the same merged photo-plus-visible-stroke composition as local PNG export');
       assert.deepEqual(await captureProjectState(page), before, 'successful upscale export does not change the saved project');
+      await page.waitForFunction(() => {
+        const button = document.querySelector('[data-testid="button-upscale-export"]');
+        return button && !button.disabled;
+      });
     }
     failNext = true;
     await page.getByTestId('button-upscale-export').click();
@@ -1038,7 +1079,7 @@ test('reports PNG export failures without announcing a download', async () => {
         }
       }, failure);
 
-      await page.getByTestId('button-export').click();
+      await clickExportAction(page, 'button-export');
       const status = page.getByTestId('status-toast');
       await status.waitFor({ state: 'visible' });
       assert.match(await status.textContent(), /Could not create the PNG export/);
@@ -1058,6 +1099,7 @@ test('does not download a partial PNG when a visible layer canvas is unavailable
       const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null');
       return project?.layers?.some(layer => layer.visible);
     });
+    await openExportMenu(page);
     const layerName = await page.evaluate(() => {
       window.__cloudPainterDownloadClicks = 0;
       HTMLAnchorElement.prototype.click = function countDownloadClick() {
@@ -1112,7 +1154,7 @@ test('does not download a sketch-only PNG when the photo fails to decode during 
       };
     });
 
-    await page.getByTestId('button-export').click();
+    await clickExportAction(page, 'button-export');
     const status = page.getByTestId('status-toast');
     await status.waitFor({ state: 'visible' });
     assert.match(await status.textContent(), /Could not include the reference photo/i);

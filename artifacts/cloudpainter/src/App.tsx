@@ -5,6 +5,7 @@ import {
   Cloud,
   Copy,
   ClipboardPaste,
+  ChevronDown,
   Eye,
   EyeOff,
   Eraser,
@@ -31,6 +32,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ActionTooltip, TooltipButton } from '@/components/tooltip-button';
 import { BrushDisclosure } from '@/components/BrushDisclosure';
 import NotFound from '@/pages/not-found';
@@ -468,6 +470,7 @@ function Home() {
   const [pdfPaperSize, setPdfPaperSize] = useState<PdfPaperSize>('letter');
   const [pdfOrientation, setPdfOrientation] = useState<PdfOrientation>('portrait');
   const [pdfSafeMargin, setPdfSafeMargin] = useState<PdfSafeMargin>('0.5');
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [panMode, setPanMode] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -1062,50 +1065,71 @@ function Home() {
           <span className="privacy-note"><Save size={13} /> Projects and photos stay here unless you explicitly send one to Poe for upscaling.</span>
           <span className="save-state" data-testid="status-save">{savedStatus}</span>
           <div className="top-actions">
-              <ActionTooltip description="View five CloudPainter logo design directions."><Link href="/logo-options" className="button button-quiet logo-options-link" data-testid="link-logo-options">Logo directions</Link></ActionTooltip>
-            <label className="export-size-control">
-              <span>PNG size</span>
-              <select aria-label="PNG export size" data-testid="select-export-size" value={exportSize} onChange={event => setExportSize(event.target.value as ExportSize)}>
-                <option value={1}>Original size</option>
-                <option value={2}>2× high resolution</option>
-                <option value="letter">US Letter · 8.5 × 11 in</option>
-                <option value="a4">A4 · 210 × 297 mm</option>
-              </select>
-            </label>
-            {(exportSize === 'letter' || exportSize === 'a4') && (
-              <label className="export-size-control">
-                <span>Orientation</span>
-                <select aria-label="Paper orientation" data-testid="select-export-orientation" value={paperOrientation} onChange={event => setPaperOrientation(event.target.value as PaperOrientation)}>
-                  <option value="match-sketch">Match sketch</option>
-                  <option value="portrait">Portrait</option>
-                  <option value="landscape">Landscape</option>
-                </select>
-              </label>
-            )}
-            <TooltipButton description="Export the reference photo and visible drawing layers as a PNG." className="button button-primary" onClick={exportPng} data-testid="button-export"><Upload size={14} /> Export PNG</TooltipButton>
-            <label className="export-size-control">
-              <span>PDF paper</span>
-              <select aria-label="PDF paper size" data-testid="select-pdf-paper" value={pdfPaperSize} onChange={event => setPdfPaperSize(event.target.value as PdfPaperSize)}>
-                <option value="letter">US Letter</option>
-                <option value="a4">A4</option>
-              </select>
-            </label>
-            <label className="export-size-control">
-              <span>PDF orientation</span>
-              <select aria-label="PDF orientation" data-testid="select-pdf-orientation" value={pdfOrientation} onChange={event => setPdfOrientation(event.target.value as PdfOrientation)}>
-                <option value="portrait">Portrait</option>
-                <option value="landscape">Landscape</option>
-              </select>
-            </label>
-            <label className="export-size-control">
-              <span>Safe margin</span>
-              <select aria-label="PDF print-safe margin" data-testid="select-pdf-margin" value={pdfSafeMargin} onChange={event => setPdfSafeMargin(event.target.value as PdfSafeMargin)}>
-                <option value="0.25">¼ in</option>
-                <option value="0.5">½ in</option>
-                <option value="0.75">¾ in</option>
-              </select>
-            </label>
-            <TooltipButton description="Download the full sketch centered inside the selected print-safe margin on a Letter or A4 page." className="button" onClick={exportPdf} data-testid="button-export-pdf"><FileDown size={14} /> Export PDF</TooltipButton>
+            <ActionTooltip description="View five CloudPainter logo design directions."><Link href="/logo-options" className="button button-quiet logo-options-link" data-testid="link-logo-options">Logo directions</Link></ActionTooltip>
+            <Popover open={exportMenuOpen} onOpenChange={setExportMenuOpen}>
+              <PopoverTrigger asChild>
+                <button type="button" className="button button-primary export-menu-trigger" aria-label="Export" data-testid="button-export-menu">
+                  Export <ChevronDown size={16} aria-hidden="true" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="export-menu-content" align="end" sideOffset={8} collisionPadding={12} aria-label="Export settings" data-testid="export-menu">
+                <div className="export-menu-heading">
+                  <h2>Export artwork</h2>
+                  <p>Choose a format and its settings.</p>
+                </div>
+                <div className="export-format-grid">
+                  <section className="export-format" aria-labelledby="png-export-heading">
+                    <h3 id="png-export-heading">PNG</h3>
+                    <label className="export-menu-field">
+                      PNG size
+                      <select aria-label="PNG export size" data-testid="select-export-size" value={exportSize} onChange={event => setExportSize(event.target.value as ExportSize)}>
+                        <option value="1">Original size</option>
+                        <option value="2">2× high resolution</option>
+                        <option value="letter">US Letter · 8.5 × 11 in</option>
+                        <option value="a4">A4 · 210 × 297 mm</option>
+                      </select>
+                    </label>
+                    {(exportSize === 'letter' || exportSize === 'a4') && (
+                      <label className="export-menu-field">
+                        Orientation
+                        <select aria-label="Paper orientation" data-testid="select-export-orientation" value={paperOrientation} onChange={event => setPaperOrientation(event.target.value as PaperOrientation)}>
+                          <option value="match-sketch">Match sketch</option>
+                          <option value="portrait">Portrait</option>
+                          <option value="landscape">Landscape</option>
+                        </select>
+                      </label>
+                    )}
+                    <TooltipButton description="Export the reference photo and visible drawing layers as a PNG." className="button button-primary export-menu-action" onClick={() => { setExportMenuOpen(false); void exportPng(); }} data-testid="button-export"><Upload size={14} /> Export PNG</TooltipButton>
+                  </section>
+                  <section className="export-format" aria-labelledby="pdf-export-heading">
+                    <h3 id="pdf-export-heading">PDF</h3>
+                    <label className="export-menu-field">
+                      Paper
+                      <select aria-label="PDF paper size" data-testid="select-pdf-paper" value={pdfPaperSize} onChange={event => setPdfPaperSize(event.target.value as PdfPaperSize)}>
+                        <option value="letter">US Letter</option>
+                        <option value="a4">A4</option>
+                      </select>
+                    </label>
+                    <label className="export-menu-field">
+                      Orientation
+                      <select aria-label="PDF orientation" data-testid="select-pdf-orientation" value={pdfOrientation} onChange={event => setPdfOrientation(event.target.value as PdfOrientation)}>
+                        <option value="portrait">Portrait</option>
+                        <option value="landscape">Landscape</option>
+                      </select>
+                    </label>
+                    <label className="export-menu-field">
+                      Safe margin
+                      <select aria-label="PDF print-safe margin" data-testid="select-pdf-margin" value={pdfSafeMargin} onChange={event => setPdfSafeMargin(event.target.value as PdfSafeMargin)}>
+                        <option value="0.25">¼ in</option>
+                        <option value="0.5">½ in</option>
+                        <option value="0.75">¾ in</option>
+                      </select>
+                    </label>
+                    <TooltipButton description="Download the full sketch centered inside the selected print-safe margin on a Letter or A4 page." className="button export-menu-action" onClick={() => { setExportMenuOpen(false); void exportPdf(); }} data-testid="button-export-pdf"><FileDown size={14} /> Export PDF</TooltipButton>
+                  </section>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       </header>

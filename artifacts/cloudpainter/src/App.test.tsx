@@ -107,6 +107,85 @@ test('signed-out Settings access directs users to sign in without changing brows
   expect(await page.evaluate(key => localStorage.getItem(key), STORE_KEY)).toBe(projectBefore);
 });
 
+test('the compact Export menu is keyboard-operable and stays within desktop and phone layouts', async ({ page }) => {
+  const trigger = page.getByTestId('button-export-menu');
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  const menu = page.getByTestId('export-menu');
+  await expect(menu).toBeVisible();
+  await expect(page.getByTestId('select-export-size')).toHaveValue('1');
+  await expect(page.getByTestId('select-pdf-paper')).toHaveValue('letter');
+  await expect(page.getByTestId('select-pdf-orientation')).toHaveValue('portrait');
+  await expect(page.getByTestId('select-pdf-margin')).toHaveValue('0.5');
+  await expect(page.getByTestId('select-export-orientation')).toHaveCount(0);
+
+  const pngSize = page.getByTestId('select-export-size');
+  await pngSize.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(pngSize).toHaveValue('2');
+  await expect(page.getByTestId('select-export-orientation')).toHaveCount(0);
+  await pngSize.focus();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await expect(pngSize).toHaveValue('a4');
+  const pngOrientation = page.getByTestId('select-export-orientation');
+  await expect(pngOrientation).toBeVisible();
+  await pngOrientation.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(pngOrientation).toHaveValue('portrait');
+
+  const pdfPaper = page.getByTestId('select-pdf-paper');
+  await pdfPaper.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(pdfPaper).toHaveValue('a4');
+  const pdfOrientation = page.getByTestId('select-pdf-orientation');
+  await pdfOrientation.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(pdfOrientation).toHaveValue('landscape');
+  const pdfMargin = page.getByTestId('select-pdf-margin');
+  await pdfMargin.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(pdfMargin).toHaveValue('0.75');
+
+  for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }, { width: 320, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await expect(page.locator('.brand')).toBeVisible();
+    await expect(page.locator('.account-controls, .account-note').first()).toBeVisible();
+    await expect(page.getByTestId('link-logo-options')).toBeVisible();
+    await expect(page.locator('.privacy-note')).toBeVisible();
+    await expect(page.locator('.intro-row .save-state')).toBeVisible();
+    const bounds = await menu.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+    expect(await menu.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+
+  const [pngDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('button-export').focus().then(() => page.keyboard.press('Enter')),
+  ]);
+  expect(pngDownload.suggestedFilename()).toBe('Untitled-idea.png');
+
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  const [pdfDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('button-export-pdf').focus().then(() => page.keyboard.press('Enter')),
+  ]);
+  expect(pdfDownload.suggestedFilename()).toBe('Untitled-idea-a4-landscape.pdf');
+});
+
 test('the entire empty card opens the picker once, without a duplicate upload action', async ({ page }) => {
     const card = page.getByTestId('button-photo-card');
   await expect(page.getByTestId('button-upload')).toHaveCount(0);
