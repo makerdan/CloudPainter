@@ -12,6 +12,8 @@
     "test:outline": "node --experimental-strip-types --test --test-timeout=10000 src/lib/outlinePrivacy.test.ts",
     "test:outline-ui": "vitest run --config vitest.outline.config.ts",
     "test:stroke-renderer": "node --experimental-strip-types --test --test-timeout=10000 src/lib/strokeRenderer.test.ts",
+    "test:layer-clipboard": "node --experimental-strip-types --test --test-timeout=10000 src/lib/layerClipboard.test.ts",
+    "test:clipboard-browser": "playwright test --config playwright.clipboard.config.ts",
     "test:drawing-tools": "node --experimental-strip-types --test --test-timeout=10000 src/lib/drawingTools.test.ts",
     "test:instruments-browser": "playwright test --config playwright.instruments.config.ts",
     "test:brushes-browser": "playwright test --config playwright.brush.config.ts",

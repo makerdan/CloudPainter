@@ -3,6 +3,8 @@ import {
   ArrowDown,
   ArrowUp,
   Cloud,
+  Copy,
+  ClipboardPaste,
   Eye,
   EyeOff,
   Eraser,
@@ -44,14 +46,15 @@ import { createInstrumentStroke, toolAfterColorSelection, TOOL_GUIDANCE, type Dr
 import { AccountProvider, AccountControls, SignInPage, SignUpPage } from '@/components/Account';
 import { OutlinePanel } from '@/components/OutlinePanel';
 import { viewportToProject } from '@/lib/outlineGeometry';
+import { copyDrawing, pasteIntoLayers, renderDrawing, undoDrawing, redoDrawing, type DrawingClipboard, type DrawingEntry } from '@/lib/layerClipboard';
 
 type PaintLayer = {
   id: string;
   name: string;
   visible: boolean;
   opacity: number;
-  strokes: Stroke[];
-  redo: Stroke[];
+  strokes: DrawingEntry[];
+  redo: DrawingEntry[];
 };
 type Project = {
   image: string | null;
@@ -399,6 +402,7 @@ function Home() {
   const [savedStatus, setSavedStatus] = useState('Saved in this browser');
   const [storageEstimate, setStorageEstimate] = useState<BrowserStorageEstimate | null>(null);
   const [toast, setToast] = useState('');
+  const [drawingClipboard, setDrawingClipboard] = useState<DrawingClipboard | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const { photoZoom, photoPan } = project;
@@ -574,7 +578,7 @@ function Home() {
       const context = canvas.getContext('2d');
       if (!context) return;
       context.clearRect(0, 0, project.width, project.height);
-      layer.strokes.forEach(stroke => renderStroke(context, stroke, project.width, project.height));
+      renderDrawing(context, layer.strokes, project.width, project.height);
       if (draft?.layerId === layer.id) renderStroke(context, draft.stroke, project.width, project.height);
     });
   }, [project.layers, project.width, project.height, draft, renderStroke]);
@@ -613,6 +617,7 @@ function Home() {
       }
       setProjectHistory(nextHistory);
       setPanMode(false);
+      setDrawingClipboard(null);
       setProject(nextProject);
       void refreshStorageEstimate();
       announce('Generated image added. You can now sketch over it.');
@@ -635,6 +640,7 @@ function Home() {
     }
     setProjectHistory(nextHistory);
     setPanMode(false);
+    setDrawingClipboard(null);
     setProject(nextProject);
     void refreshStorageEstimate();
     announce(`Restored “${savedProject.title}”.`);
@@ -665,6 +671,7 @@ function Home() {
         const { width, height } = getScaledImageDimensions(image.naturalWidth, image.naturalHeight);
         const layer = createLayer('Sketch layer');
         setPanMode(false);
+        setDrawingClipboard(null);
         setProject(current => ({
           ...current, image: String(reader.result), width, height,
           layers: [layer], selectedLayerId: layer.id,
@@ -682,6 +689,7 @@ function Home() {
   };
 
   const startBlank = () => {
+    setDrawingClipboard(null);
     const layer = createLayer('Layer 1');
     setPanMode(false);
     setProject(current => ({
@@ -823,15 +831,27 @@ function Home() {
 
   const undo = () => {
     if (!selectedLayer?.strokes.length) return;
-    changeLayer(selectedLayer.id, layer => ({
-      ...layer, strokes: layer.strokes.slice(0, -1), redo: [...layer.redo, layer.strokes[layer.strokes.length - 1]],
-    }));
+    changeLayer(selectedLayer.id, undoDrawing);
   };
   const redo = () => {
     if (!selectedLayer?.redo.length) return;
-    changeLayer(selectedLayer.id, layer => ({
-      ...layer, strokes: [...layer.strokes, layer.redo[layer.redo.length - 1]], redo: layer.redo.slice(0, -1),
+    changeLayer(selectedLayer.id, redoDrawing);
+  };
+  const clipboardLayer = project.layers.find(layer => layer.id === project.selectedLayerId);
+  const copyLayerDrawing = () => {
+    const snapshot = copyDrawing(clipboardLayer);
+    if (!snapshot) { setToast('Nothing to copy: select a layer with drawings.'); return; }
+    setDrawingClipboard(snapshot);
+    setToast(`Copied drawing from ${clipboardLayer!.name}. Select a layer and paste.`);
+  };
+  const pasteLayerDrawing = () => {
+    if (!drawingClipboard?.length) { setToast('Copy a layer drawing before pasting.'); return; }
+    if (!clipboardLayer) { setToast('Select an existing layer before pasting.'); return; }
+    const destinationId = clipboardLayer.id;
+    updateProject(current => ({
+      ...current, layers: pasteIntoLayers(current.layers, destinationId, drawingClipboard),
     }));
+    setToast(`Pasted drawing into ${clipboardLayer.name}. Undo removes this paste.`);
   };
   const addLayer = () => {
     const next = createLayer(`Layer ${project.layers.length + 1}`);
@@ -1118,6 +1138,10 @@ function Home() {
               ))}
             </div>
             <TooltipButton description="Add and select a new transparent drawing layer above the others." className="add-layer" onClick={addLayer} data-testid="button-add-layer"><Plus size={14} /> Add a drawing layer</TooltipButton>
+            <div className="layer-clipboard-controls">
+              <TooltipButton className="add-layer" description={clipboardLayer?.strokes.length ? 'Copy this layer’s complete drawing, including erasing, to the app clipboard. The original stays unchanged; layer settings and the photo are not copied.' : 'Nothing to copy: select a layer with drawing content. An earlier copy stays available.'} onClick={copyLayerDrawing} disabled={!clipboardLayer?.strokes.length || !!draft} data-testid="button-copy-drawing"><Copy size={14} /> Copy drawing</TooltipButton>
+              <TooltipButton className="add-layer" description={!drawingClipboard?.length ? 'Copy a layer drawing first. The drawing clipboard is local to this open app and clears on reload.' : !clipboardLayer ? 'Select an existing destination layer before pasting.' : 'Append the copied drawing to this layer without changing existing content. Copied erasers affect only the copy; one Undo removes the paste.'} onClick={pasteLayerDrawing} disabled={!drawingClipboard?.length || !clipboardLayer || !!draft} data-testid="button-paste-drawing"><ClipboardPaste size={14} /> Paste drawing</TooltipButton>
+            </div>
             <p className="layer-footnote">Your photograph stays safely underneath, unchanged. Drawings live on their own layers.</p>
           </aside>
 
@@ -1134,8 +1158,8 @@ function Home() {
                 ))}
                 <span className="tool-divider" />
                 <TooltipButton description={project.image ? 'Preview contours from the visible photo with local detection, hosted AI, or edge tracing. Nothing is drawn until you accept.' : 'Import a reference photo before outlining a subject.'} className="tool-button" aria-label="Outline" onClick={openOutline} disabled={!project.image || !selectedLayer.visible || outlineOpening} data-testid="button-outline"><Sparkles size={17} /></TooltipButton>
-                <TooltipButton description={selectedLayer?.strokes.length ? 'Undo the most recent drawing or erasing stroke on the selected layer.' : 'Nothing to undo: the selected layer has no strokes.'} className="tool-button" aria-label="Undo" onClick={undo} disabled={!selectedLayer?.strokes.length} data-testid="button-undo"><Undo2 size={17} /></TooltipButton>
-                <TooltipButton description={selectedLayer?.redo.length ? 'Restore the last undone stroke on the selected layer.' : 'Nothing to redo: undo a stroke on the selected layer first.'} className="tool-button" aria-label="Redo" onClick={redo} disabled={!selectedLayer?.redo.length} data-testid="button-redo"><Redo2 size={17} /></TooltipButton>
+                <TooltipButton description={selectedLayer?.strokes.length ? 'Undo the most recent stroke or whole paste on the selected layer.' : 'Nothing to undo: the selected layer has no drawing actions.'} className="tool-button" aria-label="Undo" onClick={undo} disabled={!selectedLayer?.strokes.length} data-testid="button-undo"><Undo2 size={17} /></TooltipButton>
+                <TooltipButton description={selectedLayer?.redo.length ? 'Restore the last undone stroke or whole paste on the selected layer.' : 'Nothing to redo: undo a drawing action on the selected layer first.'} className="tool-button" aria-label="Redo" onClick={redo} disabled={!selectedLayer?.redo.length} data-testid="button-redo"><Redo2 size={17} /></TooltipButton>
               </div>
               <div className="tool-group">
                 <span className="canvas-meta">{project.width} × {project.height}</span>

@@ -15,7 +15,13 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[3]
-OUT = ROOT / "generated-artifacts/instrument-validation"
+# Separate approval/deadline for the layer clipboard task. Never reset either
+# operation's existing deadline, and restrict clipboard mode to its scoped checks.
+clipboard_mode = len(sys.argv) > 1 and sys.argv[1] == "--clipboard"
+if clipboard_mode:
+    sys.argv.pop(1)
+OUT = ROOT / ("generated-artifacts/clipboard-validation" if clipboard_mode
+              else "generated-artifacts/instrument-validation")
 OUT.mkdir(parents=True, exist_ok=True)
 if ctypes.CDLL(None).prctl(36, 1, 0, 0, 0) != 0:
     raise RuntimeError("Child subreaper unavailable; refusing launch")
@@ -125,6 +131,18 @@ checks = {
                          "--grep", "all instruments preserve pixels"], 90),
 }
 failed = False
+if clipboard_mode:
+    checks = {
+        "typecheck": checks["typecheck"],
+        "renderer": checks["renderer"],
+        "image-dimensions": checks["image-dimensions"],
+        "clipboard": (["pnpm", "--filter", "@workspace/cloudpainter", "run", "test:layer-clipboard"], 30),
+        "clipboard-browser": (["pnpm", "--filter", "@workspace/cloudpainter", "run", "test:clipboard-browser"], 270),
+        "standard-browser-discovery": (["pnpm", "--filter", "@workspace/cloudpainter", "run", "test:photo-card", "--list"], 30),
+        "recovery-browser": (["pnpm", "--filter", "@workspace/cloudpainter", "exec", "playwright", "test",
+                             "--config", "playwright.config.ts", "ImageGenerator.test.tsx",
+                             "--grep-invert", "signed-in generation"], 270),
+    }
 for name in sys.argv[1:]:
     command, limit = checks[name]
     if "browser" in name and not os.environ.get("CLOUDPAINTER_TEST_URL"):

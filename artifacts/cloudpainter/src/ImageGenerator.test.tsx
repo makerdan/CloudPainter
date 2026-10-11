@@ -212,12 +212,8 @@ test('a full history store leaves the current sketch and older saved sketches in
   expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY)).toEqual(olderSketches);
 });
 
-test('warns before applying a generated image when estimated browser storage is nearly full', async ({ page }) => {
+test('Poe failures preserve the sketch and never issue an alternate-model request', async ({ page }) => {
   const before = await saved(page);
-
-  const originalHistory = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY);
-
-  const olderSketch = { ...before, title: 'Earlier saved sketch' };
   let requests = 0;
   await page.route('**/api/images/generate', route => {
     requests++;
@@ -230,6 +226,51 @@ test('warns before applying a generated image when estimated browser storage is 
   await expect(page.getByTestId('button-use-generated-image')).toHaveCount(0);
   expect(requests).toBe(1);
   expect(await saved(page)).toEqual(before);
+});
+
+test('warns before applying a generated image when estimated browser storage is nearly full', async ({ page }) => {
+  const before = await saved(page);
+  const originalHistory = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY);
+  const olderSketch = { ...before, title: 'Earlier saved sketch' };
+  const history = [olderSketch, ...originalHistory];
+  await page.evaluate(({ key, history }) => localStorage.setItem(key, JSON.stringify(history)), {
+    key: PROJECT_HISTORY_KEY, history,
+  });
+  await page.reload();
+  const image = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 8; canvas.height = 8;
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  await page.route('**/api/images/generate', route => route.fulfill({
+    json: { b64_json: image, mime: 'image/png' },
+  }));
+  await page.getByTestId('button-generate-image').click();
+  await page.getByTestId('input-image-prompt').fill('Storage warning reference');
+  await page.getByTestId('button-submit-generation').click();
+  await expect(page.getByTestId('generated-image-preview')).toBeVisible();
+  await page.evaluate(() => {
+    Object.defineProperty(navigator.storage, 'estimate', {
+      configurable: true, value: async () => ({ usage: 9_500_000, quota: 10_000_000 }),
+    });
+  });
+  const rejectedDialogPromise = page.waitForEvent('dialog');
+  const rejectedClick = page.getByTestId('button-use-generated-image').click();
+  const rejectedDialog = await rejectedDialogPromise;
+  expect(rejectedDialog.message()).toContain('Browser storage is nearing its estimated limit');
+  await rejectedDialog.dismiss();
+  await rejectedClick;
+  expect(await saved(page)).toEqual(before);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY)).toEqual(history);
+  await expect(page.getByTestId('generated-image-preview')).toBeVisible();
+  const acceptedDialogPromise = page.waitForEvent('dialog');
+  const acceptedClick = page.getByTestId('button-use-generated-image').click();
+  const acceptedDialog = await acceptedDialogPromise;
+  expect(acceptedDialog.message()).toContain('Browser storage is nearing its estimated limit');
+  await acceptedDialog.accept();
+  await acceptedClick;
+  await expect.poll(async () => (await saved(page))?.title).toBe('Storage warning reference');
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY)).toEqual([before, ...history]);
 });
 
 test('missing Poe configuration disables generation without touching the sketch', async ({ page }) => {
@@ -411,9 +452,7 @@ test('saved sketches can be deleted without changing the active sketch, includin
 
 test('saved sketches keep their own photo framing across switches and reloads', async ({ page }) => {
   const photo = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
-
-  const activeLayer = { id: 'legacy-active-layer', name: 'Active layer', visible: true, opacity: 1, strokes: [], redo: [] };
-  const layer = { id: 'malformed-framing-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] };
+  const layer = { id: 'framing-test-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] };
   const activeSketch = {
     image: photo,
     width: 320,
@@ -465,24 +504,12 @@ test('saved sketches keep their own photo framing across switches and reloads', 
   await expect(stageContent).toHaveAttribute('style', /translate3d\(60px, -34px, 0px\) scale\(2\.25\)/);
   await expect.poll(async () => {
     const project = await saved(page);
-    return {
-      title: project?.title,
-      photoZoom: project?.photoZoom,
-      photoPan: project?.photoPan,
-      layerNames: project?.layers.map((layer: { name: string }) => layer.name),
-    };
-  }).toEqual({
-    title: 'Legacy active sketch',
-    photoZoom: 1,
-    photoPan: { x: 0, y: 0 },
-    layerNames: ['Active layer', 'Layer 2'],
-  });
+    return { photoZoom: project?.photoZoom, photoPan: project?.photoPan };
+  }).toEqual({ photoZoom: 2.25, photoPan: { x: 60, y: -34 } });
 
-  await page.getByRole('button', { name: 'Restore saved sketch: Legacy recovery sketch' }).click();
-  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
-  await expect(stageContent).toHaveAttribute('style', /translate3d\(0px, 0px, 0px\) scale\(1\)/);
-
-  await page.getByTestId('button-add-layer').click();
+  await page.getByRole('button', { name: 'Restore saved sketch: Earlier framing' }).click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(-48px, 30px, 0px\) scale\(1\.5\)/);
   await expect.poll(async () => {
     const project = await saved(page);
     return { title: project?.title, photoZoom: project?.photoZoom, photoPan: project?.photoPan };
@@ -501,10 +528,17 @@ test('saved sketches keep their own photo framing across switches and reloads', 
 
 test('malformed saved photo framing is normalized without disabling the photo or canvas', async ({ page }) => {
   const photo = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
-
-  const activeLayer = { id: 'legacy-active-layer', name: 'Active layer', visible: true, opacity: 1, strokes: [], redo: [] };
   const layer = { id: 'malformed-framing-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] };
-    const project = await saved(page);
+  const project = (title: string, photoZoom: unknown, photoPan: unknown) => ({
+    image: photo,
+    width: 320,
+    height: 240,
+    layers: [layer],
+    selectedLayerId: layer.id,
+    title,
+    photoZoom,
+    photoPan,
+  });
   const malformedZoom = project('Malformed zoom', 'not-a-number', { x: 'invalid', y: null });
   const malformedPan = project('Malformed pan', 2, { x: 'invalid', y: null });
   const outOfRange = project('Out of range framing', 20, { x: 1_000_000, y: -1_000_000 });
@@ -648,17 +682,3 @@ test('legacy sketches open fitted, remain editable, and save current framing fie
   });
 });
 
-  const dialogPromise = page.waitForEvent('dialog');
-
-  const image = await page.evaluate(() => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 8;
-    canvas.height = 8;
-    return canvas.toDataURL('image/png').split(',')[1];
-  });
-
-  const historyBeforeRestore = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY);
-
-  const acceptedDialogPromise = page.waitForEvent('dialog');
-
-  const dialog = await dialogPromise;
