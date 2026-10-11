@@ -1339,7 +1339,8 @@ test('undo and redo preserve the zoomed and panned photo while moving the exact 
   await assertViewUnchanged();
 });
 
-test('undo and redo preserve hidden reference photo settings and unrelated drawing data across reloads', async ({ page }) => {
+for (const referencePhotoVisible of [false, true]) {
+test(`undo and redo preserve ${referencePhotoVisible ? 'visible' : 'hidden'} reference photo settings and unrelated drawing data across reloads`, async ({ page }) => {
   const photo = await png(page, 'undo-redo-photo-settings.png', 480, 320);
   const stroke = (color: string, y: number) => ({
     points: [{ x: 0.2, y }, { x: 0.7, y }],
@@ -1374,14 +1375,14 @@ test('undo and redo preserve hidden reference photo settings and unrelated drawi
   await expect.poll(() => savedProject(page)).toEqual(before);
 
   await page.getByTestId('input-reference-photo-opacity').fill('37');
-  await page.getByTestId('button-reference-photo-visibility').click();
-  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
+  if (!referencePhotoVisible) await page.getByTestId('button-reference-photo-visibility').click();
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', String(referencePhotoVisible));
   await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
-  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0');
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', referencePhotoVisible ? '0.37' : '0');
 
   const settingsProject = {
     ...before,
-    referencePhotoVisible: false,
+    referencePhotoVisible,
     referencePhotoOpacity: 37,
   };
   await expect.poll(() => savedProject(page)).toEqual(settingsProject);
@@ -1396,9 +1397,9 @@ test('undo and redo preserve hidden reference photo settings and unrelated drawi
     await expect.poll(() => savedProject(page)).toEqual(expected);
     await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
     await expect(page.locator('.stage img.base-photo')).toHaveAttribute('src', before.image);
-    await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', String(referencePhotoVisible));
     await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
-    await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0');
+    await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', referencePhotoVisible ? '0.37' : '0');
   };
 
   await page.getByTestId('button-undo').click();
@@ -1411,6 +1412,7 @@ test('undo and redo preserve hidden reference photo settings and unrelated drawi
   await page.reload();
   await assertCurrentProject(settingsProject);
 });
+}
 
 test('reference photo display defaults, legacy projects, replacements, and saved-sketch restoration', async ({ page }) => {
   const original = await png(page, 'photo-display-legacy.png', 600, 400);
