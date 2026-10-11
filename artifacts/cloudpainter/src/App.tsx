@@ -95,6 +95,39 @@ function readPreviousProject(): Project | null {
   return null;
 }
 
+type ExportSize = '1' | '2' | 'letter' | 'a4';
+
+const PRINT_PAPER_PIXELS = {
+  letter: { width: 2550, height: 3300 },
+  a4: { width: 2480, height: 3508 },
+} as const;
+
+function getExportLayout(projectWidth: number, projectHeight: number, exportSize: ExportSize) {
+  if (exportSize === '1' || exportSize === '2') {
+    const scale = Number(exportSize);
+    return {
+      width: projectWidth * scale,
+      height: projectHeight * scale,
+      scale,
+      offsetX: 0,
+      offsetY: 0,
+    };
+  }
+
+  const portraitPaper = PRINT_PAPER_PIXELS[exportSize];
+  const paper = projectWidth > projectHeight
+    ? { width: portraitPaper.height, height: portraitPaper.width }
+    : portraitPaper;
+  const scale = Math.min(paper.width / projectWidth, paper.height / projectHeight);
+  return {
+    width: paper.width,
+    height: paper.height,
+    scale,
+    offsetX: (paper.width - projectWidth * scale) / 2,
+    offsetY: (paper.height - projectHeight * scale) / 2,
+  };
+}
+
 function Home() {
   const [project, setProject] = useState<Project>(readProject);
   const [previousProject, setPreviousProject] = useState<Project | null>(readPreviousProject);
@@ -117,7 +150,7 @@ function Home() {
   const [renameValue, setRenameValue] = useState('');
   const [photoZoom, setPhotoZoom] = useState(1);
   const [photoPan, setPhotoPan] = useState({ x: 0, y: 0 });
-  const [exportScale, setExportScale] = useState(1);
+  const [exportSize, setExportSize] = useState<ExportSize>('1');
   const [panMode, setPanMode] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -489,15 +522,16 @@ function Home() {
   const exportPng = () => {
     const exportFailed = () => announce('Could not create the PNG export. Try again or use a smaller canvas.');
     try {
+      const layout = getExportLayout(project.width, project.height, exportSize);
       const canvas = document.createElement('canvas');
-      canvas.width = project.width * exportScale;
-      canvas.height = project.height * exportScale;
+      canvas.width = layout.width;
+      canvas.height = layout.height;
       const context = canvas.getContext('2d');
       if (!context) {
         exportFailed();
         return;
       }
-      context.setTransform(exportScale, 0, 0, exportScale, 0, 0);
+      context.setTransform(layout.scale, 0, 0, layout.scale, layout.offsetX, layout.offsetY);
       const finish = () => {
         try {
           project.layers.forEach(layer => {
@@ -585,9 +619,11 @@ function Home() {
               <ActionTooltip description="View five CloudPainter logo design directions."><Link href="/logo-options" className="button button-quiet logo-options-link" data-testid="link-logo-options">Logo directions</Link></ActionTooltip>
             <label className="export-size-control">
               <span>PNG size</span>
-              <select aria-label="PNG export size" data-testid="select-export-size" value={exportScale} onChange={event => setExportScale(Number(event.target.value))}>
+              <select aria-label="PNG export size" data-testid="select-export-size" value={exportSize} onChange={event => setExportSize(event.target.value as ExportSize)}>
                 <option value={1}>Original size</option>
                 <option value={2}>2× high resolution</option>
+                <option value="letter">US Letter · 8.5 × 11 in</option>
+                <option value="a4">A4 · 210 × 297 mm</option>
               </select>
             </label>
             <TooltipButton description="Export the reference photo and visible drawing layers as a PNG." className="button button-primary" onClick={exportPng} data-testid="button-export"><Upload size={14} /> Export PNG</TooltipButton>

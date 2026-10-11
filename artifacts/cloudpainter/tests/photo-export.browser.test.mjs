@@ -188,7 +188,7 @@ async function captureProjectState(page) {
   });
 }
 
-async function exportAndInspect(page, name, dimensions) {
+async function exportAndInspect(page, name, dimensions, expectedDimensions = dimensions) {
   await page.evaluate(() => {
     window.__cloudPainterExport = null;
     HTMLAnchorElement.prototype.click = function capturePngDownload() {
@@ -221,7 +221,7 @@ async function exportAndInspect(page, name, dimensions) {
     return { width: canvas.width, height: canvas.height, pixels };
   });
 
-  assertClose(exported.width / exported.height, dimensions.width / dimensions.height, `${name}: exported PNG ratio`);
+  assertClose(exported.width / exported.height, expectedDimensions.width / expectedDimensions.height, `${name}: exported PNG ratio`);
   assert.deepEqual(exported.pixels, [
     [229, 57, 53],
     [67, 160, 71],
@@ -336,6 +336,54 @@ test('exports only visible sketch layers and preserves their opacity', async () 
       [originalState.project.width, originalState.project.height],
       'export size should not change the saved project dimensions',
     );
+  } finally {
+    await page.close();
+  }
+});
+
+test('exports complete sketches on US Letter and A4 paper without changing the project', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await page.goto(appUrl);
+    const projectDimensions = await importPhoto(page, { width: 960, height: 640 }, 'print-paper-landscape.png');
+    await page.waitForFunction(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null');
+      return project?.width > 0 && project?.height > 0 && typeof project?.image === 'string';
+    });
+    const originalState = await captureProjectState(page);
+    const select = page.getByTestId('select-export-size');
+
+    for (const paper of [
+      { value: 'letter', name: 'US Letter', dimensions: { width: 3300, height: 2550 } },
+      { value: 'a4', name: 'A4', dimensions: { width: 3508, height: 2480 } },
+    ]) {
+      await select.selectOption(paper.value);
+      await exportAndInspect(page, paper.name, projectDimensions, paper.dimensions);
+      const stateAfterExport = await captureProjectState(page);
+      assert.deepEqual(stateAfterExport.dimensions, originalState.dimensions, `${paper.name}: displayed project dimensions should remain unchanged`);
+      assert.deepEqual(stateAfterExport.stageRatio, originalState.stageRatio, `${paper.name}: canvas shape should remain unchanged`);
+      assert.deepEqual(stateAfterExport.layers, originalState.layers, `${paper.name}: drawing-layer dimensions should remain unchanged`);
+      assert.deepEqual(
+        [stateAfterExport.project.width, stateAfterExport.project.height],
+        [originalState.project.width, originalState.project.height],
+        `${paper.name}: saved project dimensions should remain unchanged`,
+      );
+    }
+
+    const portraitPage = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    try {
+      await portraitPage.goto(appUrl);
+      const portraitDimensions = await importPhoto(portraitPage, { width: 640, height: 960 }, 'print-paper-portrait.png');
+      for (const paper of [
+        { value: 'letter', name: 'portrait US Letter', dimensions: { width: 2550, height: 3300 } },
+        { value: 'a4', name: 'portrait A4', dimensions: { width: 2480, height: 3508 } },
+      ]) {
+        await portraitPage.getByTestId('select-export-size').selectOption(paper.value);
+        await exportAndInspect(portraitPage, paper.name, portraitDimensions, paper.dimensions);
+      }
+    } finally {
+      await portraitPage.close();
+    }
   } finally {
     await page.close();
   }

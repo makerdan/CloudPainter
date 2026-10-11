@@ -69,7 +69,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid #b9d66a; outline-
 .save-state { font-family:var(--font-mono); text-transform:uppercase; letter-spacing:.06em; color:#889087; font-size:10px; }
 .top-actions { display:flex; gap:9px; }
 .export-size-control { display:flex; align-items:center; gap:6px; color:#68756d; font-size:10px; font-weight:700; white-space:nowrap; }
-.export-size-control select { min-width:0; max-width:155px; border:1px solid #c7cec5; border-radius:8px; background:var(--paper); color:var(--ink); padding:7px 8px; font:inherit; font-size:11px; }
+.export-size-control select { min-width:0; max-width:175px; border:1px solid #c7cec5; border-radius:8px; background:var(--paper); color:var(--ink); padding:7px 8px; font:inherit; font-size:11px; }
 .export-size-control select:focus-visible { outline:3px solid var(--lime); outline-offset:2px; }
 .button { border:1px solid #d9d7cd; background:var(--paper); color:var(--ink); border-radius:10px; padding:9px 13px; display:inline-flex; align-items:center; justify-content:center; gap:8px; font-size:12px; font-weight:700; transition:transform .15s, background .15s, border-color .15s; }
 .button:hover:not(:disabled) { transform:translateY(-1px); background:#fff; border-color:#c3c2b8; }
@@ -243,7 +243,7 @@ h1 { font-family:var(--font-display); font-size:32px; line-height:1.1; font-weig
   .button { padding:8px 10px; font-size:11px; }
   .button-primary { padding:9px 11px; }
   .export-size-control { gap:4px; }
-  .export-size-control select { max-width:126px; padding:7px 5px; }
+  .export-size-control select { max-width:155px; padding:7px 5px; }
   .workspace { padding-top:19px; }
   .intro-row { margin-bottom:14px; }
   h1 { font-size:27px; }
