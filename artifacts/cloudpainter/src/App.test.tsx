@@ -713,6 +713,106 @@ test('layer moves preserve selection, artwork, properties and history across rel
 });
 
 test.describe('layer rename regression', () => {
+  for (const firstTarget of ['selected', 'unselected'] as const) {
+    test(`switching rename fields from ${firstTarget} layer commits each draft to its own ID and survives reload`, async ({ page }) => {
+      const photo = await png(page, 'rename-switch-reference.png', 480, 320);
+      const ids = ['switch-bottom', 'switch-middle', 'switch-top'];
+      const before = {
+        image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
+        width: 480, height: 320, title: 'Independent rename drafts', selectedLayerId: ids[1],
+        layers: ids.map((id, index) => ({
+          id, name: ['Background lines', 'Selected details', 'Hidden highlights'][index],
+          visible: index !== 2, opacity: (40 + index * 20) / 100,
+          strokes: [{ tool: 'pen', color: ['#e53935', '#1e88e5', '#43a047'][index], size: 8,
+            points: [{ x: 0.2, y: 0.25 + index * 0.2 }, { x: 0.7, y: 0.25 + index * 0.2 }] }],
+          redo: [{ tool: 'pen', color: '#ff9800', size: 6,
+            points: [{ x: 0.3, y: 0.3 + index * 0.2 }] }],
+        })),
+      };
+      // Seed once: reloading below must read actual autosaved names, not the fixture.
+      await page.addInitScript(({ key, project }) => {
+        const marker = `${key}-rename-switch-seeded`;
+        if (sessionStorage.getItem(marker)) return;
+        localStorage.setItem(key, JSON.stringify(project));
+        sessionStorage.setItem(marker, 'true');
+      }, { key: STORE_KEY, project: before });
+      await page.reload();
+      await expect(page.getByTestId('img-reference')).toBeVisible();
+      await expect.poll(() => savedProject(page)).toEqual(before);
+      const pixels = await Promise.all(ids.map(async id => {
+        const canvas = page.getByTestId(`canvas-layer-${id}`);
+        await expect.poll(() => canvas.evaluate(el => {
+          const surface = el as HTMLCanvasElement;
+          const rgba = surface.getContext('2d')!.getImageData(0, 0, surface.width, surface.height).data;
+          return rgba.some((value, index) => index % 4 === 3 && value > 0);
+        })).toBe(true);
+        return canvas.evaluate(el => (el as HTMLCanvasElement).toDataURL());
+      }));
+      const firstId = firstTarget === 'selected' ? ids[1] : ids[2];
+      const secondId = firstTarget === 'selected' ? ids[2] : ids[1];
+      const firstInput = page.getByTestId(`input-rename-${firstId}`);
+      const secondInput = page.getByTestId(`input-rename-${secondId}`);
+      const assertIntact = async () => {
+        await expect(page.locator('.layer-row')).toHaveCount(3);
+        await expect(page.locator('.layer-row.active')).toHaveCount(1);
+        await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
+        await expect(page.getByTestId('input-layer-opacity')).toHaveValue('60');
+        await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+        await expect(page.getByTestId('button-undo')).toBeEnabled();
+        await expect(page.getByTestId('button-redo')).toBeEnabled();
+        for (const [index, layer] of before.layers.entries()) {
+          await expect(page.getByTestId(`button-visibility-${layer.id}`)).toHaveAttribute(
+            'aria-label', layer.visible ? 'Hide layer' : 'Show layer',
+          );
+          const canvas = page.getByTestId(`canvas-layer-${layer.id}`);
+          await expect(canvas).toHaveCSS('opacity', String(layer.visible ? layer.opacity : 0));
+          await expect.poll(() => canvas.evaluate(el => (el as HTMLCanvasElement).toDataURL())).toBe(pixels[index]);
+        }
+      };
+      await page.getByTestId(`button-rename-${firstId}`).click();
+      await expect(firstInput).toBeFocused();
+      await expect(firstInput).toHaveValue(before.layers.find(layer => layer.id === firstId)!.name);
+      await firstInput.fill('  First committed draft  ');
+      await page.waitForTimeout(650); // Drafts must not autosave before a commit.
+      expect(await savedProject(page)).toEqual(before);
+
+      // One real pointer click must blur/commit the first input AND open the
+      // second. Do not simulate blur separately or commit via Enter first.
+      await page.getByTestId(`button-rename-${secondId}`).click();
+      await expect(firstInput).toHaveCount(0);
+      await expect(page.locator('.rename-input')).toHaveCount(1);
+      await expect(secondInput).toBeFocused();
+      await expect(secondInput).toHaveValue(before.layers.find(layer => layer.id === secondId)!.name);
+      const firstCommitted = {
+        ...before,
+        layers: before.layers.map(layer => layer.id === firstId ? { ...layer, name: 'First committed draft' } : layer),
+      };
+      await expect(page.getByTestId(`button-select-layer-${firstId}`)).toHaveText('First committed draft');
+      await expect.poll(() => savedProject(page)).toEqual(firstCommitted);
+      await assertIntact();
+
+      await secondInput.fill('  Second committed draft  ');
+      await page.waitForTimeout(650);
+      expect(await savedProject(page)).toEqual(firstCommitted);
+      await secondInput.press('Enter');
+      await expect(secondInput).toHaveCount(0);
+      const expected = {
+        ...firstCommitted,
+        layers: firstCommitted.layers.map(layer => layer.id === secondId ? { ...layer, name: 'Second committed draft' } : layer),
+      };
+      for (const reload of [false, true]) {
+        if (reload) await page.reload();
+        await expect(page.locator('.rename-input')).toHaveCount(0);
+        for (const layer of expected.layers) {
+          await expect(page.getByTestId(`button-select-layer-${layer.id}`)).toHaveText(layer.name);
+        }
+        await assertIntact();
+        // Full equality guards IDs/order, histories, photo and all other data.
+        await expect.poll(() => savedProject(page)).toEqual(expected);
+      }
+    });
+  }
+
   for (const target of ['selected', 'unselected'] as const) {
     for (const action of ['Enter', 'blur', 'Escape', 'empty', 'whitespace'] as const) {
       test(`${target} layer: ${action} preserves selection and artwork after reload`, async ({ page }) => {
