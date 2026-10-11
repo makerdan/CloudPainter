@@ -92,3 +92,23 @@ any follow-up reruns covered only the repaired cases.
 The combined run passed 15 of 17 cases; both remaining deletion cases passed
 after opening the opacity disclosure. All 18 spending checks and the canonical
 workspace typecheck also passed against the final integrated source.
+
+### Manual approved-generation QA — 2026-10-10
+
+- Route: CloudPainter `/` and API `/api/images/config`, `/api/images/generate`.
+- Signed-out browser flow passed: drawing remained available, the generator showed
+  the sign-in gate, submission was disabled, and the browser intercepted zero
+  generation requests.
+- The anonymous config response reported `signedIn: false` and `allowed: false`.
+  A direct generation POST returned HTTP 401 with `Sign in to generate images.`
+- The 18 spending-control tests and 17 Poe provider-contract tests passed; these
+  use stubbed provider transport and made no live Poe request.
+- No owner-approved test identity or request-specific point-spending approval was
+  provided. Therefore no live generation was authorized or completed. The approved
+  account preview-and-apply journey was not manually exercised in this run.
+- The sketch-preservation requirement did not pass source/test inspection: selecting
+  “Use image as reference” replaces the current project with a new one-layer project
+  (`App.tsx` and `ImageGenerator.test.tsx`), and the dialog warns that existing
+  photo/drawing layers will be replaced. This behavior was not changed because
+  changing image-generation behavior is out of scope for this verification task.
+- No account identifiers or prompts were recorded.
