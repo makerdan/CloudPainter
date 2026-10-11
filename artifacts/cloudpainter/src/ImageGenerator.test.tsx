@@ -294,6 +294,8 @@ test('saved sketches can be browsed and restored without signing in', async ({ p
     image: null, width: 320, height: 240, selectedLayerId: 'quota-oldest-layer', title: 'Oldest sketch',
     layers: [{ id: 'quota-oldest-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
   };
+
+  const normalizedCurrent = { ...current, photoZoom: 1, photoPan: { x: 0, y: 0 } };
   const normalizedOldest = { ...oldest, photoZoom: 1, photoPan: { x: 0, y: 0 } };
   await page.addInitScript(({ project, history }) => {
     if (sessionStorage.getItem('cloudpainter-history-test-seeded')) return;
@@ -326,6 +328,8 @@ test('a full history store leaves the current sketch and saved versions intact w
     image: null, width: 320, height: 240, selectedLayerId: 'quota-oldest-layer', title: 'Oldest sketch',
     layers: [{ id: 'quota-oldest-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
   };
+
+  const normalizedCurrent = { ...current, photoZoom: 1, photoPan: { x: 0, y: 0 } };
   await page.addInitScript(({ project, history }) => {
     if (sessionStorage.getItem('cloudpainter-history-quota-seeded')) return;
     localStorage.setItem('cloudpainter-project-v1', JSON.stringify(project));
@@ -348,6 +352,50 @@ test('a full history store leaves the current sketch and saved versions intact w
   await expect(page.getByRole('button', { name: 'Restore saved sketch: Earlier sketch' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Restore saved sketch: Oldest sketch' })).toBeVisible();
   expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY)).toEqual(existingHistory);
+});
+
+test('saved sketches can be deleted without changing the active sketch, including the last entry', async ({ page }) => {
+  const current = {
+    image: null, width: 1200, height: 800, selectedLayerId: 'current-layer', title: 'Current sketch',
+    layers: [{ id: 'current-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+  };
+  const earlier = {
+    image: null, width: 640, height: 480, selectedLayerId: 'earlier-layer', title: 'Earlier sketch',
+    layers: [{ id: 'earlier-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+  };
+  const oldest = {
+    image: null, width: 320, height: 240, selectedLayerId: 'oldest-layer', title: 'Oldest sketch',
+    layers: [{ id: 'oldest-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+  };
+  const normalizedCurrent = { ...current, photoZoom: 1, photoPan: { x: 0, y: 0 } };
+  await page.addInitScript(({ project, history }) => {
+    if (sessionStorage.getItem('cloudpainter-delete-test-seeded')) return;
+    localStorage.setItem('cloudpainter-project-v1', JSON.stringify(project));
+    localStorage.setItem('cloudpainter-project-history-v1', JSON.stringify(history));
+    sessionStorage.setItem('cloudpainter-delete-test-seeded', 'true');
+  }, { project: current, history: [earlier, oldest] });
+  await page.goto('./');
+
+  await expect(page.getByTestId('button-delete-project-0')).toHaveAccessibleName('Delete saved sketch: Earlier sketch');
+  await page.getByTestId('button-delete-project-0').click();
+  await expect(page.getByTestId('button-restore-project-0')).toHaveAccessibleName('Restore saved sketch: Oldest sketch');
+  await expect.poll(async () => saved(page)).toEqual(normalizedCurrent);
+  await expect.poll(async () =>
+    page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY),
+  ).toEqual([expect.objectContaining({ title: 'Oldest sketch' })]);
+
+  await page.reload();
+  await expect(page.getByTestId('button-delete-project-0')).toHaveAccessibleName('Delete saved sketch: Oldest sketch');
+  await page.getByTestId('button-delete-project-0').click();
+  await expect(page.getByRole('region', { name: 'Saved sketches' })).toHaveCount(0);
+  await expect.poll(async () =>
+    page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY),
+  ).toEqual([]);
+  await expect.poll(async () => saved(page)).toEqual(normalizedCurrent);
+
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Saved sketches' })).toHaveCount(0);
+  await expect.poll(async () => saved(page)).toEqual(normalizedCurrent);
 });
 
 test('saved sketches keep their own photo framing across switches and reloads', async ({ page }) => {

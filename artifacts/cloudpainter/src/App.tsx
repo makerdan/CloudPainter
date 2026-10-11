@@ -540,6 +540,17 @@ function Home() {
     setProject(normalizeProjectView(savedProject));
     announce(`Restored “${savedProject.title}”.`);
   };
+  const deleteSavedProject = (index: number) => {
+    const nextHistory = projectHistory.filter((_, currentIndex) => currentIndex !== index);
+    try {
+      localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
+    } catch {
+      announce('Could not delete this saved sketch. Nothing changed.');
+      return;
+    }
+    setProjectHistory(nextHistory);
+    announce('Saved sketch deleted.');
+  };
   const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -943,16 +954,27 @@ function Home() {
                 <p className="section-label">Saved sketches · {projectHistory.length}</p>
                 <div className="saved-sketch-list">
                   {projectHistory.map((savedProject, index) => (
-                    <TooltipButton
-                      key={`${savedProject.title}-${index}`}
-                      description={`Restore “${savedProject.title}”. Your current sketch is saved first.`}
-                      className="button saved-sketch-button"
-                      onClick={() => restoreProject(savedProject)}
-                      aria-label={`Restore saved sketch: ${savedProject.title}`}
-                      data-testid={`button-restore-project-${index}`}
-                    >
-                      {savedProject.title}
-                    </TooltipButton>
+                    <div className="saved-sketch-row" key={`${savedProject.title}-${index}`}>
+                      <TooltipButton
+                        description={`Restore “${savedProject.title}”. Your current sketch is saved first.`}
+                        className="button saved-sketch-button"
+                        onClick={() => restoreProject(savedProject)}
+                        aria-label={`Restore saved sketch: ${savedProject.title}`}
+                        data-testid={`button-restore-project-${index}`}
+                      >
+                        {savedProject.title}
+                      </TooltipButton>
+                      <TooltipButton
+                        description={`Delete “${savedProject.title}” from saved sketches.`}
+                        type="button"
+                        className="button icon-button saved-sketch-delete"
+                        onClick={() => deleteSavedProject(index)}
+                        aria-label={`Delete saved sketch: ${savedProject.title}`}
+                        data-testid={`button-delete-project-${index}`}
+                      >
+                        <Trash2 size={14} />
+                      </TooltipButton>
+                    </div>
                   ))}
                 </div>
               </section>
