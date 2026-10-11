@@ -3,6 +3,7 @@ import type { LookupAddress } from "node:dns";
 import { BlockList, isIP } from "node:net";
 import { request } from "node:https";
 import { Buffer } from "node:buffer";
+import sharp from "sharp";
 
 const HOSTS = new Set(["pfst.cf2.poecdn.net", "qph.cf2.poecdn.net"]);
 export const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
@@ -85,6 +86,45 @@ export function validatePoeMedia(bytes: Buffer, contentType: string): PoeMedia {
     throw new Error("Poe returned an invalid or oversized raster image.");
   }
   return { bytes, mime: mime as ImageMime };
+}
+
+/**
+ * Header checks stay synchronous for existing callers. General generation must
+ * also decode every raster frame before returning the original provider bytes.
+ */
+export async function decodePoeMedia(bytes: Buffer, contentType: string, signal: AbortSignal): Promise<PoeMedia> {
+  const media = validatePoeMedia(bytes, contentType);
+  signal.throwIfAborted();
+  const decoder = sharp(bytes, { failOn: "warning", limitInputPixels: 20_000_000, animated: true })
+    .timeout({ seconds: 10 });
+  let rejectAbort!: (reason: unknown) => void;
+  const aborted = new Promise<never>((_resolve, reject) => { rejectAbort = reject; });
+  const abort = () => {
+    // Sharp is a Duplex: destroy(error) emits an error event independently of
+    // its promise API. Reject our operation instead, without a stream error.
+    rejectAbort(signal.reason);
+    decoder.destroy();
+  };
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    return await Promise.race([aborted, (async () => {
+      const metadata = await decoder.metadata();
+      signal.throwIfAborted();
+      const format = { "image/png": "png", "image/jpeg": "jpeg", "image/webp": "webp" }[media.mime];
+      const width = metadata.width ?? 0;
+      const height = metadata.height ?? 0;
+      if (metadata.format !== format || !width || !height || width > 8192 || height > 8192
+        || width * height > 20_000_000) throw new Error("Invalid decoded image dimensions.");
+      const { data, info } = await decoder.raw().toBuffer({ resolveWithObject: true });
+      signal.throwIfAborted();
+      if (info.width !== width || info.height !== height || !info.channels
+        || data.length !== width * height * info.channels) throw new Error("Image pixels are incomplete.");
+      return media;
+    })()]);
+  } finally {
+    signal.removeEventListener("abort", abort);
+    decoder.destroy();
+  }
 }
 
 export async function downloadPoeImage(value: string, signal: AbortSignal): Promise<PoeMedia> {

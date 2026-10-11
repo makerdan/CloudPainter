@@ -5,6 +5,8 @@ import sharp from "sharp";
 import { buildPoeUpscalePrompt } from "@workspace/api-zod";
 import { createImageUpscaleRouter } from "../src/routes/image-upscale.ts";
 import { ImageAccessError } from "../src/lib/image-budget.ts";
+import { createImagesRouter } from "../src/routes/images.ts";
+import { generatePoeImage } from "@workspace/integrations-openai-ai-server/poe";
 import {
   MAX_UPSCALE_INPUT_BYTES,
   POE_ASSISTANT_MODEL,
@@ -19,6 +21,59 @@ const reply = (content: unknown = `![upscaled](${imageUrl})`, finishReason = "st
   choices: [{ finish_reason: finishReason, message: { role: "assistant", content } }],
 });
 const requestBody = (scale: 4 | 8 = 4) => ({ pngBase64: inputPng.toString("base64"), scale });
+
+test("general generation maps truncated provider pixels to a safe 502, never a success or refund", async t => {
+  const events: string[] = [];
+  let released!: () => void;
+  const releaseDone = new Promise<void>(resolve => { released = resolve; });
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.log = { info() {}, warn() {}, error() {} } as never;
+    next();
+  });
+  app.use("/api", createImagesRouter({
+    userId: () => "fixture-owner",
+    configured: () => true,
+    budget: {
+      status: async () => ({ dailyLimit: 2, remaining: 2, globalRemaining: 20 }),
+      reserve: async () => { events.push("reserve"); return "lease-fixture"; },
+      release: async id => { events.push(`release:${id}`); released(); },
+    },
+    generate: (input, signal) => generatePoeImage(input, signal, {
+      key: () => "test-fixture-only",
+      fetch: async (url, init) => {
+        events.push(String(url));
+        assert.equal(JSON.parse(String(init?.body)).model, "Nano-Banana-Pro");
+        return Response.json(reply());
+      },
+      download: async url => {
+        events.push(url);
+        return { bytes: inputPng.subarray(0, 33), mime: "image/png" };
+      },
+    }),
+  }));
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  t.after(() => new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const origin = `http://127.0.0.1:${address.port}`;
+  const response = await fetch(`${origin}/api/images/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: origin },
+    body: JSON.stringify({ model: "Nano-Banana-Pro", prompt: "Clouds" }),
+  });
+  assert.equal(response.status, 502);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await response.json(), {
+    code: "upstream_error",
+    error: "Poe image generation did not complete. No other model or provider was used.",
+  });
+  await releaseDone;
+  // Only release the concurrency lease. No persistence or refund fixture.
+  assert.deepEqual(events, ["reserve", "https://api.poe.com/v1/chat/completions", imageUrl, "release:lease-fixture"]);
+});
 
 test("shared Poe Assistant prompt contract keeps the exact reviewed 4× and 8× text", () => {
   assert.deepEqual(

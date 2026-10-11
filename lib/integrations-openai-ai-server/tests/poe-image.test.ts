@@ -1,15 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import sharp from "sharp";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { generatePoeImage, POE_IMAGE_MODELS, PoeImageError } from "../src/poe/images";
 import { assertPoeMediaUrl, isPublicAddress, validatePoeMedia } from "../src/poe/media";
 
-const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aP2cAAAAASUVORK5CYII=", "base64");
+const png = await sharp({ create: { width: 16, height: 12, channels: 3, background: "#315d4d" } }).png().toBuffer();
+const jpeg = await sharp(png).jpeg().toBuffer();
+const webp = await sharp(png).webp().toBuffer();
 const asset = "https://pfst.cf2.poecdn.net/base/image/example.png";
 const completion = { choices: [{ finish_reason: "stop", message: { role: "assistant", content: `![Generated image](${asset})` } }] };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const input = { model: "Nano-Banana-Pro", prompt: " A fluffy cloud " };
 
-function fixture(response: () => Response = () => json(completion)) {
+function fixture(response: () => Response = () => json(completion), media = { bytes: png, mime: "image/png" as "image/png" | "image/jpeg" | "image/webp" }) {
   const requests: { url: string; init: RequestInit }[] = [];
   const downloads: string[] = [];
   const deps = {
@@ -20,11 +26,82 @@ function fixture(response: () => Response = () => json(completion)) {
     }) as typeof fetch,
     download: async (url: string) => {
       downloads.push(url);
-      return { bytes: png, mime: "image/png" as const };
+      return media;
     },
   };
   return { deps, requests, downloads };
 }
+
+for (const [mime, bytes] of [["image/png", png], ["image/jpeg", jpeg], ["image/webp", webp]] as const) {
+  test(`fully decoded ${mime} retains exact bytes and MIME`, async () => {
+    const f = fixture(undefined, { bytes, mime });
+    const result = await generatePoeImage(input, undefined, f.deps);
+    assert.deepEqual(result, { mime, b64_json: bytes.toString("base64") });
+    const decoded = await sharp(Buffer.from(result.b64_json, "base64"), { failOn: "warning" }).raw().toBuffer({ resolveWithObject: true });
+    assert.deepEqual([decoded.info.width, decoded.info.height], [16, 12]);
+    assert.ok(decoded.data.length > 0);
+    assert.equal(f.requests.length, 1);
+    assert.deepEqual(f.downloads, [asset]);
+  });
+}
+
+const corruptPng = Buffer.from(png);
+const idat = corruptPng.indexOf(Buffer.from("IDAT"));
+corruptPng[idat + 5] ^= 0xff;
+const corruptJpeg = Buffer.from(jpeg);
+const scan = corruptJpeg.indexOf(Buffer.from([0xff, 0xda]));
+corruptJpeg.fill(0, scan + 4);
+const corruptWebp = Buffer.from(webp);
+// Invalidate the VP8 frame tag while retaining its signature and dimensions.
+corruptWebp.fill(0xff, 20, 23);
+for (const [name, mime, bytes] of [
+  ["exact 33-byte PNG header regression", "image/png", png.subarray(0, 33)],
+  ["PNG truncated pixel stream", "image/png", png.subarray(0, idat + 6)],
+  ["PNG corrupt pixels", "image/png", corruptPng],
+  ["JPEG truncated scan", "image/jpeg", jpeg.subarray(0, scan + 4)],
+  ["JPEG corrupt pixels", "image/jpeg", corruptJpeg],
+  ["WebP truncated pixels", "image/webp", webp.subarray(0, 30)],
+  ["WebP corrupt pixels", "image/webp", corruptWebp],
+] as const) {
+  test(`${name} fails safely after exactly one Poe request and download`, async () => {
+    // The old header-only boundary accepts each of these fixtures.
+    assert.equal(validatePoeMedia(bytes, mime).mime, mime);
+    const f = fixture(undefined, { bytes, mime });
+    await assert.rejects(generatePoeImage(input, undefined, f.deps), error => {
+      assert.ok(error instanceof PoeImageError);
+      assert.equal(error.code, "upstream_error");
+      assert.equal(error.status, 502);
+      assert.equal(error.message, "Poe image generation did not complete. No other model or provider was used.");
+      return true;
+    });
+    assert.equal(f.requests.length, 1);
+    assert.equal(f.requests[0].url, "https://api.poe.com/v1/chat/completions");
+    assert.equal(JSON.parse(String(f.requests[0].init.body)).model, input.model);
+    assert.deepEqual(f.downloads, [asset]);
+  });
+}
+
+test("cancellation after a download cannot return late decoded pixels", async () => {
+  const controller = new AbortController();
+  const f = fixture();
+  f.deps.download = async url => {
+    f.downloads.push(url);
+    controller.abort();
+    return { bytes: png, mime: "image/png" };
+  };
+  await assert.rejects(generatePoeImage(input, controller.signal, f.deps), error =>
+    error instanceof PoeImageError && error.code === "upstream_timeout");
+  assert.equal(f.requests.length, 1);
+  assert.deepEqual(f.downloads, [asset]);
+});
+
+test("aborting during native pixel decoding safely rejects without crashing the process", async () => {
+  const { stdout, stderr } = await promisify(execFile)(process.execPath, [
+    "--import", "tsx", fileURLToPath(new URL("./fixtures/poe-decode-abort.ts", import.meta.url)),
+  ], { timeout: 8000, maxBuffer: 64 * 1024 });
+  assert.equal(stderr, "");
+  assert.equal(stdout, "decode-abort-process-survived\n");
+});
 
 test("registry contains exactly the user's four Poe choices", () => {
   assert.deepEqual(Object.keys(POE_IMAGE_MODELS), ["Nano-Banana-Pro", "Nano-Banana-2", "GPT-Image-2.5-Sunburst", "Flux-2-Turbo"]);
