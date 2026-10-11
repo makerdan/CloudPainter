@@ -277,6 +277,31 @@ async function inspectExportedPixels(page, locations) {
   }, locations);
 }
 
+test('uses distinct filenames for original-size and high-resolution PNG exports', async () => {
+  const page = await browser.newPage();
+  try {
+    await page.goto(appUrl);
+    const exportButton = page.getByTestId('button-export');
+    const exportSize = page.getByTestId('select-export-size');
+
+    assert.equal(await exportSize.inputValue(), '1', 'original size should be the default export size');
+    const [originalDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      exportButton.click(),
+    ]);
+    assert.equal(originalDownload.suggestedFilename(), 'Untitled-idea.png');
+
+    await exportSize.selectOption('2');
+    const [highResolutionDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      exportButton.click(),
+    ]);
+    assert.equal(highResolutionDownload.suggestedFilename(), 'Untitled-idea-2x.png');
+  } finally {
+    await page.close();
+  }
+});
+
 test('exports only visible sketch layers and preserves their opacity', async () => {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   try {

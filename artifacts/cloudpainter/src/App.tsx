@@ -549,7 +549,9 @@ function Home() {
             return;
           }
           const link = document.createElement('a');
-          link.download = `${project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea'}.png`;
+          const title = project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea';
+          const resolutionSuffix = exportScale === 1 ? '' : `-${exportScale}x`;
+          link.download = `${title}${resolutionSuffix}.png`;
           link.href = png;
           link.click();
           announce('PNG exported. Your browser saved the finished composition.');
