@@ -22,11 +22,13 @@ async function failProjectHistoryWrites(page: Page) {
   await page.evaluate(key => sessionStorage.setItem(key, 'true'), keys.failureKey);
 }
 
-test.describe('signed-in generation (provider always stubbed)', () => {
-test.use({ storageState: process.env.CLOUDPAINTER_AUTH_STATE });
+const signedInStorageState = process.env.CLOUDPAINTER_AUTH_STATE;
+
+test.describe('signed-in generation (provider always stubbed; requires authorized state)', () => {
+test.use({ storageState: signedInStorageState || { cookies: [], origins: [] } });
 
 test.beforeEach(async ({ page }) => {
-  if (!process.env.CLOUDPAINTER_AUTH_STATE) throw new Error('Set CLOUDPAINTER_AUTH_STATE to a signed-in Clerk Playwright storage-state file. No paid inference is used.');
+  if (!signedInStorageState) throw new Error('Set CLOUDPAINTER_AUTH_STATE to a signed-in Clerk Playwright storage-state file. No paid inference is used.');
   await page.route('**/api/images/config', route => route.fulfill({ json: approvedConfig }));
   await page.goto('./');
   await page.getByTestId('button-add-layer').click();
@@ -316,6 +318,17 @@ test('unapproved accounts cannot submit a prompt', async ({ page }) => {
   await expect(page.getByTestId('button-submit-generation')).toBeDisabled();
   expect(calls).toBe(0);
 });
+});
+
+test.describe('account-independent image-generator behavior (local API stubs only)', () => {
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/images/config', route => route.fulfill({
+    json: { configured: false, signedIn: false, allowed: false, dailyLimit: 0, remaining: 0, globalRemaining: 0 },
+  }));
+  await page.route('**/api/images/generate', route => route.fulfill({
+    status: 401,
+    json: { error: 'Sign in is required to generate images.' },
+  }));
 });
 
 test('anonymous visitors can draw but must sign in before generation', async ({ page }) => {
@@ -680,5 +693,6 @@ test('legacy sketches open fitted, remain editable, and save current framing fie
     photoPan: { x: 0, y: 0 },
     layerNames: ['Recovery layer', 'Layer 2'],
   });
+});
 });
 

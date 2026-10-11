@@ -21,6 +21,16 @@ async function markedPhoto(page: Page, width: number, height: number, name: stri
   return { name, mimeType: 'image/png', buffer: Buffer.from(data, 'base64') };
 }
 
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/images/config', route => route.fulfill({
+    json: { configured: false, signedIn: false, allowed: false, dailyLimit: 0, remaining: 0, globalRemaining: 0 },
+  }));
+  await page.route('**/api/images/generate', route => route.fulfill({
+    status: 401,
+    json: { error: 'Sign in is required to generate images.' },
+  }));
+});
+
 for (const photo of [
   { name: 'portrait', width: 400, height: 600 },
   { name: 'near-square', width: 500, height: 480 },

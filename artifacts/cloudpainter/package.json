@@ -24,6 +24,7 @@
     "test:keyboard-shortcuts": "node --test tests/keyboard-shortcuts.browser.test.mjs",
     "test:photo-export": "node --test tests/photo-export.browser.test.mjs",
     "test:photo-card": "playwright test --config playwright.config.ts",
+    "test:anonymous-photo-and-images": "playwright test --config playwright.config.ts --grep-invert 'signed-in generation'",
     "test:logo-browser": "node --test tests/logo-preview.browser.test.mjs",
     "test:poe-images": "playwright test --config playwright.config.ts ImageGenerator.test.tsx",
     "test:tooltips": "playwright test --config playwright.tooltip.config.ts",

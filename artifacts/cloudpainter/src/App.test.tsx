@@ -52,6 +52,13 @@ async function trackPicker(page: Page) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await page.route('**/api/images/config', route => route.fulfill({
+    json: { configured: false, signedIn: false, allowed: false, dailyLimit: 0, remaining: 0, globalRemaining: 0 },
+  }));
+  await page.route('**/api/images/generate', route => route.fulfill({
+    status: 401,
+    json: { error: 'Sign in is required to generate images.' },
+  }));
   await page.goto('./');
   await expect(page.getByTestId('button-photo-card')).toBeVisible();
   await trackPicker(page);

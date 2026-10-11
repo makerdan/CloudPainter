@@ -111,9 +111,9 @@ a 45-minute timeout. The aggregate job has a five-minute timeout.
 | `pnpm --filter @workspace/cloudpainter run test:clipboard-browser` | Included against the isolated CI server; local-storage fixtures and browser contexts, no account state. |
 | `pnpm --filter @workspace/cloudpainter run test:outline-model-browser` | Included; starts and tears down its own local server, runs the locked local inference library in Chromium, and checks public dog/cat fixtures. It fetches public Wikimedia photos and public Hugging Face model assets with bounded timeouts; it makes no hosted inference or paid request. |
 | `pnpm --filter @workspace/cloudpainter run test:tooltips` | Included against the same local server; no authentication state is supplied. |
-| `pnpm --filter @workspace/cloudpainter exec playwright test --config playwright.config.ts --grep-invert 'signed-in generation'` | Included against the same isolated server. Covers account-free `App`, photo-card, and image-generator cases; excludes only the named signed-in generation group. No Clerk storage state or credentials are set. |
-| `pnpm --filter @workspace/cloudpainter run test:photo-card` | The full suite is not run because it includes signed-in cases requiring an authorized Clerk storage-state fixture. Its authenticated-free cases are covered by the preceding explicit title filter. |
-| `pnpm --filter @workspace/cloudpainter run test:poe-images` | The full suite is not run because it includes signed-in cases requiring authorized Clerk state. Its account-free cases are covered by the same title-filtered command; provider requests remain stubbed. |
+| `pnpm --filter @workspace/cloudpainter run test:anonymous-photo-and-images` | Included against the same isolated server. Covers account-free `App`, photo-card, and image-generator cases; excludes the explicitly named signed-in generation group. CI clears `CLOUDPAINTER_AUTH_STATE`; image API responses are local route stubs, with no credentials or paid Poe request. |
+| `pnpm --filter @workspace/cloudpainter run test:photo-card` | The full suite is not run because it includes signed-in generation cases requiring an authorized Clerk storage-state fixture. Its account-free cases are covered by `test:anonymous-photo-and-images`. |
+| `pnpm --filter @workspace/cloudpainter run test:poe-images` | The full suite is not run because it includes signed-in generation cases requiring authorized Clerk state. Its account-free cases are covered by `test:anonymous-photo-and-images`; provider requests remain locally stubbed. |
 | `pnpm run validate:task-plans` | Not applicable to a GitHub checkout: its input `.local/tasks/` is workspace-local and no task-plan files are tracked. The wrapper also has an intentional `--fix-stub` write phase; the portable `test:regression-guard` contract suite is included instead. |
 | `node scripts/check-regression-guard.mjs` | Not applicable in a GitHub checkout for the same reason: without tracked `.local/tasks/`, the checker has no task plans to inspect and reports an empty inventory. |
 | `pnpm --filter @workspace/api-server run setup:image-access` | Excluded: initializes database state; no setup/migration command is run in CI. The isolated tests own their test schemas. |
@@ -168,9 +168,13 @@ browser suites do not establish full accessibility coverage.
 
 ## Exclusions, gaps, and duplicate decisions
 
-- Signed-in photo-card and image-generator browser scenarios remain unverified
-  because they require genuine authorized storage state. Anonymous cases are
-  included through the explicit Playwright title filter.
+- Signed-in image-generator scenarios remain outside CI because they require
+  authorized Clerk storage state. They are isolated in the
+  `signed-in generation (provider always stubbed; requires authorized state)`
+  group; the account-independent group uses local config/generation API stubs.
+  Photo-card and other account-free image-generator cases run through the
+  dedicated `test:anonymous-photo-and-images` command, which clears
+  `CLOUDPAINTER_AUTH_STATE` in CI.
 - The on-device outline browser test depends on publicly hosted fixture and
   model assets. Their network availability and upstream contents are outside
   this repository's lockfile; the test fails closed if they are unavailable or
@@ -245,6 +249,17 @@ for the post-rebase update; generated build/test artifacts are ignored.
   anonymous sign-in-control assertion; no failures were removed or marked
   passing. The full signed-in suites were not run without their required
   authorized storage-state fixture.
+- A subsequent no-auth verification collected the same 47 cases and passed
+  6/6 focused photo-card cases, 7/7 account-independent image-generator cases,
+  and 4/4 pan-limit photo cases. Each suite stubs `/api/images/config` and
+  `/api/images/generate` locally; `CLOUDPAINTER_AUTH_STATE` was unset. A run of
+  the named `test:anonymous-photo-and-images` command still reached its
+  240-second timeout (12 passed, 25 failed, 10 not run); the failing App tests
+  mostly compare saved projects without the normalized `photoZoom` and
+  `photoPan` defaults. These pre-existing failures remain visible to CI.
+- `pnpm --filter @workspace/cloudpainter run typecheck` remains blocked by 58
+  existing errors in CloudPainter/API generated exports and outline-related
+  modules. No application or generated API code was changed for this work.
 - The browser validation is therefore locally red and will make `validation`
   and `ci-required` fail closed. Resolve or explicitly disposition the listed
   browser failures before considering this candidate for branch protection.
