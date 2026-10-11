@@ -3,10 +3,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import express from "express";
 import pg from "pg";
+import sharp from "sharp";
 import { pool } from "@workspace/db";
 import { createImageBudget, dailyLimit, checkBudget, ImageAccessError } from "../src/lib/image-budget";
 import { createImagesRouter } from "../src/routes/images";
 import { createLogoImagesRouter } from "../src/routes/logo-images";
+import { createImageUpscaleRouter } from "../src/routes/image-upscale";
+import { createOutlineRouter } from "../src/routes/outline";
 import { PoeImageError } from "@workspace/integrations-openai-ai-server/poe";
 
 // A private schema isolates test usage/membership from real accounts and budgets.
@@ -225,6 +228,106 @@ async function logoRouteRequest(userId: string) {
   }
 }
 
+const sharedRouteInputs = {
+  image: { prompt: "Clouds", model: "Nano-Banana-Pro" },
+  logo: { prompt: "A cloud mark" },
+  upscale: {
+    pngBase64: (await sharp({ create: { width: 1, height: 1, channels: 4, background: "#315d4d" } }).png().toBuffer()).toString("base64"),
+    scale: 4,
+  },
+  outline: {
+    imageBase64: Buffer.alloc(64).toString("base64"),
+    consent: true,
+    subject: "cloud",
+    sensitivity: 0.5,
+  },
+} as const;
+const sharedRouteOrder = ["image", "logo", "upscale", "outline"] as const;
+type SharedRoute = typeof sharedRouteOrder[number];
+
+async function sharedRouteFixture(userId: string) {
+  const transports: Record<SharedRoute, number> = { image: 0, logo: 0, upscale: 0, outline: 0 };
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.log = { info() {}, warn() {}, error() {} } as never;
+    next();
+  });
+  app.use("/api", createImagesRouter({
+    userId: () => userId,
+    configured: () => true,
+    budget,
+    generate: async () => {
+      transports.image++;
+      return { mime: "image/png", b64_json: "stub" };
+    },
+  }));
+  app.use("/api", createLogoImagesRouter({
+    auth: () => ({ userId, sessionId: "shared-route-session" }),
+    configured: () => true,
+    budget,
+    provider: async () => {
+      transports.logo++;
+      const png = await sharp({ create: { width: 1024, height: 1024, channels: 4, background: "#ffffff" } }).png().toBuffer();
+      return { data: [{ b64_json: png.toString("base64") }] };
+    },
+  }));
+  app.use("/api", createImageUpscaleRouter({
+    userId: () => userId,
+    configured: () => true,
+    budget,
+    upscale: async () => {
+      transports.upscale++;
+      return { b64_json: "stub", mime: "image/png", width: 4, height: 4 };
+    },
+  }));
+  app.use("/api", createOutlineRouter({
+    auth: () => ({ userId, sessionId: "shared-route-session" }),
+    configured: () => true,
+    budget,
+    prepare: async () => ({ png: Buffer.alloc(0), width: 512, height: 512, left: 0, top: 0 }),
+    generate: async () => {
+      transports.outline++;
+      return {
+        model: "GPT-Image-2",
+        candidates: [{ label: "Cloud", points: [{ x: 0.1, y: 0.1 }, { x: 0.9, y: 0.1 }, { x: 0.5, y: 0.9 }] }],
+      };
+    },
+  }));
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const origin = `http://127.0.0.1:${address.port}`;
+  return {
+    transports,
+    async post(route: SharedRoute) {
+      const paths = {
+        image: "/api/images/generate",
+        logo: "/api/logo-images",
+        upscale: "/api/images/upscale",
+        outline: "/api/outlines",
+      } as const;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Origin: origin,
+        ...(route === "logo" ? { "X-Logo-Session": "shared-route-session" } : {}),
+        ...(route === "outline" ? { "X-Outline-Session": "shared-route-session" } : {}),
+      };
+      const response = await fetch(`${origin}${paths[route]}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(sharedRouteInputs[route]),
+      });
+      return { status: response.status, data: await response.json() as Record<string, unknown> };
+    },
+    async close() {
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    },
+  };
+}
+
 test("anonymous and explicitly revoked route requests never contact the provider", async () => {
   await database.query("INSERT INTO image_generation_accounts (user_id, role, enabled) VALUES ('revoked-route', 'normal', false)");
   for (const [user, status] of [[null, 401], ["revoked-route", 403]] as const) {
@@ -257,6 +360,69 @@ test("logo generation shares the same durable account quota as image generation"
   assert.equal(logo.data.code, "quota_exhausted");
   assert.equal(logo.transports, 0);
   assert.equal((await budget.status("normal")).remaining, 0);
+});
+
+test("each Poe route spends the same final normal-account request across route types", async () => {
+  for (let i = 0; i < sharedRouteOrder.length; i++) {
+    await database.query("TRUNCATE image_generation_attempts");
+    await seed("normal", 1);
+    const first = sharedRouteOrder[i];
+    const second = sharedRouteOrder[(i + 1) % sharedRouteOrder.length];
+    const fixture = await sharedRouteFixture("normal");
+    try {
+      const allowed = await fixture.post(first);
+      assert.equal(allowed.status, 200, `${first} should use the remaining normal request`);
+      assert.equal(fixture.transports[first], 1);
+      const denied = await fixture.post(second);
+      assert.equal(denied.status, 429, `${second} should see the shared normal-account limit`);
+      assert.equal(denied.data.code, "quota_exhausted");
+      assert.equal(fixture.transports[second], 0);
+      assert.equal((await budget.status("normal")).remaining, 0);
+    } finally {
+      await fixture.close();
+    }
+  }
+});
+
+test("all Poe routes deny disabled accounts before provider transport", async () => {
+  await database.query("INSERT INTO image_generation_accounts (user_id, role, enabled) VALUES ('disabled-shared-route', 'normal', false)");
+  for (const route of sharedRouteOrder) {
+    const fixture = await sharedRouteFixture("disabled-shared-route");
+    try {
+      const result = await fixture.post(route);
+      assert.equal(result.status, 403, route);
+      assert.equal(fixture.transports[route], 0, route);
+    } finally {
+      await fixture.close();
+    }
+  }
+  assert.deepEqual(
+    (await database.query("SELECT role, enabled FROM image_generation_accounts WHERE user_id = 'disabled-shared-route'")).rows,
+    [{ role: "normal", enabled: false }],
+  );
+  assert.equal(Number((await database.query("SELECT count(*) FROM image_generation_attempts WHERE user_id = 'disabled-shared-route'")).rows[0].count), 0);
+});
+
+test("all Poe routes enforce the shared global daily budget without changing admin role or history", async () => {
+  await seed("admin", 4);
+  await seed("other-account", 16);
+  for (const route of sharedRouteOrder) {
+    const fixture = await sharedRouteFixture("admin");
+    try {
+      const result = await fixture.post(route);
+      assert.equal(result.status, 429, route);
+      assert.equal(result.data.code, "quota_exhausted");
+      assert.equal(fixture.transports[route], 0, route);
+    } finally {
+      await fixture.close();
+    }
+  }
+  assert.deepEqual(
+    (await database.query("SELECT role, enabled FROM image_generation_accounts WHERE user_id = 'admin'")).rows,
+    [{ role: "admin", enabled: true }],
+  );
+  assert.equal(Number((await database.query("SELECT count(*) FROM image_generation_attempts WHERE user_id = 'admin'")).rows[0].count), 4);
+  assert.equal((await budget.status("admin")).remaining, 11);
 });
 
 test("account, global, burst, and concurrency exhaustion happen before provider transport", async () => {
