@@ -869,6 +869,13 @@ test('keeps PNG size and export controls on screen on narrow phones', async () =
         `${width}px phone: the page should not scroll horizontally`,
       );
     }
+    await orientationSelect.selectOption('landscape');
+    assert.equal(await orientationSelect.inputValue(), 'landscape', '320px phone: paper orientation should remain changeable');
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      exportButton.click(),
+    ]);
+    assert.equal(download.suggestedFilename(), 'Untitled-idea.png', '320px phone: PNG export should remain usable');
   } finally {
     await page.close();
   }
