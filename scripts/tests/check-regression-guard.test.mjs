@@ -110,6 +110,69 @@ test("strict mode accepts a complete qualifying regression guard", (t) => {
   assert.match(result.stdout, /strict check passed/);
 });
 
+test("strict mode ignores declaration examples in fenced blocks and blockquotes", (t) => {
+  const exampleFields = `**Covers:** The saved sketch is restored after a resize.
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.`;
+  const plans = {
+    "fenced-examples.md": `# Fix sketch drift after resizing
+
+## What & Why
+Fix incorrect saved photo placement after the editor is resized.
+
+## Regression Guard
+\`\`\`markdown
+${exampleFields}
+\`\`\`
+`,
+    "tilde-fenced-examples.md": `# Fix sketch drift after resizing
+
+## What & Why
+Fix incorrect saved photo placement after the editor is resized.
+
+## Regression Guard
+~~~markdown
+${exampleFields}
+~~~
+`,
+    "blockquote-examples.md": `# Fix sketch drift after resizing
+
+## What & Why
+Fix incorrect saved photo placement after the editor is resized.
+
+## Regression Guard
+> Example declarations:
+**Covers:** The saved sketch is restored after a resize.
+**Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
+**What it checks:** Asserts the restored image uses the current canvas bounds.
+`,
+    "active-fields-with-examples.md": VALID_PLAN.replace(
+      VALID_GUARD,
+      `${VALID_GUARD}
+\`\`\`markdown
+${exampleFields}
+\`\`\`
+> Example declarations:
+**Covers:** Example only.
+`,
+    ),
+  };
+  const directory = fixture(t, plans);
+
+  for (const name of ["fenced-examples.md", "tilde-fenced-examples.md", "blockquote-examples.md"]) {
+    const result = runChecker([], { TASK_PLAN_FILE: path.join(directory, name) });
+    assert.equal(result.status, 1, `${name}: ${result.stderr}`);
+    assert.match(result.stderr, /requires exactly one \*\*Covers:\*\* field/);
+    assert.match(result.stderr, /requires exactly one \*\*Test location:\*\* field/);
+    assert.match(result.stderr, /requires exactly one \*\*What it checks:\*\* field/);
+  }
+
+  const validWithExamples = runChecker([], {
+    TASK_PLAN_FILE: path.join(directory, "active-fields-with-examples.md"),
+  });
+  assert.equal(validWithExamples.status, 0, validWithExamples.stderr);
+});
+
 test("strict mode exempts additive and DELETE-prefixed plans", (t) => {
   const directory = fixture(t, {
     "additive.md": EXCLUDED_ADDITIVE_PLAN,

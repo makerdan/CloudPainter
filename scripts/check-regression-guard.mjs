@@ -156,6 +156,36 @@ function declarationLines(sectionText, label) {
   return [...sectionText.matchAll(expression)].map((match) => match[1].trim());
 }
 
+function activeDeclarationText(sectionText) {
+  let fence = null;
+  let inBlockquote = false;
+  return sectionText
+    .split("\n")
+    .filter((line) => {
+      if (fence) {
+        const closing = new RegExp(`^ {0,3}${fence.character}{${fence.length},}[\\t ]*$`);
+        if (closing.test(line)) fence = null;
+        return false;
+      }
+
+      if (/^ {0,3}>/.test(line)) {
+        inBlockquote = true;
+        return false;
+      }
+      if (inBlockquote) {
+        if (!line.trim()) inBlockquote = false;
+        else return false;
+      }
+
+      const opening = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+      if (!opening) return true;
+      if (opening[1][0] === "`" && opening[2].includes("`")) return true;
+      fence = { character: opening[1][0], length: opening[1].length };
+      return false;
+    })
+    .join("\n");
+}
+
 function isPlaceholder(value) {
   return !value || PLACEHOLDER.test(value);
 }
@@ -175,7 +205,7 @@ function hasValidNaReason(reason) {
 function checkSection(section, planPath, sectionIndex, mode, classification) {
   const problems = [];
   if (sectionIndex > 0) problems.push("contains more than one ## Regression Guard section");
-  const text = section.text.trim();
+  const text = activeDeclarationText(section.text).trim();
   const naLines = declarationLines(text, "N/A");
   const selfLines = declarationLines(text, "Self-satisfying");
   const normalFields = ["Covers", "Test location", "What it checks"];

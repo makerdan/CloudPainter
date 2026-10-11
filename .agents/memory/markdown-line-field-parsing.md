@@ -5,6 +5,8 @@ description: A regex pitfall when parsing labeled Markdown declarations line by 
 
 For line-oriented Markdown fields, match optional spaces and tabs (`[ \t]*`) after a label rather than `\s*`. In multiline regexes, `\s*` can consume line breaks and absorb the next field, making an empty declaration appear populated or a standalone marker appear to contain another field.
 
-**Why:** The Regression Guard checker initially accepted incorrect field boundaries because the whitespace matcher crossed newlines; fixtures caught it when validating empty fields and standalone N/A markers.
+Before validating Markdown field-shaped declarations, exclude fenced code blocks and blockquotes so examples cannot satisfy required fields.
 
-**How to apply:** When parsing Markdown labels with line anchors, keep optional whitespace horizontal and include adjacent-field / empty-value fixtures.
+**Why:** Raw line matching can both cross field boundaries and treat illustrative Markdown as live declarations; focused fixtures exposed both failure modes.
+
+**How to apply:** When parsing Markdown labels with line anchors, keep optional whitespace horizontal, ignore fenced and quoted examples, and include adjacent-field / empty-value fixtures.
