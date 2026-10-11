@@ -18,3 +18,4 @@
 - [Markdown line-field parsing](markdown-line-field-parsing.md) — use horizontal whitespace in line-oriented Markdown field regexes; `\s*` can cross into the next field.
 - [On-device outline fixtures](on-device-outline-fixtures.md) — validate public animal fixtures against the actual local model; labels and photo contents alone do not guarantee usable masks.
 - [Pointer pressure precision](pointer-pressure-precision.md) — browser pointer pressure is floating-point input; test it approximately without rounding persisted samples.
+- [Disposable Postgres on Nix](nix-disposable-postgres.md) — local ephemeral clusters may need a temporary Unix-socket directory because `/run/postgresql` may not exist.

@@ -1,0 +1,206 @@
+name: CloudPainter CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    name: validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16.10-bookworm
+        env:
+          POSTGRES_DB: cloudpainter_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cloudpainter_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          version: 10.26.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.13.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Regenerate API contracts and check freshness
+        run: |
+          pnpm --filter @workspace/api-spec run codegen
+          git diff --exit-code -- lib/api-client-react/src/generated lib/api-zod/src/generated
+          test -z "$(git ls-files --others --exclude-standard -- lib/api-client-react/src/generated lib/api-zod/src/generated)"
+
+      - name: Typecheck and build all workspace packages
+        env:
+          PORT: 4173
+          BASE_PATH: /
+        run: pnpm run build
+
+      - name: Run aggregate fail-closed regression tests
+        run: node --test scripts/ci/check-required-results.test.mjs
+
+      - name: Test task-plan regression guard
+        run: pnpm run test:regression-guard
+
+      - name: Run portable unit and mocked-provider suites
+        run: |
+          set +e
+          failed=0
+          run_check() {
+            label="$1"
+            shift
+            printf '\n=== %s ===\n' "$label"
+            "$@"
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              printf 'FAILED (%s): exit %s\n' "$label" "$status"
+              failed=1
+            else
+              printf 'PASSED: %s\n' "$label"
+            fi
+          }
+          run_check api-outline pnpm --filter @workspace/api-server run test:outline
+          run_check api-image-upscale pnpm --filter @workspace/api-server run test:image-upscale
+          run_check api-logo pnpm --filter @workspace/api-server run test:logo-api
+          run_check poe-adapter pnpm --filter @workspace/integrations-openai-ai-server run test:poe
+          run_check cloudpainter-image-dimensions pnpm --filter @workspace/cloudpainter run test:image-dimensions
+          run_check cloudpainter-outline pnpm --filter @workspace/cloudpainter run test:outline
+          run_check cloudpainter-outline-ui pnpm --filter @workspace/cloudpainter run test:outline-ui
+          run_check cloudpainter-stroke-renderer pnpm --filter @workspace/cloudpainter run test:stroke-renderer
+          run_check cloudpainter-layer-clipboard pnpm --filter @workspace/cloudpainter run test:layer-clipboard
+          run_check cloudpainter-drawing-tools pnpm --filter @workspace/cloudpainter run test:drawing-tools
+          run_check cloudpainter-drawing-colors pnpm --filter @workspace/cloudpainter run test:drawing-colors
+          run_check cloudpainter-palettes pnpm --filter @workspace/cloudpainter run test:palettes
+          run_check cloudpainter-logo-ui pnpm --filter @workspace/cloudpainter run test:logo-ui
+          run_check cloudpainter-upscale-ui pnpm --filter @workspace/cloudpainter run test:upscale-ui
+          exit "$failed"
+
+      - name: Run database tests against the disposable PostgreSQL service
+        env:
+          DATABASE_URL: postgresql://postgres:ci-test-password@127.0.0.1:5432/cloudpainter_test
+        run: |
+          set +e
+          failed=0
+          for check in test:image-access test:palettes; do
+            printf '\n=== api-server %s ===\n' "$check"
+            pnpm --filter @workspace/api-server run "$check"
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              printf 'FAILED (%s): exit %s\n' "$check" "$status"
+              failed=1
+            else
+              printf 'PASSED: %s\n' "$check"
+            fi
+          done
+          exit "$failed"
+
+      - name: Install Chromium for isolated browser checks
+        run: pnpm --filter @workspace/cloudpainter exec playwright install --with-deps chromium
+
+      - name: Run browser checks against a CI-started local server
+        env:
+          CLOUDPAINTER_TEST_URL: http://127.0.0.1:4173/
+          VITE_CLERK_PUBLISHABLE_KEY: pk_test_cGFsZXR0ZS10ZXN0LmNsZXJrLmFjY291bnRzLmRldiQ=
+        run: |
+          set -euo pipefail
+          log_file="$RUNNER_TEMP/cloudpainter-vite.log"
+          setsid env PORT=4173 BASE_PATH=/ NODE_ENV=development \
+            pnpm --filter @workspace/cloudpainter run dev >"$log_file" 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill -TERM -- "-$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=0
+          for attempt in $(seq 1 120); do
+            if curl --fail --silent --connect-timeout 1 --max-time 2 "$CLOUDPAINTER_TEST_URL" >/dev/null; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              cat "$log_file"
+              exit 1
+            fi
+            sleep 0.5
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat "$log_file"
+            echo "CloudPainter did not become ready at $CLOUDPAINTER_TEST_URL" >&2
+            exit 1
+          fi
+
+          export CHROMIUM_PATH
+          CHROMIUM_PATH="$(pnpm --filter @workspace/cloudpainter exec node --input-type=module -e 'import { chromium } from "@playwright/test"; console.log(chromium.executablePath())')"
+          set +e
+          failed=0
+          run_check() {
+            label="$1"
+            shift
+            printf '\n=== %s ===\n' "$label"
+            "$@"
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              printf 'FAILED (%s): exit %s\n' "$label" "$status"
+              failed=1
+            else
+              printf 'PASSED: %s\n' "$label"
+            fi
+          }
+          run_check instruments pnpm --filter @workspace/cloudpainter run test:instruments-browser
+          run_check drawing-colors pnpm --filter @workspace/cloudpainter run test:drawing-colors-browser
+          run_check keyboard-shortcuts pnpm --filter @workspace/cloudpainter run test:keyboard-shortcuts
+          run_check photo-export pnpm --filter @workspace/cloudpainter run test:photo-export
+          run_check logo-browser pnpm --filter @workspace/cloudpainter run test:logo-browser
+          run_check clipboard pnpm --filter @workspace/cloudpainter run test:clipboard-browser
+          run_check tooltips pnpm --filter @workspace/cloudpainter run test:tooltips
+          run_check anonymous-photo-and-image-flows pnpm --filter @workspace/cloudpainter exec playwright test --config playwright.config.ts --grep-invert 'signed-in generation'
+          run_check local-outline-model pnpm --filter @workspace/cloudpainter run test:outline-model-browser
+          exit "$failed"
+
+  ci-required:
+    name: ci-required
+    if: ${{ always() }}
+    needs:
+      - validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.13.0
+
+      - name: Require every validation job to succeed
+        env:
+          NEEDS_CONTEXT: ${{ toJSON(needs) }}
+        run: node scripts/ci/check-required-results.mjs validation
