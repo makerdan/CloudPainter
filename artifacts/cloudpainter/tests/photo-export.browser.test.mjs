@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:net';
+import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { after, before, test } from 'node:test';
 import { chromium } from 'playwright-core';
@@ -474,6 +475,102 @@ test('keeps PNG size and export controls on screen on narrow phones', async () =
         `${width}px phone: the page should not scroll horizontally`,
       );
     }
+  } finally {
+    await page.close();
+  }
+});
+
+test('keeps ordinary PNG export local and unchanged unless the explicit Poe confirmation flow is used', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const upscaleRequests = [];
+  let failNext = false;
+  try {
+    // A test-only module response supplies an approved identity without changing
+    // production authentication or sending paid inference during regression checks.
+    await page.route('**/src/components/Account.tsx*', route => route.fulfill({
+      contentType: 'application/javascript',
+      body: `
+        export function AccountProvider({ children }) { return children; }
+        export function AccountControls() { return null; }
+        export function SignInPage() { return null; }
+        export function SignUpPage() { return null; }
+        export function usePaletteAccount() {
+          return { isLoaded: true, userId: 'fixture-owner', sessionId: 'fixture-session' };
+        }
+      `,
+    }));
+    await page.route('**/api/images/config*', route => route.fulfill({
+      json: { configured: true, signedIn: true, allowed: true, dailyLimit: 15, remaining: 15, globalRemaining: 20 },
+    }));
+    await page.route('**/api/palette', route => route.fulfill({ json: { revision: 0, colors: [] } }));
+    await page.route('**/api/images/upscale', async route => {
+      const submitted = route.request().postDataJSON();
+      upscaleRequests.push(submitted);
+      if (failNext) {
+        await route.fulfill({ status: 502, json: { code: 'invalid_output', error: 'Poe returned no downloadable image.' } });
+        return;
+      }
+      const result = await page.evaluate(async ({ pngBase64, scale }) => {
+        const image = new Image();
+        image.src = `data:image/png;base64,${pngBase64}`;
+        await image.decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth * scale;
+        canvas.height = image.naturalHeight * scale;
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        return { b64_json: canvas.toDataURL('image/png').split(',')[1], mime: 'image/png', width: canvas.width, height: canvas.height };
+      }, submitted);
+      await route.fulfill({ json: result });
+    });
+    await page.goto(appUrl);
+    await importPhoto(page, { width: 360, height: 240 }, 'local-only-reference.png');
+    await page.locator('canvas.draw-surface').scrollIntoViewIfNeeded();
+    await drawStroke(page, { startX: 0.25, endX: 0.75, y: 0.5 });
+    await waitForStrokeCount(page, 0, 1);
+    await page.waitForFunction(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null');
+      return project?.title === 'local-only-reference' && project?.image;
+    });
+    const before = await captureProjectState(page);
+
+    const scale = page.getByTestId('select-upscale-factor');
+    await scale.selectOption('8');
+    assert.equal(await scale.inputValue(), '8', 'users can choose 8× without starting a request');
+    assert.match(await page.getByTestId('upscale-route-disclosure').textContent(), /Nano-Banana-2/i);
+    assert.match(await page.getByTestId('upscale-route-disclosure').textContent(), /Please upscale the attached image to be 8x/);
+    await page.waitForFunction(() => !document.querySelector('[data-testid="button-upscale-export"]').disabled);
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('button-export').click(),
+    ]);
+    assert.equal(download.suggestedFilename(), 'local-only-reference.png');
+    const localPng = await readFile(await download.path());
+    await page.waitForTimeout(600);
+    assert.deepEqual(await captureProjectState(page), before, 'choosing a scale and exporting locally must not change the project');
+    assert.deepEqual(upscaleRequests, [], 'choosing a scale or ordinary PNG export may not call the upscale endpoint');
+    for (const factor of [4, 8]) {
+      await scale.selectOption(String(factor));
+      await page.getByTestId('button-upscale-export').click();
+      assert.equal(upscaleRequests.length, factor === 4 ? 0 : 1, 'reviewing the disclosure must not transfer artwork');
+      const [upscaledDownload] = await Promise.all([
+        page.waitForEvent('download', { timeout: 10_000 }).catch(async () => {
+          throw new Error(`${factor}x upscale did not download. Requests: ${upscaleRequests.length}; feedback: ${await page.locator('.upscale-export').innerText()}`);
+        }),
+        page.getByTestId('button-confirm-upscale').click(),
+      ]);
+      assert.equal(upscaledDownload.suggestedFilename(), `local-only-reference-assistant-${factor}x.png`);
+      const submitted = upscaleRequests.at(-1);
+      assert.equal(submitted.scale, factor);
+      assert.equal(submitted.pngBase64, localPng.toString('base64'), 'Poe receives the same merged photo-plus-visible-stroke composition as local PNG export');
+      assert.deepEqual(await captureProjectState(page), before, 'successful upscale export does not change the saved project');
+    }
+    failNext = true;
+    await page.getByTestId('button-upscale-export').click();
+    await page.getByTestId('button-confirm-upscale').click();
+    await page.getByTestId('upscale-error').waitFor();
+    assert.match(await page.getByTestId('upscale-error').textContent(), /no downloadable image/);
+    assert.deepEqual(await captureProjectState(page), before, 'failed upscale export does not change the saved project');
   } finally {
     await page.close();
   }

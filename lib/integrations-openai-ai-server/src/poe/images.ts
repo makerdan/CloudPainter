@@ -2,6 +2,7 @@ import { POE_IMAGE_MODELS, isPoeImageModel } from "./models";
 import { assertPoeMediaUrl, downloadPoeImage, validatePoeMedia, type PoeMedia } from "./media";
 
 export { POE_IMAGE_MODELS, isPoeImageModel } from "./models";
+export { assertPoeMediaUrl, downloadPoeImage, MAX_IMAGE_BYTES, validatePoeMedia, type PoeMedia } from "./media";
 export class PoeImageError extends Error {
   constructor(public readonly code: string, message: string, public readonly status = 502) {
     super(message);

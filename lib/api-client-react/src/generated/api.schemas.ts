@@ -127,6 +127,49 @@ export interface PoeImageOutput {
   mime: PoeImageOutputMime;
 }
 
+export type PoeUpscaleInputScale = typeof PoeUpscaleInputScale[keyof typeof PoeUpscaleInputScale];
+
+
+export const PoeUpscaleInputScale = {
+  NUMBER_4: 4,
+  NUMBER_8: 8,
+} as const;
+
+export interface PoeUpscaleInput {
+  /**
+     * @minLength 1
+     * @maxLength 11184812
+     */
+  pngBase64: string;
+  scale: PoeUpscaleInputScale;
+}
+
+export type PoeUpscaleOutputMime = typeof PoeUpscaleOutputMime[keyof typeof PoeUpscaleOutputMime];
+
+
+export const PoeUpscaleOutputMime = {
+  'image/png': 'image/png',
+} as const;
+
+export interface PoeUpscaleOutput {
+  /**
+     * @minLength 1
+     * @maxLength 16777216
+     */
+  b64_json: string;
+  mime: PoeUpscaleOutputMime;
+  /**
+     * @minimum 1
+     * @maximum 8192
+     */
+  width: number;
+  /**
+     * @minimum 1
+     * @maximum 8192
+     */
+  height: number;
+}
+
 export interface ImageGenerationError {
   error: string;
   code: string;

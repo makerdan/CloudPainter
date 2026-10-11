@@ -144,3 +144,32 @@ export const GeneratePoeImageResponse = zod.object({
 })
 
 
+/**
+ * Sends the image only after an explicit user action. Poe Assistant receives exactly "Please upscale the attached image to be 4x" or "Please upscale the attached image to be 8x". Poe chooses the provider; only a PNG at the exact requested dimensions is accepted.
+ * @summary Ask Poe Assistant to upscale a merged PNG
+ */
+export const upscalePoeImageBodyPngBase64Max = 11184812;
+
+
+
+export const UpscalePoeImageBody = zod.object({
+  "pngBase64": zod.string().min(1).max(upscalePoeImageBodyPngBase64Max),
+  "scale": zod.union([zod.literal(4),zod.literal(8)])
+})
+
+export const upscalePoeImageResponseB64JsonMax = 16777216;
+
+export const upscalePoeImageResponseWidthMax = 8192;
+
+export const upscalePoeImageResponseHeightMax = 8192;
+
+
+
+export const UpscalePoeImageResponse = zod.object({
+  "b64_json": zod.string().min(1).max(upscalePoeImageResponseB64JsonMax),
+  "mime": zod.enum(['image/png']),
+  "width": zod.number().int().min(1).max(upscalePoeImageResponseWidthMax),
+  "height": zod.number().int().min(1).max(upscalePoeImageResponseHeightMax)
+})
+
+

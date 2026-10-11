@@ -7,6 +7,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware, getClerkProxyHost } from "./middlewares/clerkProxyMiddleware";
 import logoImagesRouter from "./routes/logo-images";
+import imageUpscaleRouter from "./routes/image-upscale";
 
 const app: Express = express();
 
@@ -38,6 +39,8 @@ app.use(clerkMiddleware((req) => ({
 })));
 // This paid text-only endpoint owns its bounded parser and does not opt into CORS.
 app.use("/api", logoImagesRouter);
+// The upscaler owns a larger, explicit JSON limit; mount before the default parser.
+app.use("/api", imageUpscaleRouter);
 // Other API routes retain their existing parser and account middleware.
 app.use(cors());
 app.use(express.json());

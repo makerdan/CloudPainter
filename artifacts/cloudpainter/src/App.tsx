@@ -35,6 +35,7 @@ import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter
 import { LogoCreationPanel } from '@/components/LogoCreationPanel';
 import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions } from '@/lib/imageDimensions';
 import { ImageGenerator } from '@/components/ImageGenerator';
+import { PoeUpscaleExport } from '@/components/PoeUpscaleExport';
 import { DrawingColorControl } from '@/components/DrawingColorControl';
 import { BrushStyleControl } from '@/components/BrushStyleControl';
 import { BRUSH_STYLES, renderStroke, type BrushStyle, type DrawingTool, type Point, type Stroke } from '@/lib/strokeRenderer';
@@ -176,6 +177,49 @@ function getExportLayout(
     offsetX: (paper.width - projectWidth * scale) / 2,
     offsetY: (paper.height - projectHeight * scale) / 2,
   };
+}
+
+async function composeProjectCanvas(
+  project: Project,
+  layerCanvases: Record<string, HTMLCanvasElement | null>,
+  exportSize: ExportSize,
+  paperOrientation: PaperOrientation = 'match-sketch',
+): Promise<{ canvas: HTMLCanvasElement; scale: number }> {
+  const layout = getExportLayout(project.width, project.height, exportSize, paperOrientation);
+  const canvas = document.createElement('canvas');
+  canvas.width = layout.width;
+  canvas.height = layout.height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Could not create the PNG export. Try again or use a smaller canvas.');
+  context.setTransform(layout.scale, 0, 0, layout.scale, layout.offsetX, layout.offsetY);
+
+  if (project.image) {
+    const photo = new Image();
+    await new Promise<void>((resolve, reject) => {
+      photo.onload = () => resolve();
+      photo.onerror = () => reject(new Error('Could not include the reference photo in the PNG export. Try again or remove the photo before exporting.'));
+      photo.src = project.image!;
+    });
+    try {
+      const imageSize = fitDimensionsWithinBounds(photo.naturalWidth, photo.naturalHeight, project.width, project.height);
+      context.drawImage(photo, (project.width - imageSize.width) / 2, (project.height - imageSize.height) / 2, imageSize.width, imageSize.height);
+    } catch {
+      throw new Error('Could not include the reference photo in the PNG export. Try again or remove the photo before exporting.');
+    }
+  }
+  for (const layer of project.layers) {
+    if (!layer.visible) continue;
+    const source = layerCanvases[layer.id];
+    if (!source) throw new Error(`Could not export PNG because visible layer "${layer.name}" could not be read. No file was downloaded.`);
+    context.globalAlpha = layer.opacity;
+    try {
+      context.drawImage(source, 0, 0);
+    } catch {
+      throw new Error(`Could not export PNG because visible layer "${layer.name}" could not be read. No file was downloaded.`);
+    }
+  }
+  context.globalAlpha = 1;
+  return { canvas, scale: layout.scale };
 }
 
 function Home() {
@@ -569,75 +613,40 @@ function Home() {
     if (nextZoom === 1) setPanMode(false);
   };
 
-  const exportPng = () => {
-    const exportFailed = () => announce('Could not create the PNG export. Try again or use a smaller canvas.');
+  const exportPng = async () => {
     try {
-      const layout = getExportLayout(project.width, project.height, exportSize, paperOrientation);
-      const canvas = document.createElement('canvas');
-      canvas.width = layout.width;
-      canvas.height = layout.height;
-      const context = canvas.getContext('2d');
-      if (!context) {
-        exportFailed();
+      const { canvas } = await composeProjectCanvas(project, canvasRefs.current, exportSize, paperOrientation);
+      const png = canvas.toDataURL('image/png');
+      const pngDataUrlPrefix = 'data:image/png;base64,';
+      if (!png.startsWith(pngDataUrlPrefix) || png.length === pngDataUrlPrefix.length) {
+        announce('Could not create the PNG export. Try again or use a smaller canvas.');
         return;
       }
-      context.setTransform(layout.scale, 0, 0, layout.scale, layout.offsetX, layout.offsetY);
-      const finish = () => {
-        try {
-          for (const layer of project.layers) {
-            if (!layer.visible) continue;
-            const source = canvasRefs.current[layer.id];
-            if (!source) {
-              announce(`Could not export PNG because visible layer "${layer.name}" could not be read. No file was downloaded.`);
-              return;
-            }
-            context.globalAlpha = layer.opacity;
-            try {
-              context.drawImage(source, 0, 0);
-            } catch {
-              announce(`Could not export PNG because visible layer "${layer.name}" could not be read. No file was downloaded.`);
-              return;
-            }
-          }
-          context.globalAlpha = 1;
-          const png = canvas.toDataURL('image/png');
-          const pngDataUrlPrefix = 'data:image/png;base64,';
-          if (!png.startsWith(pngDataUrlPrefix) || png.length === pngDataUrlPrefix.length) {
-            exportFailed();
-            return;
-          }
-          const link = document.createElement('a');
-          const title = project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea';
-          const resolutionSuffix = exportSize === '2' ? '-2x' : '';
-          link.download = `${title}${resolutionSuffix}.png`;
-          link.href = png;
-          link.click();
-          announce('PNG exported. Your browser saved the finished composition.');
-        } catch {
-          exportFailed();
-        }
-      };
-      if (project.image) {
-        const photo = new Image();
-        photo.onload = () => {
-          try {
-            const imageSize = fitDimensionsWithinBounds(photo.naturalWidth, photo.naturalHeight, project.width, project.height);
-            const x = (project.width - imageSize.width) / 2;
-            const y = (project.height - imageSize.height) / 2;
-            context.drawImage(photo, x, y, imageSize.width, imageSize.height);
-            finish();
-          } catch {
-            exportFailed();
-          }
-        };
-        photo.onerror = () => announce('Could not include the reference photo in the PNG export. Try again or remove the photo before exporting.');
-        photo.src = project.image;
-      } else {
-        finish();
-      }
-    } catch {
-      exportFailed();
+      const link = document.createElement('a');
+      const title = project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea';
+      const resolutionSuffix = exportSize === '2' ? '-2x' : '';
+      link.download = `${title}${resolutionSuffix}.png`;
+      link.href = png;
+      link.click();
+      announce('PNG exported. Your browser saved the finished composition.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      announce(message.startsWith('Could not include the reference photo')
+        || message.startsWith('Could not export PNG because visible layer')
+        || message.startsWith('Could not create the PNG export')
+        ? message
+        : 'Could not create the PNG export. Try again or use a smaller canvas.');
     }
+  };
+
+  const composePngForUpscale = async (): Promise<Blob> => {
+    const { canvas } = await composeProjectCanvas(project, canvasRefs.current, '1');
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(blob => {
+        if (blob?.type === 'image/png' && blob.size > 0) resolve(blob);
+        else reject(new Error('Could not create the merged PNG for upscaling. No image was sent.'));
+      }, 'image/png');
+    });
   };
 
   useEffect(() => {
@@ -673,7 +682,7 @@ function Home() {
         </div>
         <div className="topbar-right">
           <AccountControls />
-          <span className="privacy-note"><Save size={13} /> Projects and photos stay in this browser</span>
+          <span className="privacy-note"><Save size={13} /> Projects and photos stay here unless you explicitly send one to Poe for upscaling.</span>
           <span className="save-state" data-testid="status-save">{savedStatus}</span>
           <div className="top-actions">
               <ActionTooltip description="View five CloudPainter logo design directions."><Link href="/logo-options" className="button button-quiet logo-options-link" data-testid="link-logo-options">Logo directions</Link></ActionTooltip>
@@ -710,6 +719,8 @@ function Home() {
           </div>
           <div className="save-state">LOCAL PROJECT · AUTOSAVED</div>
         </div>
+
+        <PoeUpscaleExport composeImage={composePngForUpscale} title={project.title} width={project.width} height={project.height} />
 
         <div className="workspace-grid">
           <aside className="panel side-panel">

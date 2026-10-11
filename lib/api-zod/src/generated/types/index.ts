@@ -23,3 +23,7 @@ export * from './poeImageInput';
 export * from './poeImageInputModel';
 export * from './poeImageOutput';
 export * from './poeImageOutputMime';
+export * from './poeUpscaleInput';
+export * from './poeUpscaleInputScale';
+export * from './poeUpscaleOutput';
+export * from './poeUpscaleOutputMime';

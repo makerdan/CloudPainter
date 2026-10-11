@@ -28,7 +28,9 @@ import type {
   LogoImageResult,
   Palette,
   PoeImageInput,
-  PoeImageOutput
+  PoeImageOutput,
+  PoeUpscaleInput,
+  PoeUpscaleOutput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -540,5 +542,94 @@ export const useGeneratePoeImage = <TError = ErrorType<ImageGenerationError>,
         TContext
       > => {
       return useMutation(getGeneratePoeImageMutationOptions(options));
+    }
+
+export const getUpscalePoeImageUrl = () => {
+
+
+
+
+  return `/api/images/upscale`
+}
+
+/**
+ * Sends the image only after an explicit user action. Poe Assistant receives exactly "Please upscale the attached image to be 4x" or "Please upscale the attached image to be 8x". Poe chooses the provider; only a PNG at the exact requested dimensions is accepted.
+ * @summary Ask Poe Assistant to upscale a merged PNG
+ */
+export const upscalePoeImage = async (poeUpscaleInput: PoeUpscaleInput, options?: Parameters<typeof customFetch>[1]): Promise<PoeUpscaleOutput> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<PoeUpscaleOutput>(getUpscalePoeImageUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(poeUpscaleInput)
+  }
+);}
+
+
+
+
+
+export const getUpscalePoeImageMutationKey = () => ['upscalePoeImage'] as const;
+
+export const getUpscalePoeImageMutationOptions = <TError = ErrorType<ImageGenerationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upscalePoeImage>>, TError,UpscalePoeImageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof upscalePoeImage>>, TError,UpscalePoeImageMutationVariables, TContext> => {
+
+const mutationKey = getUpscalePoeImageMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof upscalePoeImage>>, UpscalePoeImageMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  upscalePoeImage(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpscalePoeImageMutationResult = NonNullable<Awaited<ReturnType<typeof upscalePoeImage>>>
+    export type UpscalePoeImageMutationBody = BodyType<PoeUpscaleInput>
+    export type UpscalePoeImageMutationError = ErrorType<ImageGenerationError>
+    export type UpscalePoeImageMutationVariables = {data: BodyType<PoeUpscaleInput>}
+
+    /**
+ * @summary Ask Poe Assistant to upscale a merged PNG
+ */
+export const useUpscalePoeImage = <TError = ErrorType<ImageGenerationError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upscalePoeImage>>, TError,UpscalePoeImageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof upscalePoeImage>>,
+        TError,
+        UpscalePoeImageMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpscalePoeImageMutationOptions(options));
     }
 

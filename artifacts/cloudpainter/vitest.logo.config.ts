@@ -6,7 +6,7 @@ export default defineConfig({
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
   test: {
     environment: 'jsdom',
-    include: ['src/components/LogoCreationPanel.test.tsx'],
+    include: ['src/components/LogoCreationPanel.test.tsx', 'src/components/PoeUpscaleExport.test.tsx'],
     css: false,
   },
 });

@@ -190,6 +190,67 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ImageGenerationError"
+  /images/upscale:
+    post:
+      operationId: upscalePoeImage
+      tags: [images]
+      summary: Ask Poe Assistant to upscale a merged PNG
+      description: Sends the image only after an explicit user action. Poe Assistant receives exactly "Please upscale the attached image to be 4x" or "Please upscale the attached image to be 8x". Poe chooses the provider; only a PNG at the exact requested dimensions is accepted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PoeUpscaleInput"
+      responses:
+        "200":
+          description: A validated PNG at exactly 4× or 8× the input dimensions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoeUpscaleOutput"
+        "400":
+          description: Invalid scale or PNG
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationError"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationError"
+        "403":
+          description: Account not approved or request did not originate from CloudPainter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationError"
+        "413":
+          description: Image exceeds the request-size limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationError"
+        "429":
+          description: Image request limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationError"
+        "502":
+          description: Poe returned an invalid or incorrectly sized image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationError"
+        "503":
+          description: Poe connection unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationError"
 components:
   responses:
     LogoImageError:
@@ -285,6 +346,38 @@ components:
       required:
         - b64_json
         - mime
+    PoeUpscaleInput:
+      type: object
+      additionalProperties: false
+      properties:
+        pngBase64:
+          type: string
+          minLength: 1
+          maxLength: 11184812
+        scale:
+          type: integer
+          enum: [4, 8]
+      required: [pngBase64, scale]
+    PoeUpscaleOutput:
+      type: object
+      additionalProperties: false
+      properties:
+        b64_json:
+          type: string
+          minLength: 1
+          maxLength: 16777216
+        mime:
+          type: string
+          enum: ["image/png"]
+        width:
+          type: integer
+          minimum: 1
+          maximum: 8192
+        height:
+          type: integer
+          minimum: 1
+          maximum: 8192
+      required: [b64_json, mime, width, height]
     ImageGenerationError:
       type: object
       properties:

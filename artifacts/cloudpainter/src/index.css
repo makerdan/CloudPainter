@@ -80,6 +80,25 @@ button:focus-visible, input:focus-visible { outline: 3px solid #b9d66a; outline-
 
 .workspace { max-width:1500px; margin:0 auto; padding-top:25px; padding-bottom:50vh; padding-bottom:50dvh; }
 .intro-row { display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:20px; }
+.upscale-export { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:14px 16px; margin:0 0 16px; }
+.upscale-export-copy { min-width:0; }
+.upscale-export-heading { display:flex; align-items:center; flex-wrap:wrap; gap:9px; }
+.upscale-export-heading h2 { margin:0; color:#30473b; font-size:13px; }
+.upscale-unavailable-label { color:#8b4b22; font:10px var(--font-mono); text-transform:uppercase; letter-spacing:.05em; }
+.upscale-export-copy p { margin:5px 0 0; color:#657168; font-size:11px; line-height:1.5; }
+.upscale-export-copy p[role="alert"], .upscale-error { color:#7b2922; }
+.upscale-export-copy p[role="status"] { color:#526057; }
+.upscale-export-copy .upscale-budget { color:#657168; }
+.upscale-export-disclosure { max-width:850px; }
+.upscale-export-disclosure a { color:var(--forest-deep); text-decoration:underline; }
+.upscale-progress { font-weight:700; }
+.upscale-confirm { max-width:520px; }
+.upscale-confirm-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px; margin-top:10px; }
+.upscale-confirm-actions [role="status"] { display:flex; align-items:center; gap:6px; color:#59645d; font-size:12px; }
+.upscale-export-controls { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; flex:none; }
+.upscale-size-control { display:flex; align-items:center; gap:6px; color:#68756d; font-size:10px; font-weight:700; white-space:nowrap; }
+.upscale-size-control select { border:1px solid #c7cec5; border-radius:8px; background:var(--paper); color:var(--ink); padding:7px 8px; font:inherit; font-size:11px; }
+.upscale-size-control select:focus-visible { outline:3px solid var(--lime); outline-offset:2px; }
 .eyebrow { font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:.13em; color:#8a9288; margin:0 0 7px; }
 h1 { font-family:var(--font-display); font-size:32px; line-height:1.1; font-weight:500; letter-spacing:-.8px; margin:0; color:#30473b; }
 .intro-copy { color:#778179; margin:8px 0 0; font-size:13px; }
@@ -248,6 +267,9 @@ h1 { font-family:var(--font-display); font-size:32px; line-height:1.1; font-weig
   .export-size-control select { max-width:155px; padding:7px 5px; }
   .workspace { padding-top:19px; }
   .intro-row { margin-bottom:14px; }
+  .upscale-export { align-items:stretch; flex-direction:column; gap:10px; padding:12px; }
+  .upscale-export-controls { justify-content:flex-start; }
+  .upscale-export-controls > .button { flex:1; }
   h1 { font-size:27px; }
   .intro-copy { font-size:11px; max-width:280px; }
   .workspace-grid { display:flex; flex-direction:column; gap:11px; min-height:0; }
