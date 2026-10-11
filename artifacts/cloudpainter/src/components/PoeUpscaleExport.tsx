@@ -6,6 +6,7 @@ import {
   useGetImageGenerationConfig,
   type PoeUpscaleInput,
 } from "@workspace/api-client-react";
+import { buildPoeUpscalePrompt } from "@workspace/api-zod";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { usePaletteAccount } from "./Account";
 
@@ -66,6 +67,7 @@ export function PoeUpscaleExport({ composeImage, title, width, height }: Props) 
   });
   const signedIn = Boolean(userId);
   const configured = configuration.data?.configured === true;
+  const prompt = buildPoeUpscalePrompt(scale);
   const eligible = Boolean(signedIn && configuration.data?.signedIn && configuration.data.allowed
     && configuration.data.remaining > 0 && configuration.data.globalRemaining > 0);
   const sizeSupported = width <= 2048 && height <= 2048
@@ -181,7 +183,7 @@ export function PoeUpscaleExport({ composeImage, title, width, height }: Props) 
           <DialogHeader>
             <DialogTitle>Send this composition to Poe?</DialogTitle>
             <DialogDescription>
-              This sends the merged photo and visible layers to Poe Assistant and may use Poe points. Assistant chooses the provider. The prompt will be “Please upscale the attached image to be {scale}x”. Continue only if you accept that.
+              This sends the merged photo and visible layers to Poe Assistant and may use Poe points. Assistant chooses the provider. The prompt will be “{prompt}”. Continue only if you accept that.
             </DialogDescription>
           </DialogHeader>
           <p className="generation-disclosure">The result is accepted only as a readable PNG at exactly {width * scale} × {height * scale} pixels. Poe may still use points if it fails or is cancelled after processing starts.</p>

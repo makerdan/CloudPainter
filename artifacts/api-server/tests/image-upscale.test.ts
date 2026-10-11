@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import express from "express";
 import sharp from "sharp";
+import { buildPoeUpscalePrompt } from "@workspace/api-zod";
 import { createImageUpscaleRouter } from "../src/routes/image-upscale.ts";
 import { ImageAccessError } from "../src/lib/image-budget.ts";
 import {
@@ -18,6 +19,13 @@ const reply = (content: unknown = `![upscaled](${imageUrl})`, finishReason = "st
   choices: [{ finish_reason: finishReason, message: { role: "assistant", content } }],
 });
 const requestBody = (scale: 4 | 8 = 4) => ({ pngBase64: inputPng.toString("base64"), scale });
+
+test("shared Poe Assistant prompt contract keeps the exact reviewed 4× and 8× text", () => {
+  assert.deepEqual(
+    [buildPoeUpscalePrompt(4), buildPoeUpscalePrompt(8)],
+    ["Please upscale the attached image to be 4x", "Please upscale the attached image to be 8x"],
+  );
+});
 
 function dependencies(output: Buffer, events: string[] = [], scale: 4 | 8 = 4) {
   return {
@@ -39,7 +47,7 @@ function dependencies(output: Buffer, events: string[] = [], scale: 4 | 8 = 4) {
       const metadata = await submitted.metadata();
       assert.deepEqual([metadata.width, metadata.height], [4, 3]);
       assert.deepEqual(await submitted.raw().toBuffer(), await sharp(inputPng).raw().toBuffer());
-      assert.equal(body.messages[0].content[0].text, `Please upscale the attached image to be ${scale}x`);
+      assert.equal(body.messages[0].content[0].text, buildPoeUpscalePrompt(scale));
       return Response.json(reply());
     },
     download: async (url: string, signal: AbortSignal) => {
