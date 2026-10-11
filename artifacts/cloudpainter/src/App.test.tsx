@@ -68,16 +68,16 @@ async function addSyntheticStroke(page: Page) {
   await expect(page.getByTestId('button-undo')).toBeEnabled();
 }
 
-async function png(page: Page, name: string, width: number, height: number) {
-  const data = await page.evaluate(({ width, height }) => {
+async function png(page: Page, name: string, width: number, height: number, color = '#87a6c0') {
+  const data = await page.evaluate(({ width, height, color }) => {
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext('2d')!;
-    context.fillStyle = '#87a6c0';
+    context.fillStyle = color;
     context.fillRect(0, 0, width, height);
     return canvas.toDataURL('image/png').split(',')[1];
-  }, { width, height });
+  }, { width, height, color });
   return { name, mimeType: 'image/png', buffer: Buffer.from(data, 'base64') };
 }
 
@@ -596,26 +596,231 @@ test('a delayed earlier file read cannot replace newer work or hide pending feed
   expect((await savedProject(page)).layers[0].strokes).toHaveLength(1);
 });
 
-test('a photo decode failure leaves the current sketch and saved sketches unchanged', async ({ page }) => {
+test('photo read and decode failures preserve the sketch until a valid retry decodes', async ({ page }) => {
   const initialPhoto = await png(page, 'keep-this-sketch.png', 320, 200);
   await page.getByTestId('input-photo').setInputFiles(initialPhoto);
   await expect.poll(async () => (await savedProject(page))?.title).toBe('keep-this-sketch');
   await addSyntheticStroke(page);
   await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
-  const activeProject = await savedProject(page);
-  const activeHistory = await savedProjectHistory(page);
+  const input = page.getByTestId('input-photo');
+  const originalProject = await savedProject(page);
+  const originalHistory = await savedProjectHistory(page);
 
-  await page.getByTestId('input-photo').setInputFiles({
-    name: 'corrupt.png',
-    mimeType: 'image/png',
-    buffer: Buffer.from('not a decodable image'),
+  await page.evaluate(() => {
+    const prototype = FileReader.prototype;
+    const readAsDataURL = prototype.readAsDataURL;
+    prototype.readAsDataURL = function (file) {
+      if (file.name !== 'unreadable.png') {
+        readAsDataURL.call(this, file);
+        return;
+      }
+      setTimeout(() => this.onerror?.call(this, new ProgressEvent('error')), 0);
+    };
   });
+  await input.setInputFiles(await png(page, 'unreadable.png', 240, 160));
+  await expect(page.getByTestId('status-toast')).toHaveText('Could not read that file. Please try again.');
+  expect(await savedProject(page)).toEqual(originalProject);
+  expect(await savedProjectHistory(page)).toEqual(originalHistory);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', originalProject.image);
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+
+  const decodeFailure = await png(page, 'decode-failure.png', 240, 160);
+  await page.evaluate(() => {
+    const controls = window as Window & {
+      failNextPhotoDecode?: boolean;
+      holdNextPhotoDecode?: boolean;
+      releasePhotoDecode?: () => void;
+      restoreNativeImage?: () => void;
+    };
+    const nativeImage = window.Image;
+    const nativeSource = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    if (!nativeSource?.set) throw new Error('Image source descriptor is unavailable.');
+    controls.failNextPhotoDecode = true;
+    controls.holdNextPhotoDecode = false;
+    class ControlledImage extends nativeImage {
+      constructor() {
+        super();
+        const image = this;
+        Object.defineProperty(image, 'src', {
+          configurable: true,
+          set(value: string) {
+            if (controls.failNextPhotoDecode) {
+              controls.failNextPhotoDecode = false;
+              setTimeout(() => image.onerror?.call(image, new Event('error')), 0);
+              return;
+            }
+            if (controls.holdNextPhotoDecode) {
+              controls.holdNextPhotoDecode = false;
+              controls.releasePhotoDecode = () => {
+                nativeSource.set!.call(image, value);
+                controls.releasePhotoDecode = undefined;
+              };
+              return;
+            }
+            nativeSource.set!.call(image, value);
+          },
+        });
+      }
+    }
+    Object.defineProperty(window, 'Image', {
+      configurable: true,
+      writable: true,
+      value: ControlledImage,
+    });
+    controls.restoreNativeImage = () => {
+      Object.defineProperty(window, 'Image', {
+        configurable: true,
+        writable: true,
+        value: nativeImage,
+      });
+    };
+  });
+  await input.setInputFiles(decodeFailure);
   await expect(page.getByTestId('status-toast')).toHaveText(
     'That photo could not be opened. Try another image.',
   );
-  expect(await savedProject(page)).toEqual(activeProject);
-  expect(await savedProjectHistory(page)).toEqual(activeHistory);
-  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', activeProject.image);
+  expect(await savedProject(page)).toEqual(originalProject);
+  expect(await savedProjectHistory(page)).toEqual(originalHistory);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', originalProject.image);
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+
+  const retryPhoto = await png(page, 'successful-retry.png', 360, 240, '#43a047');
+  await page.evaluate(() => {
+    const controls = window as Window & {
+      holdNextPhotoDecode?: boolean;
+      releasePhotoDecode?: () => void;
+    };
+    controls.holdNextPhotoDecode = true;
+  });
+  await input.setInputFiles(retryPhoto);
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releasePhotoDecode?: () => void }).releasePhotoDecode,
+  )).toBe('function');
+  expect(await savedProject(page)).toEqual(originalProject);
+  expect(await savedProjectHistory(page)).toEqual(originalHistory);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', originalProject.image);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(2);
+  const projectBeforeSuccessfulRetry = await savedProject(page);
+  expect(projectBeforeSuccessfulRetry.layers[0].strokes).toHaveLength(2);
+  await page.evaluate(() => {
+    (window as Window & { releasePhotoDecode?: () => void }).releasePhotoDecode?.();
+  });
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { title: project.title, width: project.width, height: project.height };
+  }).toEqual({ title: 'successful-retry', width: 360, height: 240 });
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${retryPhoto.buffer.toString('base64')}`,
+  );
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect(page.getByTestId('status-toast')).toHaveText(
+    'Photo added. Your previous sketch is saved in Saved sketches.',
+  );
+  expect((await savedProjectHistory(page))[0]).toEqual(projectBeforeSuccessfulRetry);
+  await expect.poll(() => savedProject(page)).toEqual(expect.objectContaining({
+    image: `data:image/png;base64,${retryPhoto.buffer.toString('base64')}`,
+    width: 360,
+    height: 240,
+  }));
+  await page.evaluate(() => {
+    (window as Window & { restoreNativeImage?: () => void }).restoreNativeImage?.();
+  });
+});
+
+test('different photos with the same filename replace according to the selected content', async ({ page }) => {
+  const firstPhoto = await png(page, 'shared-photo.png', 320, 200, '#e53935');
+  const secondPhoto = await png(page, 'shared-photo.png', 420, 260, '#43a047');
+  expect(firstPhoto.buffer.equals(secondPhoto.buffer)).toBe(false);
+  const input = page.getByTestId('input-photo');
+
+  await input.setInputFiles(firstPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('shared-photo');
+  await page.getByTestId('button-add-layer').click();
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[1]?.strokes.length).toBe(1);
+  await zoomAndPan(page);
+  const firstProject = await savedProject(page);
+  expect(firstProject.image).toBe(`data:image/png;base64,${firstPhoto.buffer.toString('base64')}`);
+
+  await input.setInputFiles(secondPhoto);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { image: project.image, width: project.width, height: project.height };
+  }).toEqual({
+    image: `data:image/png;base64,${secondPhoto.buffer.toString('base64')}`,
+    width: 420,
+    height: 260,
+  });
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${secondPhoto.buffer.toString('base64')}`,
+  );
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect(page.getByTestId('button-pan-mode')).toHaveAttribute('aria-pressed', 'false');
+  const stageBounds = await page.getByTestId('canvas-stage').boundingBox();
+  expect(stageBounds).not.toBeNull();
+  await expect.poll(async () => {
+    const view = await photoView(page);
+    return { stage: view.stage, content: view.content };
+  }).toEqual({ stage: stageBounds, content: stageBounds });
+  const replacedProject = await savedProject(page);
+  expect(replacedProject.layers).toHaveLength(1);
+  expect(replacedProject.layers[0].strokes).toEqual([]);
+  expect((await savedProjectHistory(page))[0]).toEqual(firstProject);
+
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${secondPhoto.buffer.toString('base64')}`,
+  );
+  await expect.poll(() => savedProject(page)).toEqual(replacedProject);
+});
+
+test('an unsupported file leaves the sketch and photo view unchanged and allows a valid retry', async ({ page }) => {
+  const firstPhoto = await png(page, 'keep-after-rejection.png', 320, 200, '#e53935');
+  await page.getByTestId('input-photo').setInputFiles(firstPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('keep-after-rejection');
+  await page.getByTestId('button-add-layer').click();
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[1]?.strokes.length).toBe(1);
+  await zoomAndPan(page);
+  const projectBeforeReject = await savedProject(page);
+  const historyBeforeReject = await savedProjectHistory(page);
+  const viewBeforeReject = await photoView(page);
+  const input = page.getByTestId('input-photo');
+
+  await input.setInputFiles({
+    name: 'notes.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('not an image'),
+  });
+  await expect(page.getByTestId('status-toast')).toHaveText('Choose an image file to begin.');
+  await expect(input).toHaveValue('');
+  expect(await savedProject(page)).toEqual(projectBeforeReject);
+  expect(await savedProjectHistory(page)).toEqual(historyBeforeReject);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', projectBeforeReject.image);
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
+  await expect(page.getByTestId('button-pan-mode')).toHaveAttribute('aria-pressed', 'true');
+  expect(await photoView(page)).toEqual(viewBeforeReject);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+
+  const retryPhoto = await png(page, 'valid-after-rejection.png', 400, 240, '#43a047');
+  await input.setInputFiles(retryPhoto);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { image: project.image, title: project.title, width: project.width, height: project.height };
+  }).toEqual({
+    image: `data:image/png;base64,${retryPhoto.buffer.toString('base64')}`,
+    title: 'valid-after-rejection',
+    width: 400,
+    height: 240,
+  });
+  expect((await savedProjectHistory(page))[0]).toEqual(projectBeforeReject);
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
 });
 
 test('a photo replacement is blocked if its recovery copy cannot be saved', async ({ page }) => {
