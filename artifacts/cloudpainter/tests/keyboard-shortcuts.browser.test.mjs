@@ -6,7 +6,7 @@ import { chromium } from 'playwright-core';
 const url = process.env.CLOUDPAINTER_TEST_URL;
 if (!url || !/^https?:\/\//.test(url)) throw new Error('Set CLOUDPAINTER_TEST_URL to the running preview.');
 
-test('undo stays in editable text controls and still works on the drawing surface', { timeout: 60_000 }, async () => {
+test('undo stays in editable controls and still works on the drawing surface', { timeout: 60_000 }, async () => {
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || execFileSync('which', ['chromium'], { encoding: 'utf8' }).trim(),
     args: ['--no-sandbox'],
@@ -47,6 +47,19 @@ test('undo stays in editable text controls and still works on the drawing surfac
       editable.setAttribute('aria-label', 'Undo test editable text');
       editable.textContent = 'seed';
       document.body.append(editable);
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.dataset.testid = 'undo-test-input';
+      input.setAttribute('aria-label', 'Undo test input');
+      input.value = 'seed';
+      document.body.append(input);
+
+      const select = document.createElement('select');
+      select.dataset.testid = 'undo-test-select';
+      select.setAttribute('aria-label', 'Undo test select');
+      select.innerHTML = '<option value="first">First</option><option value="second">Second</option>';
+      document.body.append(select);
     });
 
     const textarea = page.getByTestId('undo-test-textarea');
@@ -55,6 +68,53 @@ test('undo stays in editable text controls and still works on the drawing surfac
     await page.keyboard.type(' edit');
     await textarea.press('Control+z');
     assert.equal(await textarea.inputValue(), 'seed', 'textarea undo should remain native');
+    assert.deepEqual(await storedHistory(page), { strokes: 1, redo: 0 });
+    assert.equal(await undo.isEnabled(), true);
+    assert.equal(await redo.isDisabled(), true);
+
+    const input = page.getByTestId('undo-test-input');
+    await input.focus();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' edit');
+    await page.keyboard.press('Control+z');
+    assert.equal(await input.inputValue(), 'seed', 'input undo should remain native');
+    assert.deepEqual(await storedHistory(page), { strokes: 1, redo: 0 });
+    assert.equal(await undo.isEnabled(), true);
+    assert.equal(await redo.isDisabled(), true);
+
+    await page.keyboard.press('Control+Shift+z');
+    assert.equal(await input.inputValue(), 'seed edit', 'input redo should remain native');
+    assert.deepEqual(await storedHistory(page), { strokes: 1, redo: 0 });
+    assert.equal(await undo.isEnabled(), true);
+    assert.equal(await redo.isDisabled(), true);
+
+    await page.evaluate(() => {
+      window.undoTestShortcutEvents = [];
+      window.addEventListener('keydown', event => {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+          window.undoTestShortcutEvents.push({
+            targetTag: event.target?.tagName,
+            defaultPrevented: event.defaultPrevented,
+          });
+        }
+      });
+    });
+    const select = page.getByTestId('undo-test-select');
+    for (const shortcut of ['Control+z', 'Control+Shift+z', 'Meta+z', 'Meta+Shift+z']) {
+      await select.focus();
+      assert.equal(
+        await select.evaluate(element => document.activeElement === element),
+        true,
+        `select should be focused before ${shortcut}`,
+      );
+      await page.keyboard.press(shortcut);
+    }
+    assert.equal(await select.inputValue(), 'first', 'undo/redo shortcuts should not change the select');
+    assert.deepEqual(
+      await page.evaluate(() => window.undoTestShortcutEvents),
+      Array.from({ length: 4 }, () => ({ targetTag: 'SELECT', defaultPrevented: false })),
+      'the workspace should not cancel undo/redo events targeted at a select',
+    );
     assert.deepEqual(await storedHistory(page), { strokes: 1, redo: 0 });
     assert.equal(await undo.isEnabled(), true);
     assert.equal(await redo.isDisabled(), true);
