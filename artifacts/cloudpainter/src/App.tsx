@@ -459,7 +459,7 @@ function Home() {
   const lastDrawingTool = useRef<DrawingInstrument>('brush');
   const editorDefaultsApplied = useRef(false);
   const drawingDefaultsTouched = useRef(false);
-  const [color, setColor] = useState('#315d4d');
+  const [color, setColor] = useState('#000000');
   const [toolSizes, setToolSizes] = useState<Record<DrawingTool, number>>({ brush: 8, pencil: 3, pen: 3, eraser: 16 });
   const [penPressureSensitivity, setPenPressureSensitivity] = useState(50);
   const brushSize = toolSizes[tool];
