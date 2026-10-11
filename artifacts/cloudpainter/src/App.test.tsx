@@ -183,6 +183,91 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
   await expect(page.getByTestId('input-photo')).toHaveAttribute('data-picker-clicks', '2');
 });
 
+test('a delayed earlier photo replaces a later photo and erases its drawing without pending feedback', async ({ page }) => {
+  const slowPhoto = await png(page, 'slow-first.png', 160, 100);
+  const fastPhoto = await png(page, 'fast-second.png', 240, 120);
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  await page.evaluate(() => {
+    const prototype = FileReader.prototype;
+    const readAsDataURL = prototype.readAsDataURL;
+    prototype.readAsDataURL = function (file) {
+      if (file.name !== 'slow-first.png') {
+        readAsDataURL.call(this, file);
+        return;
+      }
+      const reader = this;
+      const delayedOnload = reader.onload;
+      reader.onload = null;
+      reader.addEventListener('load', () => {
+        (window as Window & { releaseSlowPhotoRead?: () => void }).releaseSlowPhotoRead = () => {
+          if (typeof delayedOnload === 'function') delayedOnload.call(reader, new ProgressEvent('load'));
+        };
+      }, { once: true });
+      readAsDataURL.call(reader, file);
+    };
+  });
+
+  const input = page.getByTestId('input-photo');
+  await input.setInputFiles(slowPhoto);
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releaseSlowPhotoRead?: () => void }).releaseSlowPhotoRead,
+  )).toBe('function');
+  await expect(page.getByTestId('status-toast')).toHaveCount(0);
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  const statusMessages = await page.getByRole('status').allTextContents();
+  expect(statusMessages.some(message => /reading|loading|importing photo/i.test(message))).toBe(false);
+
+  await input.setInputFiles(fastPhoto);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { title: project.title, width: project.width, height: project.height };
+  }).toEqual({ title: 'fast-second', width: 240, height: 120 });
+  await expect(page.getByTestId('status-toast')).toHaveText('Photo added. Your original stays untouched.');
+
+  const surface = page.locator('canvas.draw-surface');
+  const box = await surface.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width * 0.3, box!.y + box!.height * 0.35);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.65);
+  await page.mouse.up();
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  const fastProject = await savedProject(page);
+  expect(fastProject.title).toBe('fast-second');
+  expect(fastProject.layers[0].strokes).toHaveLength(1);
+
+  await page.evaluate(() => {
+    (window as Window & { releaseSlowPhotoRead?: () => void }).releaseSlowPhotoRead?.();
+  });
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && {
+      title: project.title,
+      width: project.width,
+      height: project.height,
+      image: project.image,
+      layers: project.layers.map((layer: { strokes: unknown[] }) => layer.strokes.length),
+    };
+  }).toEqual({
+    title: 'slow-first',
+    width: 160,
+    height: 100,
+    image: `data:image/png;base64,${slowPhoto.buffer.toString('base64')}`,
+    layers: [0],
+  });
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${slowPhoto.buffer.toString('base64')}`,
+  );
+  await expect(page.getByTestId('status-toast')).toHaveText('Photo added. Your original stays untouched.');
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+
+  const slowProject = await savedProject(page);
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', slowProject.image);
+  await expect.poll(() => savedProject(page)).toEqual(slowProject);
+  expect((await savedProject(page)).layers[0].strokes).toHaveLength(0);
+});
+
 test('choosing the identical photo again handles change and saves a fresh fitted sketch', async ({ page }) => {
   const photo = await png(page, 'same-photo.png', 600, 400);
   const input = page.getByTestId('input-photo');
