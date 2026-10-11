@@ -82,15 +82,11 @@ button:focus-visible, input:focus-visible { outline: 3px solid #b9d66a; outline-
 .intro-row { display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:20px; }
 .upscale-export { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:14px 16px; margin:0 0 16px; }
 .upscale-export-copy { min-width:0; }
-.upscale-export-heading { display:flex; align-items:center; flex-wrap:wrap; gap:9px; }
-.upscale-export-heading h2 { margin:0; color:#30473b; font-size:13px; }
-.upscale-unavailable-label { color:#8b4b22; font:10px var(--font-mono); text-transform:uppercase; letter-spacing:.05em; }
+.upscale-export-copy h2 { margin:0; color:#30473b; font-size:13px; }
 .upscale-export-copy p { margin:5px 0 0; color:#657168; font-size:11px; line-height:1.5; }
 .upscale-export-copy p[role="alert"], .upscale-error { color:#7b2922; }
 .upscale-export-copy p[role="status"] { color:#526057; }
 .upscale-export-copy .upscale-budget { color:#657168; }
-.upscale-export-disclosure { max-width:850px; }
-.upscale-export-disclosure a { color:var(--forest-deep); text-decoration:underline; }
 .upscale-progress { font-weight:700; }
 .upscale-confirm { max-width:520px; }
 .upscale-confirm-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px; margin-top:10px; }

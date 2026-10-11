@@ -151,16 +151,7 @@ export function PoeUpscaleExport({ composeImage, title, width, height }: Props) 
     <>
       <section className="upscale-export panel" aria-labelledby="upscale-export-title">
         <div className="upscale-export-copy">
-          <div className="upscale-export-heading">
-            <h2 id="upscale-export-title">Poe Assistant upscale export</h2>
-            <span className="upscale-unavailable-label">Poe chooses the provider</span>
-          </div>
-          <p role="status" data-testid="upscale-route-disclosure">
-            Poe chooses the image provider for Assistant and currently lists Nano-Banana-2 for image generation. The prompt will be “Please upscale the attached image to be {scale}x”. A file is downloaded only if the result is a PNG at exactly {scale}× dimensions.
-          </p>
-          <p className="upscale-export-disclosure">
-            After you confirm, the merged photo and visible layers leave this browser and go to Poe Assistant. The request uses the connected Poe account’s points; attempt limits are not an exact point budget. Poe providers may process the image. Avoid sensitive images. <a href="https://poe.com/pages/privacy" target="_blank" rel="noreferrer">Poe privacy policy</a>.
-          </p>
+          <h2 id="upscale-export-title">Poe Assistant upscale export</h2>
           {status && <p role="status" className="upscale-progress" data-testid="upscale-status">{status}</p>}
           {error && <p role="alert" className="upscale-error" data-testid="upscale-error">{error}</p>}
           {!sizeSupported && <p role="status">This composition is too large for {scale}× export. Output is limited to 8192 pixels per side and 20 megapixels; input is limited to 2048 pixels per side. Choose a smaller composition or scale.</p>}
