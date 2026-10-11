@@ -6,6 +6,22 @@ const models = ['Nano-Banana-Pro', 'Nano-Banana-2', 'GPT-Image-2.5-Sunburst', 'F
 const saved = (page: Page) => page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), STORE_KEY);
 const approvedConfig = { configured: true, signedIn: true, allowed: true, dailyLimit: 2, remaining: 2, globalRemaining: 20 };
 
+async function failProjectHistoryWrites(page: Page) {
+  const installFailure = ({ historyKey, failureKey }: { historyKey: string; failureKey: string }) => {
+    const originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (this === window.localStorage && key === historyKey && window.sessionStorage.getItem(failureKey) === 'true') {
+        throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      }
+      originalSetItem.call(this, key, value);
+    };
+  };
+  const keys = { historyKey: PROJECT_HISTORY_KEY, failureKey: 'cloudpainter-test-history-quota' };
+  await page.addInitScript(installFailure, keys);
+  await page.evaluate(installFailure, keys);
+  await page.evaluate(key => sessionStorage.setItem(key, 'true'), keys.failureKey);
+}
+
 test.describe('signed-in generation (provider always stubbed)', () => {
 test.use({ storageState: process.env.CLOUDPAINTER_AUTH_STATE });
 
@@ -152,6 +168,42 @@ test('applying another generated image keeps every earlier sketch available afte
   await expect.poll(async () => (await saved(page))?.title).toBe('First generated idea');
 });
 
+test('a full history store leaves the current sketch and older saved sketches intact when applying an image', async ({ page }) => {
+  const before = await saved(page);
+  const olderSketches = [
+    { ...before, title: 'Earlier saved sketch' },
+    { ...before, title: 'Oldest saved sketch' },
+  ];
+  await page.evaluate(({ key, history }) => localStorage.setItem(key, JSON.stringify(history)), {
+    key: PROJECT_HISTORY_KEY,
+    history: olderSketches,
+  });
+  const generatedImage = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 48;
+    canvas.height = 32;
+    canvas.getContext('2d')!.fillRect(0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  await page.route('**/api/images/generate', route => route.fulfill({ json: { b64_json: generatedImage, mime: 'image/png' } }));
+  await page.getByTestId('button-generate-image').click();
+  await page.getByTestId('input-image-prompt').fill('A new starting point');
+  await page.getByTestId('button-submit-generation').click();
+  await expect(page.getByTestId('generated-image-preview')).toBeVisible();
+  await failProjectHistoryWrites(page);
+
+  await page.getByTestId('button-use-generated-image').click();
+  await expect(page.getByRole('alert')).toContainText('Could not save a recovery copy of your current sketch. No changes were made.');
+  expect(await saved(page)).toEqual(before);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY)).toEqual(olderSketches);
+
+  await page.reload();
+  expect(await saved(page)).toEqual(before);
+  await expect(page.getByRole('button', { name: 'Restore saved sketch: Earlier saved sketch' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Restore saved sketch: Oldest saved sketch' })).toBeVisible();
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY)).toEqual(olderSketches);
+});
+
 test('Poe failures preserve the sketch and never issue an alternate-model request', async ({ page }) => {
   const before = await saved(page);
   let requests = 0;
@@ -250,6 +302,43 @@ test('saved sketches can be browsed and restored without signing in', async ({ p
   await expect(page.getByTestId('button-restore-project-1')).toHaveAccessibleName('Restore saved sketch: Earlier sketch');
   await expect(page.getByTestId('button-restore-project-2')).toHaveAccessibleName('Restore saved sketch: Oldest sketch');
   await expect.poll(async () => saved(page)).toEqual(normalizedOldest);
+});
+
+test('a full history store leaves the current sketch and saved versions intact when restoring', async ({ page }) => {
+  const current = {
+    image: null, width: 1200, height: 800, selectedLayerId: 'quota-current-layer', title: 'Current sketch',
+    layers: [{ id: 'quota-current-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+  };
+  const earlier = {
+    image: null, width: 640, height: 480, selectedLayerId: 'quota-earlier-layer', title: 'Earlier sketch',
+    layers: [{ id: 'quota-earlier-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+  };
+  const oldest = {
+    image: null, width: 320, height: 240, selectedLayerId: 'quota-oldest-layer', title: 'Oldest sketch',
+    layers: [{ id: 'quota-oldest-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+  };
+  await page.addInitScript(({ project, history }) => {
+    if (sessionStorage.getItem('cloudpainter-history-quota-seeded')) return;
+    localStorage.setItem('cloudpainter-project-v1', JSON.stringify(project));
+    localStorage.setItem('cloudpainter-project-history-v1', JSON.stringify(history));
+    sessionStorage.setItem('cloudpainter-history-quota-seeded', 'true');
+  }, { project: current, history: [earlier, oldest] });
+  await page.goto('./');
+  await expect.poll(async () => (await saved(page))?.photoZoom).toBe(1);
+  const before = await saved(page);
+  const existingHistory = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY);
+  await failProjectHistoryWrites(page);
+
+  await page.getByRole('button', { name: 'Restore saved sketch: Oldest sketch' }).click();
+  await expect(page.getByTestId('status-toast')).toContainText('Could not save the current sketch before restoring. Nothing changed.');
+  expect(await saved(page)).toEqual(before);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY)).toEqual(existingHistory);
+
+  await page.reload();
+  expect(await saved(page)).toEqual(before);
+  await expect(page.getByRole('button', { name: 'Restore saved sketch: Earlier sketch' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Restore saved sketch: Oldest sketch' })).toBeVisible();
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY)).toEqual(existingHistory);
 });
 
 test('saved sketches keep their own photo framing across switches and reloads', async ({ page }) => {
