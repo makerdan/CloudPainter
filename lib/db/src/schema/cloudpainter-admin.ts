@@ -19,6 +19,8 @@ export const cloudPainterAdminAudit = pgTable("cloudpainter_admin_audit", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => [
   index("cloudpainter_admin_audit_created_id_idx").on(table.createdAt, table.id),
+  index("cloudpainter_admin_audit_outcome_created_id_action_idx")
+    .on(table.outcome, table.createdAt, table.id, table.action),
   check("cloudpainter_admin_audit_action", sql`${table.action} in ('suspend', 'reactivate')`),
   check("cloudpainter_admin_audit_outcome", sql`${table.outcome} in ('pending', 'succeeded', 'failed')`),
 ]);

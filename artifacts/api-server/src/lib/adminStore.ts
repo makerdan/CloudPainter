@@ -1,4 +1,4 @@
-import { and, count, desc, eq, lt, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, sql } from "drizzle-orm";
 import { db, cloudPainterAdminAccounts, cloudPainterAdminAudit } from "@workspace/db";
 import type { AdminAction, AdminAuditOutcome, AdminStore } from "../routes/admin";
 
@@ -15,13 +15,8 @@ export function createAdminStore(database: Pick<typeof db, "select" | "insert" |
         ...(action ? [eq(cloudPainterAdminAudit.action, action)] : []),
         ...(outcome ? [eq(cloudPainterAdminAudit.outcome, outcome)] : []),
       ];
-      const cursorConditionFor = (createdAt: string, id: string) => or(
-        lt(cloudPainterAdminAudit.createdAt, sql`${createdAt}::timestamptz`),
-        and(
-          eq(cloudPainterAdminAudit.createdAt, sql`${createdAt}::timestamptz`),
-          lt(cloudPainterAdminAudit.id, id),
-        ),
-      );
+      const cursorConditionFor = (createdAt: string, id: string) =>
+        sql`(${cloudPainterAdminAudit.createdAt}, ${cloudPainterAdminAudit.id}) < (${createdAt}::timestamptz, ${id}::uuid)`;
       const cursorCondition = cursor
         ? cursorConditionFor(cursor.createdAt, cursor.id)
         : undefined;
