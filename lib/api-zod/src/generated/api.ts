@@ -95,7 +95,9 @@ export const listAdminAuditEventsQueryOffsetMax = 10000;
 
 export const ListAdminAuditEventsQueryParams = zod.object({
   "limit": zod.coerce.number().int().min(1).max(listAdminAuditEventsQueryLimitMax).default(listAdminAuditEventsQueryLimitDefault),
-  "offset": zod.coerce.number().int().min(listAdminAuditEventsQueryOffsetMin).max(listAdminAuditEventsQueryOffsetMax).default(listAdminAuditEventsQueryOffsetDefault)
+  "offset": zod.coerce.number().int().min(listAdminAuditEventsQueryOffsetMin).max(listAdminAuditEventsQueryOffsetMax).default(listAdminAuditEventsQueryOffsetDefault),
+  "action": zod.enum(['suspend', 'reactivate']).optional().describe('Restrict history to one account status action'),
+  "outcome": zod.enum(['pending', 'succeeded', 'failed']).optional().describe('Restrict history to one audit outcome')
 })
 
 export const listAdminAuditEventsHeaderXAdminSessionMax = 256;

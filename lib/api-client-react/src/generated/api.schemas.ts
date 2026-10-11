@@ -420,7 +420,32 @@ limit?: number;
  * @maximum 10000
  */
 offset?: number;
+/**
+ * Restrict history to one account status action
+ */
+action?: ListAdminAuditEventsAction;
+/**
+ * Restrict history to one audit outcome
+ */
+outcome?: ListAdminAuditEventsOutcome;
 };
+
+export type ListAdminAuditEventsAction = typeof ListAdminAuditEventsAction[keyof typeof ListAdminAuditEventsAction];
+
+
+export const ListAdminAuditEventsAction = {
+  suspend: 'suspend',
+  reactivate: 'reactivate',
+} as const;
+
+export type ListAdminAuditEventsOutcome = typeof ListAdminAuditEventsOutcome[keyof typeof ListAdminAuditEventsOutcome];
+
+
+export const ListAdminAuditEventsOutcome = {
+  pending: 'pending',
+  succeeded: 'succeeded',
+  failed: 'failed',
+} as const;
 
 export type GetImageGenerationConfig200 = {
   configured: boolean;

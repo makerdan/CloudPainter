@@ -148,6 +148,28 @@ describe("CloudPainter admin account console", () => {
     expect(mocks.auditHook.mock.calls.some(([params]) => (params as { offset?: number }).offset === 25)).toBe(true);
   });
 
+  it("filters status history by action and outcome and resets its page", () => {
+    render(<AdminAccountsPage />);
+    fireEvent.click(screen.getByTestId("button-audit-next-page"));
+    expect(mocks.auditHook.mock.calls.some(([params]) => (params as { offset?: number }).offset === 25)).toBe(true);
+
+    fireEvent.change(screen.getByTestId("select-audit-action"), { target: { value: "suspend" } });
+    fireEvent.change(screen.getByTestId("select-audit-outcome"), { target: { value: "failed" } });
+
+    const latestParams = mocks.auditHook.mock.calls.at(-1)?.[0] as {
+      limit: number; offset: number; action?: string; outcome?: string;
+    };
+    expect(latestParams).toEqual({ limit: 25, offset: 0, action: "suspend", outcome: "failed" });
+
+    fireEvent.change(screen.getByTestId("select-audit-action"), { target: { value: "" } });
+    const clearedActionParams = mocks.auditHook.mock.calls.at(-1)?.[0] as {
+      limit: number; offset: number; action?: string; outcome?: string;
+    };
+    expect(clearedActionParams).toEqual({ limit: 25, offset: 0, outcome: "failed" });
+    fireEvent.change(screen.getByTestId("select-audit-outcome"), { target: { value: "" } });
+    expect(mocks.auditHook.mock.calls.at(-1)?.[0]).toEqual({ limit: 25, offset: 0 });
+  });
+
   it("requires explicit confirmation before changing status", () => {
     render(<AdminAccountsPage />);
     fireEvent.click(screen.getByTestId("button-suspend-user_target123456"));

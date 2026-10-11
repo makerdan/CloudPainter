@@ -81,13 +81,21 @@ paths:
         - in: query
           name: offset
           schema: { type: integer, minimum: 0, maximum: 10000, default: 0 }
+        - in: query
+          name: action
+          description: Restrict history to one account status action
+          schema: { type: string, enum: [suspend, reactivate] }
+        - in: query
+          name: outcome
+          description: Restrict history to one audit outcome
+          schema: { type: string, enum: [pending, succeeded, failed] }
       responses:
         "200":
           description: Bounded status-change history containing only actor, target, action, outcome, and time
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AdminAuditEventPage" }
-        "400": { description: Invalid pagination }
+        "400": { description: Invalid pagination or audit filter }
         "401": { description: Sign in required or session changed }
         "404": { description: Page not found for accounts without dashboard access }
         "503": { description: Account history is temporarily unavailable }

@@ -34,6 +34,9 @@
 .admin-live-dot { width:6px; height:6px; border-radius:50%; background:#438d72; }
 .admin-directory { max-width:1320px; margin:0 auto; padding:24px 25px 0; border:1px solid #cfdbd2; border-radius:16px; background:var(--admin-paper); box-shadow:0 14px 34px rgba(37,62,57,.045); }
 .admin-audit { margin-top:22px; }
+.admin-audit-filters { display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; }
+.admin-audit-filters label { display:grid; gap:6px; color:#758782; font:10px var(--font-mono); letter-spacing:.06em; text-transform:uppercase; }
+.admin-audit-filters select { min-width:150px; min-height:36px; border:1px solid #dce5df; border-radius:8px; background:#fff; padding:0 30px 0 10px; color:#344b43; font:12px 'DM Sans',sans-serif; letter-spacing:normal; text-transform:none; }
 .admin-audit-table { width:100%; margin-top:18px; overflow-x:auto; }
 .admin-audit-labels,.admin-audit-row { min-width:720px; display:grid; grid-template-columns:minmax(135px,1fr) minmax(135px,1fr) minmax(90px,.65fr) minmax(100px,.7fr) minmax(170px,1.1fr); align-items:center; gap:12px; padding:0 14px; }
 .admin-audit-labels { min-height:37px; border-top:1px solid #e4ebe5; border-bottom:1px solid #e4ebe5; color:#91a09a; font:10px var(--font-mono); letter-spacing:.11em; }

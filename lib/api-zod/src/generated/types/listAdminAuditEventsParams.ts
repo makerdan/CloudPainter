@@ -5,6 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ListAdminAuditEventsAction } from './listAdminAuditEventsAction';
+import type { ListAdminAuditEventsOutcome } from './listAdminAuditEventsOutcome';
 
 export type ListAdminAuditEventsParams = {
 /**
@@ -17,4 +19,12 @@ limit?: number;
  * @maximum 10000
  */
 offset?: number;
+/**
+ * Restrict history to one account status action
+ */
+action?: ListAdminAuditEventsAction;
+/**
+ * Restrict history to one audit outcome
+ */
+outcome?: ListAdminAuditEventsOutcome;
 };

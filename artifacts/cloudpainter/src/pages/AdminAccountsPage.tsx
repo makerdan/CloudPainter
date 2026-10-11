@@ -57,6 +57,8 @@ export default function AdminAccountsPage() {
   const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
   const [auditOffset, setAuditOffset] = useState(0);
+  const [auditAction, setAuditAction] = useState<'' | 'suspend' | 'reactivate'>('');
+  const [auditOutcome, setAuditOutcome] = useState<'' | 'pending' | 'succeeded' | 'failed'>('');
   const [confirming, setConfirming] = useState<{ id: string; name: string; next: 'active' | 'suspended' } | null>(null);
   const [notice, setNotice] = useState('');
   const [denied, setDenied] = useState(false);
@@ -91,7 +93,9 @@ export default function AdminAccountsPage() {
   const auditParams = useMemo<ListAdminAuditEventsParams>(() => ({
     limit: PAGE_SIZE,
     offset: auditOffset,
-  }), [auditOffset]);
+    ...(auditAction ? { action: auditAction } : {}),
+    ...(auditOutcome ? { outcome: auditOutcome } : {}),
+  }), [auditAction, auditOffset, auditOutcome]);
   const auditKey = useMemo(() => [...getListAdminAuditEventsQueryKey(auditParams), sessionId ?? ''], [auditParams, sessionId]);
 
   const overview = useGetAdminOverview({
@@ -281,6 +285,33 @@ export default function AdminAccountsPage() {
         </div>
         <div className="admin-count">{auditPage.isLoading ? 'Loading history' : `${auditTotalCount.toLocaleString()} ${auditTotalCount === 1 ? 'event' : 'events'}`}</div>
       </div>
+      <div className="admin-audit-filters" aria-label="Filter account status history">
+        <label>
+          <span>Action</span>
+          <select data-testid="select-audit-action" value={auditAction}
+            onChange={event => {
+              setAuditAction(event.target.value as typeof auditAction);
+              setAuditOffset(0);
+            }}>
+            <option value="">All actions</option>
+            <option value="suspend">Suspend</option>
+            <option value="reactivate">Reactivate</option>
+          </select>
+        </label>
+        <label>
+          <span>Outcome</span>
+          <select data-testid="select-audit-outcome" value={auditOutcome}
+            onChange={event => {
+              setAuditOutcome(event.target.value as typeof auditOutcome);
+              setAuditOffset(0);
+            }}>
+            <option value="">All outcomes</option>
+            <option value="pending">Pending</option>
+            <option value="succeeded">Succeeded</option>
+            <option value="failed">Failed</option>
+          </select>
+        </label>
+      </div>
       {auditFatalError && <div className="admin-error" role="alert" data-testid="status-audit-error">
         <CircleAlert size={18} />
         <div><strong>Account history could not be loaded.</strong><p>Check the connection and try again.</p></div>
@@ -291,8 +322,8 @@ export default function AdminAccountsPage() {
       </div>}
       {!auditFatalError && auditReady && !auditPage.isLoading && auditPage.data?.events.length === 0 && <div className="admin-empty" data-testid="status-audit-empty">
         <span className="admin-empty-icon"><ShieldCheck size={20} /></span>
-        <strong>No account status changes yet</strong>
-        <p>Suspends and reactivations will appear here.</p>
+        <strong>{auditAction || auditOutcome ? 'No matching account status changes' : 'No account status changes yet'}</strong>
+        <p>{auditAction || auditOutcome ? 'Try changing or clearing the selected filters.' : 'Suspends and reactivations will appear here.'}</p>
       </div>}
       {!auditFatalError && auditReady && !auditPage.isLoading && (auditPage.data?.events.length ?? 0) > 0 && <>
         <div className="admin-audit-table" role="table" aria-label="Account status changes">

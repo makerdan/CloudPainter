@@ -1,6 +1,6 @@
-import { count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { db, cloudPainterAdminAccounts, cloudPainterAdminAudit } from "@workspace/db";
-import type { AdminStore } from "../routes/admin";
+import type { AdminAction, AdminAuditOutcome, AdminStore } from "../routes/admin";
 
 export function createAdminStore(database: Pick<typeof db, "select" | "insert" | "update">): AdminStore {
   return {
@@ -10,7 +10,12 @@ export function createAdminStore(database: Pick<typeof db, "select" | "insert" |
         .where(eq(cloudPainterAdminAccounts.userId, userId));
       return row?.enabled === true;
     },
-    async listAuditEvents({ limit, offset }) {
+    async listAuditEvents({ limit, offset, action, outcome }) {
+      const filters = [
+        ...(action ? [eq(cloudPainterAdminAudit.action, action)] : []),
+        ...(outcome ? [eq(cloudPainterAdminAudit.outcome, outcome)] : []),
+      ];
+      const where = filters.length > 0 ? and(...filters) : undefined;
       const [eventRows, [countRow]] = await Promise.all([
         database.select({
           actorId: cloudPainterAdminAudit.actorUserId,
@@ -19,16 +24,17 @@ export function createAdminStore(database: Pick<typeof db, "select" | "insert" |
           outcome: cloudPainterAdminAudit.outcome,
           createdAt: cloudPainterAdminAudit.createdAt,
         }).from(cloudPainterAdminAudit)
+          .where(where)
           .orderBy(desc(cloudPainterAdminAudit.createdAt), desc(cloudPainterAdminAudit.id))
           .limit(limit)
           .offset(offset),
-        database.select({ totalCount: count() }).from(cloudPainterAdminAudit),
+        database.select({ totalCount: count() }).from(cloudPainterAdminAudit).where(where),
       ]);
       return {
         events: eventRows.map(row => ({
           ...row,
-          action: row.action as "suspend" | "reactivate",
-          outcome: row.outcome as "pending" | "succeeded" | "failed",
+          action: row.action as AdminAction,
+          outcome: row.outcome as AdminAuditOutcome,
         })),
         totalCount: countRow?.totalCount ?? 0,
       };

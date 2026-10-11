@@ -27,7 +27,7 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
     ["disabled-admin", false],
   ]);
   let listCalls: { limit: number; offset: number; query?: string }[] = [];
-  let auditListCalls: { limit: number; offset: number }[] = [];
+  let auditListCalls: { limit: number; offset: number; action?: "suspend" | "reactivate"; outcome?: "pending" | "succeeded" | "failed" }[] = [];
   let providerMutations: string[] = [];
   let audit: { actor: string; target: string; action: AdminAction; outcome: "pending" | "succeeded" | "failed" }[] = [];
   let failProvider = false;
@@ -74,15 +74,18 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
     async isEnabledAdmin(userId) { return adminPermissions.get(userId) === true; },
     async listAuditEvents(params) {
       auditListCalls.push(params);
+      const filteredAudit = audit.filter(event =>
+        (!params.action || event.action === params.action)
+        && (!params.outcome || event.outcome === params.outcome));
       return {
-        events: audit.slice(params.offset, params.offset + params.limit).map(event => ({
+        events: filteredAudit.slice(params.offset, params.offset + params.limit).map(event => ({
           actorId: event.actor,
           targetId: event.target,
           action: event.action,
           outcome: event.outcome,
           createdAt: new Date("2024-02-03T04:05:06.000Z"),
         })),
-        totalCount: audit.length,
+        totalCount: filteredAudit.length,
       };
     },
     async startAction(actor, target, action) {
@@ -158,6 +161,9 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
     assert.deepEqual(auditListCalls.at(-1), { limit: 2, offset: 0 });
     assert.equal((await request("/audit-events?limit=51", "admin-user")).status, 400);
     assert.equal((await request("/audit-events?offset=10001", "admin-user")).status, 400);
+    assert.equal((await request("/audit-events?action=delete", "admin-user")).status, 400);
+    assert.equal((await request("/audit-events?outcome=unknown", "admin-user")).status, 400);
+    assert.equal((await request("/audit-events?action=suspend&action=reactivate", "admin-user")).status, 400);
 
     const page = await request("/accounts?limit=2&offset=4&query=river", "admin-user");
     assert.equal(page.status, 200);
@@ -226,6 +232,26 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
     });
     assert.deepEqual(Object.keys(history.events[0] ?? {}).sort(), ["action", "actorId", "createdAt", "outcome", "targetId"]);
     assert.deepEqual(auditListCalls.at(-1), { limit: 1, offset: 1 });
+    const filteredHistory = await request("/audit-events?limit=5&offset=0&action=suspend&outcome=succeeded", "admin-user");
+    assert.equal(filteredHistory.status, 200);
+    assert.deepEqual(await filteredHistory.json(), {
+      events: [{
+        actorId: "admin-user",
+        targetId: "user_target123456",
+        action: "suspend",
+        outcome: "succeeded",
+        createdAt: "2024-02-03T04:05:06.000Z",
+      }],
+      totalCount: 1,
+      limit: 5,
+      offset: 0,
+    });
+    assert.deepEqual(auditListCalls.at(-1), {
+      limit: 5,
+      offset: 0,
+      action: "suspend",
+      outcome: "succeeded",
+    });
 
     const beforeFailure = initialProviderCalls();
     failProvider = true;

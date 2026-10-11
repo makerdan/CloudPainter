@@ -25,6 +25,8 @@ export * from './getImageGenerationConfig200';
 export * from './healthStatus';
 export * from './imageGenerationError';
 export * from './listAdminAccountsParams';
+export * from './listAdminAuditEventsAction';
+export * from './listAdminAuditEventsOutcome';
 export * from './listAdminAuditEventsParams';
 export * from './logoImageError';
 export * from './logoImageErrorCode';

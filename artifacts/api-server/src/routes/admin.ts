@@ -12,16 +12,17 @@ import {
 
 export type AdminAction = "suspend" | "reactivate";
 export type AdminActionOutcome = "succeeded" | "failed";
+export type AdminAuditOutcome = AdminActionOutcome | "pending";
 export interface AdminAuditEvent {
   actorId: string;
   targetId: string;
   action: AdminAction;
-  outcome: AdminActionOutcome | "pending";
+  outcome: AdminAuditOutcome;
   createdAt: Date;
 }
 export interface AdminStore {
   isEnabledAdmin(userId: string): Promise<boolean>;
-  listAuditEvents(params: { limit: number; offset: number }): Promise<{
+  listAuditEvents(params: { limit: number; offset: number; action?: AdminAction; outcome?: AdminAuditOutcome }): Promise<{
     events: AdminAuditEvent[];
     totalCount: number;
   }>;
@@ -117,14 +118,23 @@ export function createAdminRouter(store: AdminStore, provider: AdminAccountProvi
     const rawOffset = req.query.offset === undefined ? "0" : String(req.query.offset);
     const limit = Number(rawLimit);
     const offset = Number(rawOffset);
+    const action = req.query.action;
+    const outcome = req.query.outcome;
     if (!/^\d+$/.test(rawLimit) || !/^\d+$/.test(rawOffset)
       || !Number.isInteger(limit) || limit < 1 || limit > 50
-      || !Number.isInteger(offset) || offset < 0 || offset > 10_000) {
-      res.status(400).json({ error: "Use a page size from 1 to 50 and an offset up to 10,000." });
+      || !Number.isInteger(offset) || offset < 0 || offset > 10_000
+      || (action !== undefined && (typeof action !== "string" || !["suspend", "reactivate"].includes(action)))
+      || (outcome !== undefined && (typeof outcome !== "string" || !["pending", "succeeded", "failed"].includes(outcome)))) {
+      res.status(400).json({ error: "Use a page size from 1 to 50, an offset up to 10,000, a valid action, and a valid outcome." });
       return;
     }
     try {
-      const result = await store.listAuditEvents({ limit, offset });
+      const result = await store.listAuditEvents({
+        limit,
+        offset,
+        ...(action !== undefined ? { action: action as AdminAction } : {}),
+        ...(outcome !== undefined ? { outcome: outcome as AdminAuditOutcome } : {}),
+      });
       res.json(ListAdminAuditEventsResponse.parse({
         events: result.events.map(event => ({
           actorId: event.actorId,
