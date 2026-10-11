@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
     isError: false,
     refetch: vi.fn(),
   },
-  account: { signedIn: true },
+  account: { signedIn: true, userId: "fixture-user" },
 }));
 
 vi.mock("@workspace/api-client-react", () => ({
@@ -21,7 +21,7 @@ vi.mock("@workspace/api-client-react", () => ({
 }));
 vi.mock("./Account", () => ({
   usePaletteAccount: () => ({
-    userId: mocks.account.signedIn ? "fixture-user" : undefined,
+    userId: mocks.account.signedIn ? mocks.account.userId : undefined,
     sessionId: "fixture-session",
     isLoaded: true,
   }),
@@ -39,6 +39,7 @@ function renderExport() {
 beforeEach(() => {
   mocks.upscale.mockReset();
   mocks.account.signedIn = true;
+  mocks.account.userId = "fixture-user";
   mocks.configuration.data = {
     configured: true,
     signedIn: true,
@@ -248,6 +249,175 @@ describe("Poe Assistant upscale export", () => {
     expect(URL.createObjectURL).not.toHaveBeenCalled();
     expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
     expect((screen.getByRole("button", { name: `Review ${scale}× export` }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("does not send a composition that finishes after Stop during preparation", async () => {
+    const user = userEvent.setup();
+    let resolveComposition!: (blob: Blob) => void;
+    const deferredComposition = new Promise<Blob>(resolve => { resolveComposition = resolve; });
+    const composeImage = vi.fn(() => deferredComposition);
+    render(<PoeUpscaleExport composeImage={composeImage} title="fixture project" width={120} height={80} />);
+
+    await user.click(screen.getByTestId("button-upscale-export"));
+    await user.click(screen.getByTestId("button-confirm-upscale"));
+    expect(screen.getByText("Preparing the merged composition…")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Stop request" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    await act(async () => {
+      resolveComposition(new Blob([mergedBytes], { type: "image/png" }));
+      await deferredComposition;
+    });
+    expect(mocks.upscale).not.toHaveBeenCalled();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+    expect((screen.getByRole("button", { name: "Review 4× export" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("does not dispatch if Stop happens while the prepared PNG is being encoded", async () => {
+    const user = userEvent.setup();
+    const readAsDataURL = vi.spyOn(FileReader.prototype, "readAsDataURL").mockImplementation(() => {});
+    const { composeImage } = renderExport();
+
+    await user.click(screen.getByTestId("button-upscale-export"));
+    await user.click(screen.getByTestId("button-confirm-upscale"));
+    await waitFor(() => expect(readAsDataURL).toHaveBeenCalledOnce());
+    const reader = readAsDataURL.mock.contexts[0] as FileReader;
+    await user.click(screen.getByRole("button", { name: "Stop request" }));
+    expect(mocks.upscale).not.toHaveBeenCalled();
+
+    await act(async () => {
+      Object.defineProperty(reader, "result", {
+        configurable: true,
+        value: `data:image/png;base64,${Buffer.from(mergedBytes).toString("base64")}`,
+      });
+      reader.dispatchEvent(new ProgressEvent("load"));
+    });
+    expect(composeImage).toHaveBeenCalledOnce();
+    expect(mocks.upscale).not.toHaveBeenCalled();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+  });
+
+  it.each(["Escape", "close button", "outside click"] as const)(
+    "closes and aborts a processing review through the %s, discarding its late result",
+    async closeMethod => {
+    const user = userEvent.setup();
+    type UpscaleResult = { b64_json: string; mime: string; width: number; height: number };
+    let resolveRequest!: (result: UpscaleResult) => void;
+    const deferredRequest = new Promise<UpscaleResult>(resolve => { resolveRequest = resolve; });
+    mocks.upscale.mockReturnValueOnce(deferredRequest);
+    renderExport();
+
+    await user.click(screen.getByTestId("button-upscale-export"));
+    await user.click(screen.getByTestId("button-confirm-upscale"));
+    await waitFor(() => expect(mocks.upscale).toHaveBeenCalledOnce());
+    const signal = mocks.upscale.mock.calls[0][1].signal as AbortSignal;
+    if (closeMethod === "Escape") {
+      await user.keyboard("{Escape}");
+    } else if (closeMethod === "close button") {
+      await user.click(screen.getByRole("button", { name: "Close" }));
+    } else {
+      const overlay = screen.getByRole("dialog").previousElementSibling;
+      expect(overlay).toBeTruthy();
+      await user.click(overlay as Element);
+    }
+    expect(signal.aborted).toBe(true);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect((screen.getByTestId("button-upscale-export") as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      resolveRequest({
+        b64_json: Buffer.from(mergedBytes).toString("base64"),
+        mime: "image/png",
+        width: 480,
+        height: 320,
+      });
+      await deferredRequest;
+    });
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Upscaled PNG downloaded/)).toBeNull();
+    await waitFor(() => expect((screen.getByRole("button", { name: "Review 4× export" }) as HTMLButtonElement).disabled).toBe(false));
+    },
+  );
+
+  it("discards an old account result without affecting a new account request", async () => {
+    const user = userEvent.setup();
+    type UpscaleResult = { b64_json: string; mime: string; width: number; height: number };
+    let resolveOldRequest!: (result: UpscaleResult) => void;
+    let resolveNewRequest!: (result: UpscaleResult) => void;
+    const deferredOldRequest = new Promise<UpscaleResult>(resolve => { resolveOldRequest = resolve; });
+    const deferredNewRequest = new Promise<UpscaleResult>(resolve => { resolveNewRequest = resolve; });
+    const validResult = {
+      b64_json: Buffer.from(mergedBytes).toString("base64"),
+      mime: "image/png",
+      width: 480,
+      height: 320,
+    };
+    mocks.upscale.mockReturnValueOnce(deferredOldRequest).mockReturnValueOnce(deferredNewRequest);
+    const composeImage = vi.fn(async () => new Blob([mergedBytes], { type: "image/png" }));
+    const view = render(<PoeUpscaleExport composeImage={composeImage} title="fixture project" width={120} height={80} />);
+
+    await user.click(screen.getByTestId("button-upscale-export"));
+    await user.click(screen.getByTestId("button-confirm-upscale"));
+    await waitFor(() => expect(mocks.upscale).toHaveBeenCalledOnce());
+    const oldSignal = mocks.upscale.mock.calls[0][1].signal as AbortSignal;
+
+    mocks.account.userId = "another-user";
+    view.rerender(<PoeUpscaleExport composeImage={composeImage} title="fixture project" width={120} height={80} />);
+    await waitFor(() => expect(oldSignal.aborted).toBe(true));
+    await waitFor(() => expect((screen.getByRole("button", { name: "Review 4× export" }) as HTMLButtonElement).disabled).toBe(false));
+
+    await user.click(screen.getByTestId("button-upscale-export"));
+    await user.click(screen.getByTestId("button-confirm-upscale"));
+    await waitFor(() => expect(mocks.upscale).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      resolveOldRequest(validResult);
+      await deferredOldRequest;
+    });
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Upscaled PNG downloaded/)).toBeNull();
+    expect((screen.getByTestId("button-upscale-export") as HTMLButtonElement).disabled).toBe(true);
+    expect(mocks.configuration.refetch).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveNewRequest(validResult);
+      await deferredNewRequest;
+    });
+    await waitFor(() => expect(screen.getByTestId("upscale-status").textContent).toContain("downloaded"));
+    expect(URL.createObjectURL).toHaveBeenCalledOnce();
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledOnce();
+  });
+
+  it("aborts a pending upscale on unmount and ignores its late result", async () => {
+    const user = userEvent.setup();
+    type UpscaleResult = { b64_json: string; mime: string; width: number; height: number };
+    let resolveRequest!: (result: UpscaleResult) => void;
+    const deferredRequest = new Promise<UpscaleResult>(resolve => { resolveRequest = resolve; });
+    mocks.upscale.mockReturnValue(deferredRequest);
+    const view = renderExport();
+
+    await user.click(screen.getByTestId("button-upscale-export"));
+    await user.click(screen.getByTestId("button-confirm-upscale"));
+    await waitFor(() => expect(mocks.upscale).toHaveBeenCalledOnce());
+    const signal = mocks.upscale.mock.calls[0][1].signal as AbortSignal;
+    view.unmount();
+    expect(signal.aborted).toBe(true);
+
+    await act(async () => {
+      resolveRequest({
+        b64_json: Buffer.from(mergedBytes).toString("base64"),
+        mime: "image/png",
+        width: 480,
+        height: 320,
+      });
+      await deferredRequest;
+    });
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
   });
 
   it.each(["resolve", "reject"] as const)("aborts Stop request and never downloads when the deferred request later %ss", async outcome => {

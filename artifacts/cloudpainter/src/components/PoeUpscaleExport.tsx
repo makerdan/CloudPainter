@@ -17,6 +17,13 @@ type Props = {
   height: number;
 };
 
+type UpscaleOperation = {
+  controller: AbortController;
+  actor: string;
+  phase: "preparing" | "sending";
+  cancelled: boolean;
+};
+
 const MAX_UPSCALE_IMAGE_BYTES = 12 * 1024 * 1024;
 const MAX_UPSCALE_BASE64_CHARS = Math.ceil(MAX_UPSCALE_IMAGE_BYTES / 3) * 4;
 const INVALID_PNG_ERROR = "Poe did not return a valid PNG. No file was downloaded.";
@@ -82,7 +89,7 @@ export function PoeUpscaleExport({ composeImage, title, width, height }: Props) 
   const identity = `${userId ?? ""}:${sessionId ?? ""}`;
   const identityRef = useRef(identity);
   identityRef.current = identity;
-  const abortRef = useRef<AbortController | null>(null);
+  const operationRef = useRef<UpscaleOperation | null>(null);
   const [scale, setScale] = useState<PoeUpscaleInput["scale"]>(4);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -106,41 +113,66 @@ export function PoeUpscaleExport({ composeImage, title, width, height }: Props) 
     && width * scale <= 8192 && height * scale <= 8192
     && width * height * scale ** 2 <= 20_000_000;
 
+  function isCurrentOperation(operation: UpscaleOperation): boolean {
+    return operationRef.current === operation
+      && !operation.controller.signal.aborted
+      && operation.actor === identityRef.current;
+  }
+
   useEffect(() => {
     setStatus("");
     setError("");
-    if (abortRef.current) abortRef.current.abort();
+    if (operationRef.current) {
+      operationRef.current.cancelled = true;
+      operationRef.current.controller.abort();
+    }
+    operationRef.current = null;
     setPending(false);
     setConfirmOpen(false);
   }, [identity]);
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(() => () => {
+    if (operationRef.current) {
+      operationRef.current.cancelled = true;
+      operationRef.current.controller.abort();
+      operationRef.current = null;
+    }
+  }, []);
 
   async function sendUpscale() {
     if (pending || !eligible || !configured || !sizeSupported) return;
-    const actor = identity;
-    const controller = new AbortController();
-    abortRef.current = controller;
+    const operation: UpscaleOperation = {
+      controller: new AbortController(),
+      actor: identity,
+      phase: "preparing",
+      cancelled: false,
+    };
+    operationRef.current = operation;
     setPending(true);
     setError("");
     setStatus("Preparing the merged composition…");
     try {
       const blob = await composeImage();
-      if (controller.signal.aborted) return;
+      if (!isCurrentOperation(operation)) return;
       if (blob.type !== "image/png" || blob.size <= 0 || blob.size > 8 * 1024 * 1024) {
         throw new Error("The merged PNG is outside the supported size limit. No image was sent.");
       }
+      const pngBase64 = await blobToBase64(blob);
+      if (!isCurrentOperation(operation)) return;
+      operation.phase = "sending";
       setStatus("Sending the merged image to Poe Assistant…");
       const result = await upscalePoeImage(
-        { pngBase64: await blobToBase64(blob), scale },
-        { signal: controller.signal },
+        { pngBase64, scale },
+        { signal: operation.controller.signal },
       );
-      if (controller.signal.aborted || actor !== identityRef.current) return;
+      if (!isCurrentOperation(operation)) return;
       if (!result || typeof result !== "object" || result.mime !== "image/png"
         || result.width !== width * scale || result.height !== height * scale) {
         throw new Error("Poe did not return a PNG at the exact requested dimensions. No file was downloaded.");
       }
       const bytes = decodeUpscalePng(result.b64_json);
-      const objectUrl = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+      const imageBuffer = new ArrayBuffer(bytes.byteLength);
+      new Uint8Array(imageBuffer).set(bytes);
+      const objectUrl = URL.createObjectURL(new Blob([imageBuffer], { type: "image/png" }));
       const link = document.createElement("a");
       const safeTitle = title.trim().replace(/[^\w-]+/g, "-") || "cloudpainter-idea";
       link.download = `${safeTitle}-assistant-${scale}x.png`;
@@ -150,24 +182,28 @@ export function PoeUpscaleExport({ composeImage, title, width, height }: Props) 
       setStatus(`Upscaled PNG downloaded (${result.width} × ${result.height}).`);
       setConfirmOpen(false);
     } catch (caught) {
-      if (actor !== identityRef.current) return;
-      if (controller.signal.aborted) {
-        setStatus("Request stopped. Poe may have charged points if processing had already started; it was not retried.");
-      } else {
-        setError(caught instanceof Error && !("data" in caught) ? caught.message : safeError(caught));
-        setStatus("");
-      }
+      if (!isCurrentOperation(operation)) return;
+      setError(caught instanceof Error && !("data" in caught) ? caught.message : safeError(caught));
+      setStatus("");
     } finally {
-      if (abortRef.current === controller) abortRef.current = null;
-      if (actor === identityRef.current) setPending(false);
-      void configuration.refetch();
+      if (operationRef.current === operation) {
+        operationRef.current = null;
+        if (operation.actor === identityRef.current) setPending(false);
+        if (!operation.cancelled || operation.phase === "sending") void configuration.refetch();
+      }
     }
   }
 
   function cancel() {
     if (pending) {
-      abortRef.current?.abort();
-      return;
+      const operation = operationRef.current;
+      if (operation) {
+        operation.cancelled = true;
+        operation.controller.abort();
+        setStatus(operation.phase === "sending"
+          ? "Request stopped. Poe may have charged points if processing had already started; it was not retried."
+          : "Request stopped before sending.");
+      }
     }
     setConfirmOpen(false);
   }
@@ -203,7 +239,7 @@ export function PoeUpscaleExport({ composeImage, title, width, height }: Props) 
         </div>
       </section>
       <Dialog open={confirmOpen} onOpenChange={value => { if (!value) cancel(); else setConfirmOpen(true); }}>
-        <DialogContent className="upscale-confirm" onEscapeKeyDown={event => { if (pending) { event.preventDefault(); cancel(); } }}>
+        <DialogContent className="upscale-confirm">
           <DialogHeader>
             <DialogTitle>Send this composition to Poe?</DialogTitle>
             <DialogDescription>
