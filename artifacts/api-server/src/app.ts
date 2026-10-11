@@ -8,6 +8,7 @@ import { publishableKeyFromHost } from "@clerk/shared/keys";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware, getClerkProxyHost } from "./middlewares/clerkProxyMiddleware";
 import logoImagesRouter from "./routes/logo-images";
 import imageUpscaleRouter from "./routes/image-upscale";
+import outlineRouter from "./routes/outline";
 
 const app: Express = express();
 
@@ -41,11 +42,12 @@ app.use(clerkMiddleware((req) => ({
 app.use("/api", logoImagesRouter);
 // The upscaler owns a larger, explicit JSON limit; mount before the default parser.
 app.use("/api", imageUpscaleRouter);
+// Photo inference has its own session/origin gates and bounded ephemeral parser.
+app.use("/api", outlineRouter);
 // Other API routes retain their existing parser and account middleware.
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
-
 export default app;

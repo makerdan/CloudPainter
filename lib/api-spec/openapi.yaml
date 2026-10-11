@@ -15,6 +15,54 @@ tags:
   - name: logos
     description: Exploratory logo concepts
 paths:
+  /outlines/config:
+    get:
+      operationId: getOutlineConfig
+      tags: [images]
+      summary: Hosted mask capability and account access, without inference
+      responses:
+        "200":
+          description: Hosted outlining availability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutlineConfig" }
+  /outlines:
+    post:
+      operationId: generateOutline
+      tags: [images]
+      summary: Consent-gated ephemeral photo mask converted into bounded contours
+      parameters:
+        - in: header
+          name: X-Outline-Session
+          required: true
+          schema: { type: string, maxLength: 256 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OutlineInput" }
+      responses:
+        "200":
+          description: Region-relative normalized contours, never photo pixels or remote URLs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutlineResult" }
+        "400":
+          description: Invalid image, consent or request
+        "401":
+          description: Sign in required or session changed
+        "403":
+          description: Account not approved or origin denied
+        "413":
+          description: Image or request too large
+        "429":
+          description: Spending or concurrent-request limit
+        "502":
+          description: Invalid provider result
+        "503":
+          description: Provider or budget unavailable
+        "504":
+          description: Inference timeout
   /logo-images:
     post:
       operationId: generateLogoImage
@@ -260,6 +308,56 @@ components:
           schema:
             $ref: "#/components/schemas/LogoImageError"
   schemas:
+    OutlineInput:
+      type: object
+      additionalProperties: false
+      required: [imageBase64, consent, subject, sensitivity]
+      properties:
+        imageBase64:
+          type: string
+          minLength: 16
+          maxLength: 700000
+          description: Bare base64 PNG or JPEG inference crop; never a remote URL
+        consent: { type: boolean, enum: [true] }
+        subject: { type: string, minLength: 1, maxLength: 160 }
+        sensitivity: { type: number, minimum: 0.1, maximum: 0.9 }
+    OutlinePoint:
+      type: object
+      additionalProperties: false
+      required: [x, y]
+      properties:
+        x: { type: number, minimum: 0, maximum: 1 }
+        y: { type: number, minimum: 0, maximum: 1 }
+    OutlineCandidate:
+      type: object
+      additionalProperties: false
+      required: [label, points]
+      properties:
+        label: { type: string, maxLength: 80 }
+        points:
+          type: array
+          minItems: 3
+          maxItems: 1024
+          items: { $ref: "#/components/schemas/OutlinePoint" }
+    OutlineResult:
+      type: object
+      additionalProperties: false
+      required: [candidates, model]
+      properties:
+        candidates:
+          type: array
+          maxItems: 8
+          items: { $ref: "#/components/schemas/OutlineCandidate" }
+        model: { type: string, enum: [GPT-Image-2] }
+    OutlineConfig:
+      type: object
+      required: [configured, signedIn, allowed, model, error]
+      properties:
+        configured: { type: boolean }
+        signedIn: { type: boolean }
+        allowed: { type: boolean }
+        model: { type: string, enum: [GPT-Image-2] }
+        error: { type: string }
     LogoImageRequest:
       type: object
       additionalProperties: false

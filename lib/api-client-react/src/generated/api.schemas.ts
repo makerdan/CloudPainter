@@ -5,6 +5,77 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface OutlineInput {
+  /**
+     * Bare base64 PNG or JPEG inference crop; never a remote URL
+     * @minLength 16
+     * @maxLength 700000
+     */
+  imageBase64: string;
+  consent: true;
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  subject: string;
+  /**
+     * @minimum 0.1
+     * @maximum 0.9
+     */
+  sensitivity: number;
+}
+
+export interface OutlinePoint {
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  x: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  y: number;
+}
+
+export interface OutlineCandidate {
+  /** @maxLength 80 */
+  label: string;
+  /**
+     * @minItems 3
+     * @maxItems 1024
+     */
+  points: OutlinePoint[];
+}
+
+export type OutlineResultModel = typeof OutlineResultModel[keyof typeof OutlineResultModel];
+
+
+export const OutlineResultModel = {
+  'GPT-Image-2': 'GPT-Image-2',
+} as const;
+
+export interface OutlineResult {
+  /** @maxItems 8 */
+  candidates: OutlineCandidate[];
+  model: OutlineResultModel;
+}
+
+export type OutlineConfigModel = typeof OutlineConfigModel[keyof typeof OutlineConfigModel];
+
+
+export const OutlineConfigModel = {
+  'GPT-Image-2': 'GPT-Image-2',
+} as const;
+
+export interface OutlineConfig {
+  configured: boolean;
+  signedIn: boolean;
+  allowed: boolean;
+  model: OutlineConfigModel;
+  error: string;
+}
+
 export type LogoImageRequestDirection = typeof LogoImageRequestDirection[keyof typeof LogoImageRequestDirection];
 
 

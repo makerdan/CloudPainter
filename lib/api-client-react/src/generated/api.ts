@@ -26,6 +26,9 @@ import type {
   LogoImageErrorResponse,
   LogoImageRequest,
   LogoImageResult,
+  OutlineConfig,
+  OutlineInput,
+  OutlineResult,
   Palette,
   PoeImageInput,
   PoeImageOutput,
@@ -59,6 +62,171 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetOutlineConfigUrl = () => {
+
+
+
+
+  return `/api/outlines/config`
+}
+
+/**
+ * @summary Hosted mask capability and account access, without inference
+ */
+export const getOutlineConfig = async ( options?: Parameters<typeof customFetch>[1]): Promise<OutlineConfig> => {
+
+  return customFetch<OutlineConfig>(getGetOutlineConfigUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOutlineConfigQueryKey = () => {
+    return [
+    `/api/outlines/config`
+    ] as const;
+    }
+
+
+export const getGetOutlineConfigQueryOptions = <TData = Awaited<ReturnType<typeof getOutlineConfig>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOutlineConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOutlineConfigQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOutlineConfig>>> = ({ signal }) => getOutlineConfig({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOutlineConfig>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOutlineConfigQueryResult = NonNullable<Awaited<ReturnType<typeof getOutlineConfig>>>
+export type GetOutlineConfigQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Hosted mask capability and account access, without inference
+ */
+
+export function useGetOutlineConfig<TData = Awaited<ReturnType<typeof getOutlineConfig>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOutlineConfig>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOutlineConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGenerateOutlineUrl = () => {
+
+
+
+
+  return `/api/outlines`
+}
+
+/**
+ * @summary Consent-gated ephemeral photo mask converted into bounded contours
+ */
+export const generateOutline = async (outlineInput: OutlineInput, options?: Parameters<typeof customFetch>[1]): Promise<OutlineResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<OutlineResult>(getGenerateOutlineUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(outlineInput)
+  }
+);}
+
+
+
+
+
+export const getGenerateOutlineMutationKey = () => ['generateOutline'] as const;
+
+export const getGenerateOutlineMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateOutline>>, TError,GenerateOutlineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateOutline>>, TError,GenerateOutlineMutationVariables, TContext> => {
+
+const mutationKey = getGenerateOutlineMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateOutline>>, GenerateOutlineMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  generateOutline(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateOutlineMutationResult = NonNullable<Awaited<ReturnType<typeof generateOutline>>>
+    export type GenerateOutlineMutationBody = BodyType<OutlineInput>
+    export type GenerateOutlineMutationError = ErrorType<void>
+    export type GenerateOutlineMutationVariables = {data: BodyType<OutlineInput>}
+
+    /**
+ * @summary Consent-gated ephemeral photo mask converted into bounded contours
+ */
+export const useGenerateOutline = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateOutline>>, TError,GenerateOutlineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateOutline>>,
+        TError,
+        GenerateOutlineMutationVariables,
+        TContext
+      > => {
+      return useMutation(getGenerateOutlineMutationOptions(options));
+    }
 
 export const getGenerateLogoImageUrl = () => {
 

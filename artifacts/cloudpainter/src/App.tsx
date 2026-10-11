@@ -42,6 +42,8 @@ import { BrushStyleControl } from '@/components/BrushStyleControl';
 import { BRUSH_STYLES, renderStroke, type BrushStyle, type DrawingTool, type Point, type Stroke } from '@/lib/strokeRenderer';
 import { createInstrumentStroke, toolAfterColorSelection, TOOL_GUIDANCE, type DrawingInstrument } from '@/lib/drawingTools';
 import { AccountProvider, AccountControls, SignInPage, SignUpPage } from '@/components/Account';
+import { OutlinePanel } from '@/components/OutlinePanel';
+import { viewportToProject } from '@/lib/outlineGeometry';
 
 type PaintLayer = {
   id: string;
@@ -402,6 +404,9 @@ function Home() {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
   const [stageBounds, setStageBounds] = useState({ width: 0, height: 0 });
+  const [outline, setOutline] = useState<{ image: string; key: string; photo: string; layerId: string } | null>(null);
+  const [outlineOpening, setOutlineOpening] = useState(false);
+  const outlineOpenId = useRef(0);
   const drawingRef = useRef(false);
   const panningRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const touchPointersRef = useRef(new Map<number, Point>());
@@ -423,6 +428,68 @@ function Home() {
     x: Math.max(-stageSize.width * (zoom - 1) / 2, Math.min(stageSize.width * (zoom - 1) / 2, pan.x)),
     y: Math.max(-stageSize.height * (zoom - 1) / 2, Math.min(stageSize.height * (zoom - 1) / 2, pan.y)),
   });
+  const outlineContextKey = JSON.stringify([project.selectedLayerId, project.width, project.height,
+    selectedLayer.visible, photoZoom, photoPan.x, photoPan.y, stageSize.width, stageSize.height]);
+  const currentOutlineContext = useRef({ key: outlineContextKey, photo: project.image });
+  currentOutlineContext.current = { key: outlineContextKey, photo: project.image };
+
+  useEffect(() => {
+    outlineOpenId.current++;
+    setOutlineOpening(false);
+    if (outline && (outline.key !== outlineContextKey || outline.photo !== project.image)) {
+      setOutline(null);
+      setToast('Outline cancelled because the photo, view, or selected layer changed.');
+    }
+  }, [outlineContextKey, project.image]);
+  useEffect(() => () => { outlineOpenId.current++; }, []);
+
+  const openOutline = async () => {
+    if (!project.image || !selectedLayer.visible || stageSize.width <= 0 || stageSize.height <= 0) return;
+    const request = ++outlineOpenId.current;
+    const key = outlineContextKey, photo = project.image, layerId = selectedLayer.id;
+    setOutlineOpening(true);
+    try {
+      const image = new Image();
+      image.src = photo;
+      await image.decode();
+      if (request !== outlineOpenId.current || currentOutlineContext.current.key !== key || currentOutlineContext.current.photo !== photo) return;
+      // Snapshot ONLY the visible reference photo, never drawings or project data.
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1, 768 / Math.max(stageSize.width, stageSize.height));
+      canvas.width = Math.max(1, Math.round(stageSize.width * scale));
+      canvas.height = Math.max(1, Math.round(stageSize.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Photo preview is not supported by this browser.');
+      const fitted = fitDimensionsWithinBounds(image.naturalWidth, image.naturalHeight, stageSize.width, stageSize.height);
+      context.scale(canvas.width / stageSize.width, canvas.height / stageSize.height);
+      context.translate(stageSize.width / 2 + photoPan.x, stageSize.height / 2 + photoPan.y);
+      context.scale(photoZoom, photoZoom);
+      context.drawImage(image, -fitted.width / 2, -fitted.height / 2, fitted.width, fitted.height);
+      setOutline({ image: canvas.toDataURL('image/png'), key, photo, layerId });
+    } catch {
+      if (request === outlineOpenId.current) setToast('Could not read the visible photo for outlining. Your project is unchanged.');
+    } finally {
+      if (request === outlineOpenId.current) setOutlineOpening(false);
+    }
+  };
+
+  const acceptOutline = (points: Point[]) => {
+    if (!outline || outline.key !== currentOutlineContext.current.key || outline.photo !== currentOutlineContext.current.photo) return;
+    try {
+      const mapped = viewportToProject(points, photoZoom, photoPan.x / stageSize.width, photoPan.y / stageSize.height);
+      const stroke: Stroke = { points: mapped, color, size: 2 * project.width / stageSize.width, tool: 'brush' };
+      setProject(current => {
+        if (current.image !== outline.photo || current.selectedLayerId !== outline.layerId
+          || !current.layers.some(layer => layer.id === outline.layerId && layer.visible)) return current;
+        return { ...current, layers: current.layers.map(layer => layer.id === outline.layerId
+          ? { ...layer, strokes: [...layer.strokes, stroke], redo: [] } : layer) };
+      });
+      setOutline(null);
+      setToast('Outline added to the selected layer. Undo removes it.');
+    } catch {
+      setToast('This outline no longer fits the current photo view. Run outlining again.');
+    }
+  };
 
   useEffect(() => {
     const stageWrap = stageWrapRef.current;
@@ -1017,6 +1084,7 @@ function Home() {
                   </TooltipButton>
                 ))}
                 <span className="tool-divider" />
+                <TooltipButton description={project.image ? 'Preview contours from the visible photo with local detection, hosted AI, or edge tracing. Nothing is drawn until you accept.' : 'Import a reference photo before outlining a subject.'} className="tool-button" aria-label="Outline" onClick={openOutline} disabled={!project.image || !selectedLayer.visible || outlineOpening} data-testid="button-outline"><Sparkles size={17} /></TooltipButton>
                 <TooltipButton description={selectedLayer?.strokes.length ? 'Undo the most recent drawing or erasing stroke on the selected layer.' : 'Nothing to undo: the selected layer has no strokes.'} className="tool-button" aria-label="Undo" onClick={undo} disabled={!selectedLayer?.strokes.length} data-testid="button-undo"><Undo2 size={17} /></TooltipButton>
                 <TooltipButton description={selectedLayer?.redo.length ? 'Restore the last undone stroke on the selected layer.' : 'Nothing to redo: undo a stroke on the selected layer first.'} className="tool-button" aria-label="Redo" onClick={redo} disabled={!selectedLayer?.redo.length} data-testid="button-redo"><Redo2 size={17} /></TooltipButton>
               </div>
@@ -1025,6 +1093,10 @@ function Home() {
                 <TooltipButton description="Remove all drawings and undo/redo history from the selected layer; keep the photo and other layers." className="tool-button" aria-label="Clear selected layer" onClick={() => { if (selectedLayer) changeLayer(selectedLayer.id, layer => ({ ...layer, strokes: [], redo: [] })); }} data-testid="button-clear-layer"><RotateCcw size={15} /></TooltipButton>
               </div>
             </div>
+
+            {outlineOpening && <p role="status">Preparing the visible photo for outlining…</p>}
+            {outline && <OutlinePanel image={outline.image} contextKey={outlineContextKey}
+              onAccept={acceptOutline} onClose={() => { setOutline(null); setToast('Outline cancelled. Your project is unchanged.'); }} />}
 
             <div className="panel stage-wrap" ref={stageWrapRef}>
               {project.image && (
@@ -1069,7 +1141,7 @@ function Home() {
                     <canvas
                       key={layer.id}
                       ref={node => { canvasRefs.current[layer.id] = node; }}
-                      style={{ zIndex: index + 1, opacity: layer.visible ? layer.opacity : 0, pointerEvents: layer.id === project.selectedLayerId && layer.visible ? 'auto' : 'none' }}
+                      style={{ zIndex: index + 1, opacity: layer.visible ? layer.opacity : 0, pointerEvents: !outline && layer.id === project.selectedLayerId && layer.visible ? 'auto' : 'none' }}
                       className={layer.id === project.selectedLayerId ? 'draw-surface' : ''}
                       onPointerDown={event => beginStroke(event, layer)}
                       onPointerMove={continueStroke}

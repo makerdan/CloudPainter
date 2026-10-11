@@ -10,6 +10,9 @@
   "include": ["src"],
   "references": [
     {
+      "path": "../../lib/outline-core"
+    },
+    {
       "path": "../../lib/db"
     },
     {

@@ -14,3 +14,31 @@ mtime_ms = 1791660792191
 storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:685909fe-be37-4979-baa7-4ef2f47d224b/9a5bc792-3a16-4ac4-b063-3b31d45d06b2/7e7eafc2-daa4-4ea8-a9e6-0483fabcf8c8"
 storage_version_token = "1791660822634242"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "kzu-gFHs9v3LJR2V3gLTw"
+uri = "file://generated-artifacts/poe-mask-probe/source.png"
+type = "image"
+title = "Mask test — source image"
+description = "Synthetic orange subject with a hole and a blue distractor; no personal photo was used."
+logical_id = "b1486440-5551-4117-8105-308f840d0174"
+content_hash = "sha256:db2822765936c2dad5087eaeaeac3a99bb7772e35e618aa930175dd90be73598"
+size = 22724
+mtime_ms = 1791693545418
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:685909fe-be37-4979-baa7-4ef2f47d224b/b1486440-5551-4117-8105-308f840d0174/92094911-b93b-4e28-a49e-a2d68442250d"
+storage_version_token = "1791693596330079"
+content_type = "image/png"
+
+[[outputs]]
+id = "qxKs857ZXPHZuQXphBEZC"
+uri = "file://generated-artifacts/poe-mask-probe/output-1.png"
+type = "image"
+title = "GPT-Image-2 — returned mask"
+description = "Actual Poe output: white subject, black background, with the internal hole preserved."
+logical_id = "e3dce147-901d-4b1f-852e-1a8dbf9cf4fe"
+content_hash = "sha256:c84ae6bfb2787274a0957d7645c044a74f6b4eb5d7b83ff55286b7fdaca2ae78"
+size = 282278
+mtime_ms = 1791693554238
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:685909fe-be37-4979-baa7-4ef2f47d224b/e3dce147-901d-4b1f-852e-1a8dbf9cf4fe/85e5bf40-87a9-46b1-97ee-d7340816a65f"
+storage_version_token = "1791693596759886"
+content_type = "image/png"

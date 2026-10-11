@@ -29,6 +29,9 @@ if (!basePath) {
 
 export default defineConfig({
   base: basePath,
+  // Worker-only imports otherwise trigger Vite's first-use dependency reload,
+  // closing the read-only outline dialog before inference can even start.
+  optimizeDeps: { include: ['@huggingface/transformers'] },
   plugins: [
     react(),
     tailwindcss({ optimize: false }),
@@ -64,6 +67,7 @@ export default defineConfig({
     outDir: path.resolve(import.meta.dirname, 'dist/public'),
     emptyOutDir: true,
   },
+  worker: { format: 'es' },
   server: {
     port,
     strictPort: true,

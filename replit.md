@@ -57,7 +57,7 @@ A browser-based creativity app for drawing imagined shapes over photographs with
 
 ## Architecture decisions
 
-- CloudPainter saves editable projects in the current browser; photos and drawings are not uploaded to a server.
+- CloudPainter saves editable projects in the current browser. Drawing content is never sent for inference; local outlining never sends photo pixels. Hosted outlining is an explicit, consent-gated exception that sends only a downsized selected reference-photo region.
 - Clerk manages accounts and verified sessions. Only named palette colors are saved in PostgreSQL per account; signing out never changes ownership of the device's local project.
 - Palette requests carry the current session ID as a transition/CSRF guard, use private no-store responses, and compare revisions to avoid overwriting changes made on another device. No browser bearer-token plumbing.
 - Required account configuration: provisioned `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, and `VITE_CLERK_PUBLISHABLE_KEY`. Production proxy variables are supplied by the host; do not set them manually.
@@ -82,6 +82,19 @@ A browser-based creativity app for drawing imagined shapes over photographs with
 - Missing configuration returns a safe `UNAVAILABLE` response without stopping health checks, the five static SVG directions, photo import, autosave or sketch PNG export.
 
 ## Product
+
+### Outline assistance
+
+- Outline opens a read-only, visible-photo preview with On-device (default), Hosted AI, and Trace an edge methods. Nothing changes until Accept adds a standard editable brush stroke to the selected visible layer.
+- On-device uses `Xenova/detr-resnet-50-panoptic` through Transformers.js in a disposable WASM worker. It recognizes common classes, not guaranteed imagined figures. Model assets may download from Hugging Face, but pixels remain local. Copies and preprocessing tensors are bounded to 512 pixels; one worker thread, 90-second inference deadline, no hosted fallback.
+- Edge tracing follows connected Sobel image edges within a user-selected region, without object-name recognition. Both local methods can be cancelled by terminating their worker.
+- Hosted outlining uses a separate exact `GPT-Image-2` mask-use-case registry, not another option in the four-model image generator. Real synthetic, dog, and two-cat requests verified mask-image output; masks remain approximate and require user review. See `reports/poe-mask-probe.md`.
+- `/api/outlines/config` checks configuration and approved-account access without paid inference. `/api/outlines` requires a verified Clerk session, matching session header, same-origin request, explicit consent, a subject description, and the existing durable image spending budget. Each sent attempt remains charged even after cancellation; no retries or model/provider substitution.
+- Only PNG/JPEG inference crops, at most 512 KiB and 16–512 pixels per side, are accepted. Server padding preserves aspect ratio. Masks must be bounded square neutral black/white images; output is at most eight normalized contours of at most 1,024 points each. Client maps them back to the selected visible region and then into standard project stroke coordinates.
+- Photos are ephemeral server buffers: no durable uploads, payload logging, source-photo modification, or remote image-URL inputs. Only existing pinned, allowlisted Poe CDN downloads are accepted for provider output.
+- Hosted consent discloses transmission to Poe/OpenAI and points spending. Poe's privacy center lists OpenAI retention of 30 days; no zero-retention guarantee is made. Its API ignores `store`, so this flag cannot establish privacy. See https://poe.com/privacy_center.
+- Photo, view, layer, region, method, sensitivity, subject, and account changes invalidate previews or requests. Late results cannot commit. Changing controls revokes hosted consent. Canvas resizing cancels the visible-photo snapshot rather than misaligning a contour.
+- Checks: `pnpm --filter @workspace/cloudpainter run test:outline`, `test:outline-ui`, `pnpm --filter @workspace/api-server run test:outline`. `verify:outline-fixtures` only reprocesses already saved real provider results; it never sends paid requests. The standalone `scripts/probe-poe-mask.ts` requires owner approval for each paid run and is not included in CI.
 
 - Import a photo or start with a blank canvas, draw using Brush, Pencil, Pen or Eraser, and manage transparent layers.
 - Undo and redo edits, autosave and restore browser-local projects, and export the visible composition as PNG.

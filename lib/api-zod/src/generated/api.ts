@@ -9,6 +9,73 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Hosted mask capability and account access, without inference
+ */
+export const GetOutlineConfigResponse = zod.object({
+  "configured": zod.boolean(),
+  "signedIn": zod.boolean(),
+  "allowed": zod.boolean(),
+  "model": zod.enum(['GPT-Image-2']),
+  "error": zod.string()
+})
+
+
+/**
+ * @summary Consent-gated ephemeral photo mask converted into bounded contours
+ */
+export const generateOutlineHeaderXOutlineSessionMax = 256;
+
+
+
+export const GenerateOutlineHeader = zod.object({
+  "X-Outline-Session": zod.string().max(generateOutlineHeaderXOutlineSessionMax)
+})
+
+export const generateOutlineBodyImageBase64Min = 16;
+export const generateOutlineBodyImageBase64Max = 700000;
+
+export const generateOutlineBodySubjectMax = 160;
+
+export const generateOutlineBodySensitivityMin = 0.1;
+export const generateOutlineBodySensitivityMax = 0.9;
+
+
+
+export const GenerateOutlineBody = zod.object({
+  "imageBase64": zod.string().min(generateOutlineBodyImageBase64Min).max(generateOutlineBodyImageBase64Max).describe('Bare base64 PNG or JPEG inference crop; never a remote URL'),
+  "consent": zod.literal(true),
+  "subject": zod.string().min(1).max(generateOutlineBodySubjectMax),
+  "sensitivity": zod.number().min(generateOutlineBodySensitivityMin).max(generateOutlineBodySensitivityMax)
+})
+
+export const generateOutlineResponseCandidatesItemLabelMax = 80;
+
+export const generateOutlineResponseCandidatesItemPointsItemXMin = 0;
+export const generateOutlineResponseCandidatesItemPointsItemXMax = 1;
+
+export const generateOutlineResponseCandidatesItemPointsItemYMin = 0;
+export const generateOutlineResponseCandidatesItemPointsItemYMax = 1;
+
+export const generateOutlineResponseCandidatesItemPointsMin = 3;
+export const generateOutlineResponseCandidatesItemPointsMax = 1024;
+
+export const generateOutlineResponseCandidatesMax = 8;
+
+
+
+export const GenerateOutlineResponse = zod.object({
+  "candidates": zod.array(zod.object({
+  "label": zod.string().max(generateOutlineResponseCandidatesItemLabelMax),
+  "points": zod.array(zod.object({
+  "x": zod.number().min(generateOutlineResponseCandidatesItemPointsItemXMin).max(generateOutlineResponseCandidatesItemPointsItemXMax),
+  "y": zod.number().min(generateOutlineResponseCandidatesItemPointsItemYMin).max(generateOutlineResponseCandidatesItemPointsItemYMax)
+})).min(generateOutlineResponseCandidatesItemPointsMin).max(generateOutlineResponseCandidatesItemPointsMax)
+})).max(generateOutlineResponseCandidatesMax),
+  "model": zod.enum(['GPT-Image-2'])
+})
+
+
+/**
  * @summary Generate one exploratory logo PNG from text only
  */
 export const generateLogoImageBodyPromptMax = 1200;

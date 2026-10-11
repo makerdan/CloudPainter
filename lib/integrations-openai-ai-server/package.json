@@ -11,6 +11,7 @@
     "./batch": "./src/batch/index.ts",
     "./image": "./src/image/index.ts",
     "./poe": "./src/poe/images.ts",
+    "./poe/media": "./src/poe/media.ts",
     "./audio": "./src/audio/index.ts"
   },
   "dependencies": {
