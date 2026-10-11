@@ -66,6 +66,10 @@ test('Poe picker offers exactly four models and preview requires explicit use', 
   await page.reload();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', priorPhoto);
   const before = await saved(page);
+
+  const originalHistory = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY);
+
+  const olderSketch = { ...before, title: 'Earlier saved sketch' };
   const base64 = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 640;
@@ -91,16 +95,7 @@ test('Poe picker offers exactly four models and preview requires explicit use', 
   await page.getByTestId('button-use-generated-image').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect.poll(async () => {
-  const project = (title: string, photoZoom: unknown, photoPan: unknown) => ({
-    image: photo,
-    width: 320,
-    height: 240,
-    layers: [layer],
-    selectedLayerId: layer.id,
-    title,
-    photoZoom,
-    photoPan,
-  });
+    const project = await saved(page);
     return { width: project.width, height: project.height, layers: project.layers.length };
   }).toEqual({ width: 640, height: 320, layers: 1 });
   expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY)).toEqual([before]);
@@ -179,6 +174,10 @@ test('applying another generated image keeps every earlier sketch available afte
 
 test('a full history store leaves the current sketch and older saved sketches intact when applying an image', async ({ page }) => {
   const before = await saved(page);
+
+  const originalHistory = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY);
+
+  const olderSketch = { ...before, title: 'Earlier saved sketch' };
   const olderSketches = [
     { ...before, title: 'Earlier saved sketch' },
     { ...before, title: 'Oldest saved sketch' },
@@ -213,8 +212,12 @@ test('a full history store leaves the current sketch and older saved sketches in
   expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY)).toEqual(olderSketches);
 });
 
-test('Poe failures preserve the sketch and never issue an alternate-model request', async ({ page }) => {
+test('warns before applying a generated image when estimated browser storage is nearly full', async ({ page }) => {
   const before = await saved(page);
+
+  const originalHistory = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY);
+
+  const olderSketch = { ...before, title: 'Earlier saved sketch' };
   let requests = 0;
   await page.route('**/api/images/generate', route => {
     requests++;
@@ -231,6 +234,10 @@ test('Poe failures preserve the sketch and never issue an alternate-model reques
 
 test('missing Poe configuration disables generation without touching the sketch', async ({ page }) => {
   const before = await saved(page);
+
+  const originalHistory = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY);
+
+  const olderSketch = { ...before, title: 'Earlier saved sketch' };
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route('**/api/images/config', route => route.fulfill({ json: { ...approvedConfig, configured: false } }));
   await page.getByTestId('button-generate-image').click();
@@ -283,16 +290,16 @@ test('anonymous visitors can draw but must sign in before generation', async ({ 
 
 test('saved sketches can be browsed and restored without signing in', async ({ page }) => {
   const current = {
-    image: null, width: 1200, height: 800, selectedLayerId: 'quota-current-layer', title: 'Current sketch',
-    layers: [{ id: 'quota-current-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+    image: null, width: 1200, height: 800, selectedLayerId: 'current-layer', title: 'Current sketch',
+    layers: [{ id: 'current-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
   };
   const earlier = {
-    image: null, width: 640, height: 480, selectedLayerId: 'quota-earlier-layer', title: 'Earlier sketch',
-    layers: [{ id: 'quota-earlier-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+    image: null, width: 640, height: 480, selectedLayerId: 'earlier-layer', title: 'Earlier sketch',
+    layers: [{ id: 'earlier-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
   };
   const oldest = {
-    image: null, width: 320, height: 240, selectedLayerId: 'quota-oldest-layer', title: 'Oldest sketch',
-    layers: [{ id: 'quota-oldest-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+    image: null, width: 320, height: 240, selectedLayerId: 'oldest-layer', title: 'Oldest sketch',
+    layers: [{ id: 'oldest-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
   };
 
   const normalizedCurrent = { ...current, photoZoom: 1, photoPan: { x: 0, y: 0 } };
@@ -317,16 +324,16 @@ test('saved sketches can be browsed and restored without signing in', async ({ p
 
 test('a full history store leaves the current sketch and saved versions intact when restoring', async ({ page }) => {
   const current = {
-    image: null, width: 1200, height: 800, selectedLayerId: 'quota-current-layer', title: 'Current sketch',
-    layers: [{ id: 'quota-current-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+    image: null, width: 1200, height: 800, selectedLayerId: 'current-layer', title: 'Current sketch',
+    layers: [{ id: 'current-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
   };
   const earlier = {
-    image: null, width: 640, height: 480, selectedLayerId: 'quota-earlier-layer', title: 'Earlier sketch',
-    layers: [{ id: 'quota-earlier-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+    image: null, width: 640, height: 480, selectedLayerId: 'earlier-layer', title: 'Earlier sketch',
+    layers: [{ id: 'earlier-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
   };
   const oldest = {
-    image: null, width: 320, height: 240, selectedLayerId: 'quota-oldest-layer', title: 'Oldest sketch',
-    layers: [{ id: 'quota-oldest-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
+    image: null, width: 320, height: 240, selectedLayerId: 'oldest-layer', title: 'Oldest sketch',
+    layers: [{ id: 'oldest-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] }],
   };
 
   const normalizedCurrent = { ...current, photoZoom: 1, photoPan: { x: 0, y: 0 } };
@@ -339,6 +346,10 @@ test('a full history store leaves the current sketch and saved versions intact w
   await page.goto('./');
   await expect.poll(async () => (await saved(page))?.photoZoom).toBe(1);
   const before = await saved(page);
+
+  const originalHistory = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY);
+
+  const olderSketch = { ...before, title: 'Earlier saved sketch' };
   const existingHistory = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY);
   await failProjectHistoryWrites(page);
 
@@ -453,16 +464,7 @@ test('saved sketches keep their own photo framing across switches and reloads', 
   await expect(page.getByTestId('input-photo-zoom')).toHaveValue('225');
   await expect(stageContent).toHaveAttribute('style', /translate3d\(60px, -34px, 0px\) scale\(2\.25\)/);
   await expect.poll(async () => {
-  const project = (title: string, photoZoom: unknown, photoPan: unknown) => ({
-    image: photo,
-    width: 320,
-    height: 240,
-    layers: [layer],
-    selectedLayerId: layer.id,
-    title,
-    photoZoom,
-    photoPan,
-  });
+    const project = await saved(page);
     return {
       title: project?.title,
       photoZoom: project?.photoZoom,
@@ -502,16 +504,7 @@ test('malformed saved photo framing is normalized without disabling the photo or
 
   const activeLayer = { id: 'legacy-active-layer', name: 'Active layer', visible: true, opacity: 1, strokes: [], redo: [] };
   const layer = { id: 'malformed-framing-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] };
-  const project = (title: string, photoZoom: unknown, photoPan: unknown) => ({
-    image: photo,
-    width: 320,
-    height: 240,
-    layers: [layer],
-    selectedLayerId: layer.id,
-    title,
-    photoZoom,
-    photoPan,
-  });
+    const project = await saved(page);
   const malformedZoom = project('Malformed zoom', 'not-a-number', { x: 'invalid', y: null });
   const malformedPan = project('Malformed pan', 2, { x: 'invalid', y: null });
   const outOfRange = project('Out of range framing', 20, { x: 1_000_000, y: -1_000_000 });
@@ -654,3 +647,18 @@ test('legacy sketches open fitted, remain editable, and save current framing fie
     layerNames: ['Recovery layer', 'Layer 2'],
   });
 });
+
+  const dialogPromise = page.waitForEvent('dialog');
+
+  const image = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 8;
+    canvas.height = 8;
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+
+  const historyBeforeRestore = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY);
+
+  const acceptedDialogPromise = page.waitForEvent('dialog');
+
+  const dialog = await dialogPromise;

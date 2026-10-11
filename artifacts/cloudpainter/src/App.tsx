@@ -68,6 +68,8 @@ const STORE_KEY = 'cloudpainter-project-v1';
 const PREVIOUS_PROJECT_KEY = 'cloudpainter-previous-project-v1';
 
 const PROJECT_HISTORY_KEY = 'cloudpainter-project-history-v1';
+
+const STORAGE_WARNING_THRESHOLD = 0.8;
 const id = () => `layer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const createLayer = (name: string): PaintLayer => ({
   id: id(), name, visible: true, opacity: 1, strokes: [], redo: [],
@@ -395,6 +397,7 @@ function Home() {
   const [brushStyle, setBrushStyle] = useState<BrushStyle>('round');
   const [draft, setDraft] = useState<{ layerId: string; stroke: Stroke } | null>(null);
   const [savedStatus, setSavedStatus] = useState('Saved in this browser');
+  const [storageEstimate, setStorageEstimate] = useState<BrowserStorageEstimate | null>(null);
   const [toast, setToast] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -528,18 +531,29 @@ function Home() {
     toastTimer.current = window.setTimeout(() => setToast(''), 2600);
   }, []);
 
+  const refreshStorageEstimate = useCallback(async () => {
+    const estimate = await readBrowserStorageEstimate();
+    setStorageEstimate(estimate);
+    return estimate;
+  }, []);
+
+  useEffect(() => {
+    void refreshStorageEstimate();
+  }, [refreshStorageEstimate]);
+
   useEffect(() => {
     setSavedStatus('Saving…');
     const timer = window.setTimeout(() => {
       try {
         localStorage.setItem(STORE_KEY, JSON.stringify(project));
         setSavedStatus('Saved in this browser');
+        void refreshStorageEstimate();
       } catch {
         setSavedStatus('Storage is full');
       }
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [project]);
+  }, [project, refreshStorageEstimate]);
 
   useEffect(() => {
     // Account navigation must not cancel the last debounced project save.
@@ -577,11 +591,20 @@ function Home() {
   const openPhoto = () => fileInput.current?.click();
   const useGeneratedReference = (source: string, prompt: string): Promise<void> => new Promise((resolve, reject) => {
     const image = new Image();
-    image.onload = () => {
+    image.onload = async () => {
       const { width, height } = getScaledImageDimensions(image.naturalWidth, image.naturalHeight);
       const layer = createLayer('Sketch layer');
+      const nextProject: Project = {
+        image: source, width, height, layers: [layer], selectedLayerId: layer.id,
+        title: prompt.slice(0, 42) || 'Generated idea', photoZoom: 1, photoPan: { x: 0, y: 0 },
+      };
+      const estimate = await refreshStorageEstimate();
       const currentProject = latestProject.current;
       const nextHistory = withSavedProject(projectHistory, currentProject);
+      if (!confirmHistoryWriteIfStorageIsLow(estimate, nextProject, nextHistory)) {
+        reject(new Error('Storage warning dismissed. No changes were made.'));
+        return;
+      }
       try {
         localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
       } catch {
@@ -590,19 +613,20 @@ function Home() {
       }
       setProjectHistory(nextHistory);
       setPanMode(false);
-      setProject({
-        image: source, width, height, layers: [layer], selectedLayerId: layer.id,
-        title: prompt.slice(0, 42) || 'Generated idea', photoZoom: 1, photoPan: { x: 0, y: 0 },
-      });
+      setProject(nextProject);
+      void refreshStorageEstimate();
       announce('Generated image added. You can now sketch over it.');
       resolve();
     };
     image.onerror = () => reject(new Error('Generated image could not be opened.'));
     image.src = source;
   });
-  const restoreProject = (savedProject: Project) => {
+  const restoreProject = async (savedProject: Project) => {
+    const estimate = await refreshStorageEstimate();
     const currentProject = latestProject.current;
     const nextHistory = withSavedProject(projectHistory, currentProject);
+    const nextProject = normalizeProjectView(savedProject);
+    if (!confirmHistoryWriteIfStorageIsLow(estimate, nextProject, nextHistory)) return;
     try {
       localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
     } catch {
@@ -611,7 +635,8 @@ function Home() {
     }
     setProjectHistory(nextHistory);
     setPanMode(false);
-    setProject(normalizeProjectView(savedProject));
+    setProject(nextProject);
+    void refreshStorageEstimate();
     announce(`Restored “${savedProject.title}”.`);
   };
   const deleteSavedProject = (index: number) => {
@@ -1031,6 +1056,15 @@ function Home() {
               <TooltipButton description="Start a fresh transparent canvas, replacing the current photo and all drawing layers." className="button" onClick={startBlank} data-testid="button-blank"><Plus size={13} /> Blank canvas</TooltipButton>
               <input ref={fileInput} hidden type="file" accept="image/*" onChange={handleFile} data-testid="input-photo" />
             </div>
+            {storageEstimate && (
+              <p className="storage-usage" role="status" aria-live="polite" data-testid="storage-usage">
+                CloudPainter storage: about {formatStorageSize(storageEstimate.cloudPainterBytes)}
+                {' · Local storage: about '}{formatStorageSize(storageEstimate.localStorageBytes)} of 5 MB guideline (browser limits vary)
+                {storageEstimate.usageBytes !== undefined && storageEstimate.quotaBytes !== undefined
+                  ? ` · Overall browser estimate: ${formatStorageSize(storageEstimate.usageBytes)} of ${formatStorageSize(storageEstimate.quotaBytes)} used`
+                  : ''}
+              </p>
+            )}
             {projectHistory.length > 0 && (
               <section className="saved-sketches" aria-label="Saved sketches">
                 <p className="section-label">Saved sketches · {projectHistory.length}</p>
@@ -1353,3 +1387,74 @@ const PDF_SAFE_MARGIN_POINTS: Record<PdfSafeMargin, number> = {
   '0.5': 36,
   '0.75': 54,
 };
+
+function projectedStorageRisk(estimate: BrowserStorageEstimate, nextProject: Project, nextHistory: Project[]): number {
+  const currentProjectBytes = (localStorage.getItem(STORE_KEY)?.length ?? 0) * 2;
+  const currentHistoryBytes = (localStorage.getItem(PROJECT_HISTORY_KEY)?.length ?? 0) * 2;
+  const nextProjectBytes = JSON.stringify(nextProject).length * 2;
+  const nextHistoryBytes = JSON.stringify(nextHistory).length * 2;
+  const localStorageDelta = nextProjectBytes - currentProjectBytes + nextHistoryBytes - currentHistoryBytes;
+  const projectedLocalStorageBytes = Math.max(0, estimate.localStorageBytes + localStorageDelta);
+  const risks = [projectedLocalStorageBytes / LOCAL_STORAGE_QUOTA_GUIDELINE_BYTES];
+  if (estimate.usageBytes !== undefined && estimate.quotaBytes !== undefined && estimate.quotaBytes > 0) {
+    const projectedBrowserUsage = Math.max(0, estimate.usageBytes + localStorageDelta);
+    risks.push(projectedBrowserUsage / estimate.quotaBytes);
+  }
+  return Math.max(...risks);
+}
+
+function formatStorageSize(bytes: number): string {
+  if (bytes < 1024) return `${Math.ceil(bytes)} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let size = bytes / 1024;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit++;
+  }
+  return `${size.toFixed(1)} ${units[unit]}`;
+}
+
+function confirmHistoryWriteIfStorageIsLow(estimate: BrowserStorageEstimate | null, nextProject: Project, nextHistory: Project[]): boolean {
+  if (!estimate) return true;
+  const projectedRisk = projectedStorageRisk(estimate, nextProject, nextHistory);
+  if (projectedRisk < STORAGE_WARNING_THRESHOLD) return true;
+  const percent = Math.min(100, Math.round(projectedRisk * 100));
+  return window.confirm(
+    `Browser storage is nearing its estimated limit (about ${percent}% used after this change). Saving a recovery copy may fail. Make room in your browser storage before continuing if needed. CloudPainter will not delete any sketches. Continue?`,
+  );
+}
+
+type BrowserStorageEstimate = { cloudPainterBytes: number; localStorageBytes: number; usageBytes?: number; quotaBytes?: number };
+
+async function readBrowserStorageEstimate(): Promise<BrowserStorageEstimate | null> {
+  let cloudPainterBytes = 0;
+  let localStorageBytes = 0;
+  try {
+    const cloudPainterKeys = new Set([STORE_KEY, PREVIOUS_PROJECT_KEY, PROJECT_HISTORY_KEY]);
+    for (let index = 0; index < localStorage.length; index++) {
+      const key = localStorage.key(index);
+      if (key === null) continue;
+      const value = localStorage.getItem(key) ?? '';
+      const bytes = (key.length + value.length) * 2;
+      localStorageBytes += bytes;
+      if (cloudPainterKeys.has(key)) cloudPainterBytes += bytes;
+    }
+  } catch {
+    return null;
+  }
+  let browserEstimate: { usage?: number; quota?: number } | undefined;
+  try {
+    browserEstimate = await navigator.storage?.estimate?.();
+  } catch {
+    // The localStorage estimate remains useful if the browser quota API is unavailable.
+  }
+  return {
+    cloudPainterBytes,
+    localStorageBytes,
+    ...(typeof browserEstimate?.usage === 'number' ? { usageBytes: browserEstimate.usage } : {}),
+    ...(typeof browserEstimate?.quota === 'number' ? { quotaBytes: browserEstimate.quota } : {}),
+  };
+}
+
+const LOCAL_STORAGE_QUOTA_GUIDELINE_BYTES = 5 * 1024 * 1024;

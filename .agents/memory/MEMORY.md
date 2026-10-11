@@ -12,5 +12,6 @@
 - [Workspace type declarations](workspace-type-declarations.md) — missing API exports may reflect stale referenced declarations rather than missing runtime source.
 - [Browser fixture module stubs](browser-fixture-module-stubs.md) — route-fulfilled ESM module stubs bypass Vite's bare-import rewriting; keep these stubs import-free.
 - [Browser image failure fixtures](browser-image-failure-fixtures.md) — malformed data URLs may not reliably exercise image decode-error handlers in Chromium.
+- [Local storage quota estimates](local-storage-quota-estimates.md) — StorageManager estimates the origin's shared storage, not localStorage's specific cap; use both signals conservatively.
 - [Poe Assistant upscaling](topaz-poe-route.md) — use the user's exact 4x/8x prompt with fixed Assistant; Poe chooses the provider.
 - [Poe mask semantics and privacy](poe-mask-privacy.md) — generated masks need review; “use mask” and ignored storage flags do not prove exact segmentation or zero retention.
