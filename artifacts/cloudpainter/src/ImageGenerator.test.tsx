@@ -327,3 +327,85 @@ test('saved sketches keep their own photo framing across switches and reloads', 
   await expect(page.getByTestId('input-photo-zoom')).toHaveValue('225');
   await expect(stageContent).toHaveAttribute('style', /translate3d\(60px, -34px, 0px\) scale\(2\.25\)/);
 });
+
+test('malformed saved photo framing is normalized without disabling the photo or canvas', async ({ page }) => {
+  const photo = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+  const layer = { id: 'malformed-framing-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] };
+  const project = (title: string, photoZoom: unknown, photoPan: unknown) => ({
+    image: photo,
+    width: 320,
+    height: 240,
+    layers: [layer],
+    selectedLayerId: layer.id,
+    title,
+    photoZoom,
+    photoPan,
+  });
+  const malformedZoom = project('Malformed zoom', 'not-a-number', { x: 'invalid', y: null });
+  const malformedPan = project('Malformed pan', 2, { x: 'invalid', y: null });
+  const outOfRange = project('Out of range framing', 20, { x: 1_000_000, y: -1_000_000 });
+  const belowMinimum = project('Below minimum framing', -5, { x: 48, y: -30 });
+
+  await page.addInitScript(({ storeKey, historyKey, active, history }) => {
+    if (sessionStorage.getItem('cloudpainter-malformed-framing-test-seeded')) return;
+    sessionStorage.setItem('cloudpainter-malformed-framing-test-seeded', '1');
+    localStorage.setItem(storeKey, JSON.stringify(active));
+    localStorage.setItem(historyKey, JSON.stringify(history));
+  }, {
+    storeKey: STORE_KEY,
+    historyKey: PROJECT_HISTORY_KEY,
+    active: malformedZoom,
+    history: [malformedPan, outOfRange, belowMinimum],
+  });
+  await page.goto('./');
+
+  const stageContent = page.locator('.stage-content');
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', photo);
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(0px, 0px, 0px\) scale\(1\)/);
+  await expect(page.locator('canvas.draw-surface')).toBeVisible();
+  await expect.poll(async () => {
+    const savedProject = await saved(page);
+    return { photoZoom: savedProject?.photoZoom, photoPan: savedProject?.photoPan };
+  }).toEqual({ photoZoom: 1, photoPan: { x: 0, y: 0 } });
+
+  await page.getByTestId('button-zoom-in').click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('125');
+  const canvas = page.locator('canvas.draw-surface');
+  const canvasBounds = await canvas.boundingBox();
+  expect(canvasBounds).not.toBeNull();
+  await page.mouse.move(canvasBounds!.x + canvasBounds!.width * 0.35, canvasBounds!.y + canvasBounds!.height * 0.35);
+  await page.mouse.down();
+  await page.mouse.move(canvasBounds!.x + canvasBounds!.width * 0.55, canvasBounds!.y + canvasBounds!.height * 0.55);
+  await page.mouse.up();
+  await expect.poll(async () => (await saved(page)).layers[0].strokes.length).toBe(1);
+
+  await page.getByRole('button', { name: 'Restore saved sketch: Malformed pan' }).click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('200');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(0px, 0px, 0px\) scale\(2\)/);
+
+  await page.getByRole('button', { name: 'Restore saved sketch: Out of range framing' }).click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('400');
+  await expect.poll(async () => {
+    const savedProject = await saved(page);
+    return {
+      photoZoom: savedProject?.photoZoom,
+      photoPan: savedProject?.photoPan,
+    };
+  }).toMatchObject({ photoZoom: 4 });
+  const normalizedPan = (await saved(page)).photoPan;
+  expect(Number.isFinite(normalizedPan.x)).toBe(true);
+  expect(Number.isFinite(normalizedPan.y)).toBe(true);
+  expect(Math.abs(normalizedPan.x)).toBeLessThan(1_000_000);
+  expect(Math.abs(normalizedPan.y)).toBeLessThan(1_000_000);
+  await expect(page.getByTestId('button-pan-mode')).toBeEnabled();
+  await expect(page.getByTestId('button-reset-photo-view')).toBeEnabled();
+  await expect(page.locator('canvas.draw-surface')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Restore saved sketch: Below minimum framing' }).click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(0px, 0px, 0px\) scale\(1\)/);
+
+  await page.getByTestId('button-zoom-in').click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('125');
+});
