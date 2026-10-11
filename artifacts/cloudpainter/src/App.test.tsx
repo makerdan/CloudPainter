@@ -579,6 +579,128 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
   });
 }
 
+for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) {
+  test(`denied initial project reads keep drawing usable and report failed ${savePath}`, async ({ page }) => {
+    const photo = await png(page, 'denied-read.png', 480, 320);
+    const before = {
+      image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
+      width: 480, height: 320, title: 'Artwork behind denied storage',
+      photoZoom: 1.5, photoPan: { x: 12, y: -8 },
+      selectedLayerId: 'denied-read-main',
+      layers: [
+        { id: 'denied-read-main', name: 'Saved drawing', visible: true, opacity: 0.65,
+          strokes: [{ points: [{ x: 0.2, y: 0.4 }, { x: 0.7, y: 0.4 }],
+            color: '#1e88e5', size: 8, tool: 'pen' }], redo: [] },
+        { id: 'denied-read-hidden', name: 'Saved hidden layer', visible: false, opacity: 0.8,
+          strokes: [], redo: [{ points: [{ x: 0.3, y: 0.6 }, { x: 0.6, y: 0.6 }],
+            color: '#43a047', size: 6, tool: 'pen' }] },
+      ],
+    };
+    const storedBytes = JSON.stringify(before);
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+
+    // Run in the incoming document, before React's lazy storage initializer.
+    // Seeding here also avoids the outgoing document's pagehide save.
+    await page.addInitScript(({ key, storedBytes }) => {
+      const originalGetItem = Storage.prototype.getItem;
+      const originalSetItem = Storage.prototype.setItem;
+      const marker = `${key}-denied-read-seeded`;
+      if (!sessionStorage.getItem(marker)) {
+        localStorage.setItem(key, storedBytes);
+        sessionStorage.setItem(marker, 'true');
+      }
+      const fixture = {
+        reads: 0,
+        writes: [] as string[],
+        storedBytes: () => originalGetItem.call(localStorage, key),
+        restore: () => {
+          Storage.prototype.getItem = originalGetItem;
+          Storage.prototype.setItem = originalSetItem;
+        },
+      };
+      (window as typeof window & { deniedReadFixture?: typeof fixture }).deniedReadFixture = fixture;
+      Storage.prototype.getItem = function (storageKey) {
+        if (this === localStorage && storageKey === key) {
+          fixture.reads++;
+          throw new DOMException('Test project storage access denied', 'SecurityError');
+        }
+        return originalGetItem.call(this, storageKey);
+      };
+      Storage.prototype.setItem = function (storageKey, value) {
+        if (this === localStorage && storageKey === key) {
+          fixture.writes.push(value);
+          throw new DOMException('Test project storage access denied', 'SecurityError');
+        }
+        return originalSetItem.call(this, storageKey, value);
+      };
+    }, { key: STORE_KEY, storedBytes });
+
+    try {
+      await page.reload();
+      await expect(page.getByTestId('button-photo-card')).toBeVisible();
+      await expect(page.getByTestId('img-reference')).toHaveCount(0);
+      await expect(page.getByTestId('status-save')).toHaveText('Storage is full');
+      await expect(page.getByText('Saved in this browser', { exact: true })).toHaveCount(0);
+
+      await page.getByTestId('button-add-layer').click();
+      await expect(page.locator('[data-testid^="layer-row-"]')).toHaveCount(2);
+      const stage = await page.getByTestId('canvas-stage').boundingBox();
+      expect(stage).not.toBeNull();
+      await page.mouse.move(stage!.x + stage!.width * 0.3, stage!.y + stage!.height * 0.4);
+      await page.mouse.down();
+      await page.mouse.move(stage!.x + stage!.width * 0.6, stage!.y + stage!.height * 0.6, { steps: 4 });
+      await page.mouse.up();
+      await expect(page.getByTestId('button-undo')).toBeEnabled();
+      await expect(page.getByTestId('status-save')).toHaveText('Saving…');
+      const writesBeforeSave = await page.evaluate(() => (
+        window as typeof window & { deniedReadFixture: { writes: string[] } }
+      ).deniedReadFixture.writes.length);
+      if (savePath === 'pagehide persistence') {
+        await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+      }
+      await expect(page.getByTestId('status-save')).toHaveText('Storage is full');
+      await expect(page.getByText('Saved in this browser', { exact: true })).toHaveCount(0);
+      const result = await page.evaluate(key => {
+        const fixture = (window as typeof window & {
+          deniedReadFixture: { reads: number; writes: string[]; storedBytes: () => string | null };
+        }).deniedReadFixture;
+        // The denial must not affect unrelated local keys or the same session key.
+        localStorage.setItem('denied-read-unrelated', 'untouched');
+        sessionStorage.setItem(key, 'session-only');
+        return {
+          reads: fixture.reads, writes: fixture.writes, storedBytes: fixture.storedBytes(),
+          unrelated: localStorage.getItem('denied-read-unrelated'),
+          session: sessionStorage.getItem(key),
+        };
+      }, STORE_KEY);
+      expect(result.reads).toBeGreaterThan(0);
+      expect(writesBeforeSave).toBeGreaterThan(0); // Initial fallback autosave was also denied.
+      expect(result.writes).toHaveLength(writesBeforeSave + 1);
+      const attempted = JSON.parse(result.writes.at(-1)!);
+      expect(attempted.title).toBe('Untitled idea');
+      expect(attempted.image).toBeNull();
+      expect(attempted.layers).toHaveLength(2);
+      expect(attempted.layers.find((layer: { id: string }) => layer.id === attempted.selectedLayerId).strokes).toHaveLength(1);
+      expect(result.storedBytes).toBe(storedBytes);
+      expect(JSON.parse(result.storedBytes!)).toEqual(before);
+      expect({ unrelated: result.unrelated, session: result.session })
+        .toEqual({ unrelated: 'untouched', session: 'session-only' });
+      expect(pageErrors).toEqual([]);
+    } finally {
+      await page.evaluate(() => {
+        const fixtureWindow = window as typeof window & {
+          deniedReadFixture?: { restore: () => void };
+        };
+        fixtureWindow.deniedReadFixture?.restore();
+        delete fixtureWindow.deniedReadFixture;
+      });
+    }
+    // Confirm ordinary reads work again and expose the exact original artwork.
+    expect(await page.evaluate(key => localStorage.getItem(key), STORE_KEY)).toBe(storedBytes);
+  });
+}
+
 for (const redoOnly of [false, true]) {
 test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, remains safe when already empty,' : 'strokes and redo history'} and persists after reload`, async ({ page }) => {
   const photo = await png(page, 'clear-layer-reference.png', 480, 320);

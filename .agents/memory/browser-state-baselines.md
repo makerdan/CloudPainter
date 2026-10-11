@@ -31,3 +31,13 @@ baseline even though the fixture write succeeded.
 
 **How to apply:** Seed after the outgoing pagehide flush and use a session marker
 to prevent later reloads from reseeding and hiding persistence regressions.
+
+When controlling browser timers, avoid pausing at a fixed timestamp that may
+already be in the past for the page. Prefer a current page-derived time, or let
+short debounce timers run naturally when exact timing is not central to the check.
+
+**Why:** A hard-coded test clock timestamp became stale relative to the page clock,
+making a storage-denial regression fail before reaching its assertions.
+
+**How to apply:** Freeze time only when deterministic timer control is needed,
+and derive the pause point from the current browser clock.
