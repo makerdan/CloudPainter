@@ -241,28 +241,23 @@ for the post-rebase update; generated build/test artifacts are ignored.
   confirmation test timed out waiting for `upscale-route-disclosure`.
   Tooltips passed 3/4; the broad “every workspace button” hover/focus test
   could not find a tooltip. These failures remain visible and are not waived.
-- `CLOUDPAINTER_TEST_URL=http://127.0.0.1:4178/ pnpm --filter @workspace/cloudpainter exec playwright test --config playwright.config.ts --list --grep-invert 'signed-in generation'`
-  successfully collected 47 account-free browser cases. Running that exact
-  filter on the isolated server ended red at its 240-second suite timeout:
-  18 passed, 26 failed, and 3 did not run. Failures included project-state
-  assertions that disagreed with normalized photo-view defaults and an
-  anonymous sign-in-control assertion; no failures were removed or marked
-  passing. The full signed-in suites were not run without their required
-  authorized storage-state fixture.
-- A subsequent no-auth verification collected the same 47 cases and passed
-  6/6 focused photo-card cases, 7/7 account-independent image-generator cases,
-  and 4/4 pan-limit photo cases. Each suite stubs `/api/images/config` and
-  `/api/images/generate` locally; `CLOUDPAINTER_AUTH_STATE` was unset. A run of
-  the named `test:anonymous-photo-and-images` command still reached its
-  240-second timeout (12 passed, 25 failed, 10 not run); the failing App tests
-  mostly compare saved projects without the normalized `photoZoom` and
-  `photoPan` defaults. These pre-existing failures remain visible to CI.
+- An earlier run collected 47 account-free browser cases but hit the
+  240-second timeout with project-state expectations that omitted normalized
+  photo-view defaults. Those fixture mismatches are now corrected. Exact
+  project snapshots also wait for framing autosaves to settle, and the
+  immediate-reload history check derives its paused clock from the browser's
+  current time.
+- The final no-auth run of
+  `env -u CLOUDPAINTER_AUTH_STATE CLOUDPAINTER_TEST_URL=https://$REPLIT_DEV_DOMAIN/ pnpm --filter @workspace/cloudpainter run test:anonymous-photo-and-images`
+  passed all 47 selected cases in 2 minutes, under the 240-second suite timeout.
+  Playwright runs four tests in parallel; the app, image-generator and pan-limit
+  files remain selected. The sole exclusion is the explicitly named
+  `signed-in generation` group, which requires an authorized Clerk
+  storage-state fixture. Image API endpoints are locally stubbed; no paid
+  provider requests or signed-in browser state are used.
 - `pnpm --filter @workspace/cloudpainter run typecheck` remains blocked by 58
   existing errors in CloudPainter/API generated exports and outline-related
   modules. No application or generated API code was changed for this work.
-- The browser validation is therefore locally red and will make `validation`
-  and `ci-required` fail closed. Resolve or explicitly disposition the listed
-  browser failures before considering this candidate for branch protection.
 - `yq -o=json '.' .github/workflows/cloudpainter-ci.yml` plus Node structural
   assertions passed for YAML parsing, exact PR/`main`-push scope, read-only
   permissions, PostgreSQL health check, job dependency, unconditional aggregate,

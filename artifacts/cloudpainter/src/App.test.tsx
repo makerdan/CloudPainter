@@ -276,6 +276,10 @@ test('cancelling replacement preserves zoom, pan, and saved photo, dimensions, t
     return project?.layers[1]?.strokes.length;
   }).toBe(1);
   await zoomAndPan(page);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return { photoZoom: project?.photoZoom, photoPan: project?.photoPan };
+  }).toEqual({ photoZoom: 1.5, photoPan: { x: 42, y: -26 } });
   const before = await savedProject(page);
   const viewBefore = await photoView(page);
   const replacement = page.waitForEvent('filechooser');
@@ -375,6 +379,7 @@ for (const action of ['undo', 'redo'] as const) {
       color, size: 8, tool: 'pen',
     });
     const before = {
+      photoZoom: 1, photoPan: { x: 0, y: 0 },
       image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
       width: 480, height: 320, title: 'Independent drawing histories',
       selectedLayerId: 'history-bottom',
@@ -462,6 +467,7 @@ for (const action of ['undo', 'redo'] as const) {
       color, size: 8, tool: 'pen',
     });
     const before = {
+      photoZoom: 1, photoPan: { x: 0, y: 0 },
       image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
       width: 480, height: 320, title: 'Immediate history reload',
       selectedLayerId: 'immediate-middle',
@@ -502,7 +508,7 @@ for (const action of ['undo', 'redo'] as const) {
     };
     // Freeze time so even a slow test runner cannot accidentally let the
     // 500ms debounce save first and mask a broken pagehide flush.
-    const frozenTime = new Date('2026-10-11T12:00:00Z');
+    const frozenTime = new Date(await page.evaluate(() => Date.now()));
     await page.clock.install({ time: frozenTime });
     await page.clock.pauseAt(frozenTime);
     await page.getByTestId(`button-${action}`).click();
@@ -533,6 +539,7 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
       points: [{ x: 0.2, y }, { x: 0.7, y }], color, size: 8, tool: 'pen',
     });
     const before = {
+      photoZoom: 1, photoPan: { x: 0, y: 0 },
       image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
       width: 480, height: 320, title: 'Previously saved artwork',
       selectedLayerId: 'storage-main',
@@ -557,7 +564,7 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
     expect(await savedProject(page)).toEqual(before);
     const storedBytes = await page.evaluate(key => localStorage.getItem(key), STORE_KEY);
 
-    const frozenTime = new Date('2026-10-11T12:00:00Z');
+    const frozenTime = new Date(await page.evaluate(() => Date.now()));
     await page.clock.install({ time: frozenTime });
     await page.clock.pauseAt(frozenTime);
     await page.evaluate(key => {
@@ -760,6 +767,7 @@ test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, rema
   });
   // Select the middle layer; protect both neighbors' artwork and history.
   const before = {
+    photoZoom: 1, photoPan: { x: 0, y: 0 },
     image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
     width: 480, height: 320, title: 'Keep the rest of my sketch',
     selectedLayerId: 'layer-clear-target',
@@ -931,6 +939,7 @@ test('layer moves preserve selection, artwork, properties and history across rel
   const photo = await png(page, 'layer-order.png', 480, 320);
   const ids = ['order-bottom', 'order-middle', 'order-top'];
   const before = {
+    photoZoom: 1, photoPan: { x: 0, y: 0 },
     image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
     width: 480, height: 320, title: 'Layer ordering', selectedLayerId: ids[1],
     layers: ids.map((id, index) => ({
@@ -999,6 +1008,7 @@ test.describe('layer rename regression', () => {
       const photo = await png(page, 'rename-switch-reference.png', 480, 320);
       const ids = ['switch-bottom', 'switch-middle', 'switch-top'];
       const before = {
+        photoZoom: 1, photoPan: { x: 0, y: 0 },
         image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
         width: 480, height: 320, title: 'Independent rename drafts', selectedLayerId: ids[1],
         layers: ids.map((id, index) => ({
@@ -1111,6 +1121,7 @@ test.describe('layer rename regression', () => {
         // Independent fixture: each layer has distinct artwork, redo history,
         // opacity and a stable ID. The unselected target is deliberately hidden.
         const before = {
+          photoZoom: 1, photoPan: { x: 0, y: 0 },
           image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
           width: 480, height: 320, title: 'Preserve my named sketch',
           selectedLayerId: 'rename-middle',
@@ -1281,13 +1292,17 @@ test('undo and redo preserve the zoomed and panned photo while moving the exact 
   await page.mouse.down();
   await page.mouse.move(box!.x + box!.width * 0.6, box!.y + box!.height * 0.6, { steps: 8 });
   await page.mouse.up();
-  // Wait for the debounced save before establishing history and view baselines.
+  // Wait for the stroke save before changing the view.
   await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  await zoomAndPan(page);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return { photoZoom: project?.photoZoom, photoPan: project?.photoPan };
+  }).toEqual({ photoZoom: 1.5, photoPan: { x: 42, y: -26 } });
   const before = await savedProject(page);
   expect(before.layers[0].redo).toEqual([]);
   expect(before.layers[0].strokes[0].points.length).toBeGreaterThan(1);
 
-  await zoomAndPan(page);
   await page.getByTestId('button-pan-mode').click();
   const viewBefore = await photoView(page);
   expect(viewBefore.content!.width / viewBefore.stage!.width).toBeCloseTo(1.5, 2);
