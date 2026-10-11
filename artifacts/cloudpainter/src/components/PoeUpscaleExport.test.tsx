@@ -89,6 +89,62 @@ describe("Poe Assistant upscale export", () => {
     expect(savedProject).toEqual(projectSnapshot);
   });
 
+  describe.each([4, 8] as const)("%s× invalid results", scale => {
+    const validResult = {
+      b64_json: Buffer.from(mergedBytes).toString("base64"),
+      mime: "image/png",
+      width: 120 * scale,
+      height: 80 * scale,
+    };
+    const metadataError = "Poe did not return a PNG at the exact requested dimensions. No file was downloaded.";
+
+    it.each([
+      { name: "wrong width", result: { ...validResult, width: validResult.width - 1 }, message: metadataError },
+      { name: "wrong height", result: { ...validResult, height: validResult.height - 1 }, message: metadataError },
+      { name: "wrong MIME type", result: { ...validResult, mime: "image/jpeg" }, message: metadataError },
+      {
+        name: "invalid PNG signature",
+        result: { ...validResult, b64_json: Buffer.from([0, ...mergedBytes.slice(1)]).toString("base64") },
+        message: "Poe did not return a valid PNG. No file was downloaded.",
+      },
+      {
+        name: "truncated PNG signature",
+        result: { ...validResult, b64_json: Buffer.from(mergedBytes.slice(0, 7)).toString("base64") },
+        message: "Poe did not return a valid PNG. No file was downloaded.",
+      },
+    ])("rejects $name without downloading or automatically retrying", async ({ result, message }) => {
+      const user = userEvent.setup();
+      mocks.upscale.mockResolvedValue(result);
+      const { composeImage } = renderExport();
+      await user.selectOptions(screen.getByTestId("select-upscale-factor"), String(scale));
+      await user.click(screen.getByTestId("button-upscale-export"));
+      const dialog = within(screen.getByRole("dialog", { name: "Send this composition to Poe?" }));
+      expect(composeImage).not.toHaveBeenCalled();
+      expect(mocks.upscale).not.toHaveBeenCalled();
+      await user.click(dialog.getByRole("button", { name: "Send and upscale" }));
+
+      expect((await screen.findByTestId("upscale-error")).textContent).toBe(message);
+      await waitFor(() => expect(mocks.configuration.refetch).toHaveBeenCalledOnce());
+      expect(composeImage).toHaveBeenCalledOnce();
+      expect(mocks.upscale).toHaveBeenCalledExactlyOnceWith(
+        { pngBase64: Buffer.from(mergedBytes).toString("base64"), scale },
+        { signal: expect.any(AbortSignal) },
+      );
+      expect(screen.queryByTestId("upscale-status")).toBeNull();
+      expect(URL.createObjectURL).not.toHaveBeenCalled();
+      expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+
+      // Finishing and dismissing the failed attempt must not resend the image.
+      await user.click(dialog.getByRole("button", { name: "Keep image in browser" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(screen.getByRole("alert").textContent).toBe(message);
+      expect(mocks.upscale).toHaveBeenCalledOnce();
+      expect(composeImage).toHaveBeenCalledOnce();
+      expect(URL.createObjectURL).not.toHaveBeenCalled();
+      expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+    });
+  });
+
   it.each([4, 8] as const)("cancels a reviewed %s× export without composing, sending, or downloading", async scale => {
     const user = userEvent.setup();
     const { composeImage } = renderExport();
