@@ -1662,7 +1662,23 @@ function Home() {
           </aside>
         </div>
       </section>
-      {toast && <div className="toast-message" role="status" data-testid="status-toast">{toast}</div>}
+      {toast && (
+        <div className="toast-message" role="status" data-testid="status-toast">
+          <span>{toast}</span>
+          <button
+            type="button"
+            className="toast-dismiss"
+            aria-label="Dismiss message"
+            onClick={() => {
+              window.clearTimeout(toastTimer.current);
+              toastTimer.current = undefined;
+              setToast('');
+            }}
+          >
+            <X size={15} aria-hidden="true" />
+          </button>
+        </div>
+      )}
     </main>
   );
 }
