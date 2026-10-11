@@ -144,6 +144,16 @@ describe("Poe Assistant upscale export", () => {
         result: { ...validResult, b64_json: Buffer.from(mergedBytes.slice(0, 7)).toString("base64") },
         message: "Poe did not return a valid PNG. No file was downloaded.",
       },
+      {
+        name: "malformed base64",
+        result: { ...validResult, b64_json: "not base64!" },
+        message: "Poe did not return a valid PNG. No file was downloaded.",
+      },
+      {
+        name: "non-string image data",
+        result: { ...validResult, b64_json: null as unknown as string },
+        message: "Poe did not return a valid PNG. No file was downloaded.",
+      },
     ])("rejects $name without downloading or automatically retrying", async ({ result, message }) => {
       const user = userEvent.setup();
       mocks.upscale.mockResolvedValue(result);
@@ -175,6 +185,55 @@ describe("Poe Assistant upscale export", () => {
       expect(URL.createObjectURL).not.toHaveBeenCalled();
       expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
     });
+  });
+
+  it("rejects an oversized encoded result before base64 decoding or download", async () => {
+    const user = userEvent.setup();
+    const atobSpy = vi.spyOn(globalThis, "atob");
+    mocks.upscale.mockResolvedValue({
+      b64_json: "A".repeat(16 * 1024 * 1024 + 4),
+      mime: "image/png",
+      width: 480,
+      height: 320,
+    });
+    renderExport();
+    await user.click(screen.getByTestId("button-upscale-export"));
+    await user.click(screen.getByTestId("button-confirm-upscale"));
+
+    expect((await screen.findByTestId("upscale-error")).textContent)
+      .toBe("Poe returned an image outside the supported size limit. No file was downloaded.");
+    expect(atobSpy).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("upscale-status")).toBeNull();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+  });
+
+  it("rejects an oversized decoded result without retaining an earlier download status", async () => {
+    const user = userEvent.setup();
+    const atobSpy = vi.spyOn(globalThis, "atob");
+    const validResult = {
+      b64_json: Buffer.from(mergedBytes).toString("base64"),
+      mime: "image/png",
+      width: 480,
+      height: 320,
+    };
+    mocks.upscale.mockResolvedValueOnce(validResult).mockResolvedValueOnce(validResult);
+    renderExport();
+
+    await user.click(screen.getByTestId("button-upscale-export"));
+    await user.click(screen.getByTestId("button-confirm-upscale"));
+    await waitFor(() => expect(screen.getByTestId("upscale-status").textContent).toContain("downloaded"));
+    expect(URL.createObjectURL).toHaveBeenCalledOnce();
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledOnce();
+
+    atobSpy.mockReturnValue("x".repeat(12 * 1024 * 1024 + 1));
+    await user.click(screen.getByRole("button", { name: "Review 4× export" }));
+    await user.click(screen.getByTestId("button-confirm-upscale"));
+    expect((await screen.findByTestId("upscale-error")).textContent)
+      .toBe("Poe returned an image outside the supported size limit. No file was downloaded.");
+    expect(screen.queryByTestId("upscale-status")).toBeNull();
+    expect(URL.createObjectURL).toHaveBeenCalledOnce();
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledOnce();
   });
 
   it.each([4, 8] as const)("cancels a reviewed %s× export without composing, sending, or downloading", async scale => {

@@ -17,6 +17,11 @@ type Props = {
   height: number;
 };
 
+const MAX_UPSCALE_IMAGE_BYTES = 12 * 1024 * 1024;
+const MAX_UPSCALE_BASE64_CHARS = Math.ceil(MAX_UPSCALE_IMAGE_BYTES / 3) * 4;
+const INVALID_PNG_ERROR = "Poe did not return a valid PNG. No file was downloaded.";
+const UPSCALE_SIZE_ERROR = "Poe returned an image outside the supported size limit. No file was downloaded.";
+
 async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -35,6 +40,33 @@ async function blobToBase64(blob: Blob): Promise<string> {
     };
     reader.readAsDataURL(blob);
   });
+}
+
+function decodeUpscalePng(encoded: unknown): Uint8Array {
+  if (typeof encoded === "string" && encoded.length > MAX_UPSCALE_BASE64_CHARS) {
+    throw new Error(UPSCALE_SIZE_ERROR);
+  }
+  if (typeof encoded !== "string" || encoded.length === 0 || encoded.length % 4 !== 0
+    || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+    throw new Error(INVALID_PNG_ERROR);
+  }
+
+  let binary: string;
+  try {
+    binary = atob(encoded);
+  } catch {
+    throw new Error(INVALID_PNG_ERROR);
+  }
+  if (binary.length === 0) throw new Error(INVALID_PNG_ERROR);
+  if (binary.length > MAX_UPSCALE_IMAGE_BYTES) throw new Error(UPSCALE_SIZE_ERROR);
+
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  if (bytes.length < 8 || bytes[0] !== 137 || bytes[1] !== 80 || bytes[2] !== 78 || bytes[3] !== 71
+    || bytes[4] !== 13 || bytes[5] !== 10 || bytes[6] !== 26 || bytes[7] !== 10) {
+    throw new Error(INVALID_PNG_ERROR);
+  }
+  return bytes;
 }
 
 function safeError(error: unknown): string {
@@ -103,19 +135,11 @@ export function PoeUpscaleExport({ composeImage, title, width, height }: Props) 
         { signal: controller.signal },
       );
       if (controller.signal.aborted || actor !== identityRef.current) return;
-      if (result.mime !== "image/png" || result.width !== width * scale || result.height !== height * scale) {
+      if (!result || typeof result !== "object" || result.mime !== "image/png"
+        || result.width !== width * scale || result.height !== height * scale) {
         throw new Error("Poe did not return a PNG at the exact requested dimensions. No file was downloaded.");
       }
-      const binary = atob(result.b64_json);
-      if (binary.length === 0 || binary.length > 12 * 1024 * 1024) {
-        throw new Error("Poe returned an image outside the supported size limit. No file was downloaded.");
-      }
-      const bytes = new Uint8Array(binary.length);
-      for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
-      if (bytes.length < 8 || bytes[0] !== 137 || bytes[1] !== 80 || bytes[2] !== 78 || bytes[3] !== 71
-        || bytes[4] !== 13 || bytes[5] !== 10 || bytes[6] !== 26 || bytes[7] !== 10) {
-        throw new Error("Poe did not return a valid PNG. No file was downloaded.");
-      }
+      const bytes = decodeUpscalePng(result.b64_json);
       const objectUrl = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
       const link = document.createElement("a");
       const safeTitle = title.trim().replace(/[^\w-]+/g, "-") || "cloudpainter-idea";
