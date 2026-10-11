@@ -85,7 +85,7 @@ a 45-minute timeout. The aggregate job has a five-minute timeout.
 | `pnpm --filter @workspace/api-spec run codegen` | Included before compilation. Then `git diff --exit-code -- lib/api-client-react/src/generated lib/api-zod/src/generated` and an untracked-file check fail if generated outputs are stale or newly emitted. |
 | `pnpm run build` with `PORT=4173 BASE_PATH=/` | Included; this root command runs `pnpm run typecheck` and all package builds. Covers `artifacts/api-server`, `artifacts/cloudpainter`, and `artifacts/mockup-sandbox` build/typecheck scripts, plus the workspace TypeScript project build. |
 | `node --test scripts/ci/check-required-results.test.mjs` | Included; directly tests the aggregator contract. |
-| `node --test scripts/ci/api-test-coverage.test.mjs` | Included in the existing validation job; runs the database step with local command stubs to check effective image-access/palettes/settings selection, reject a comment-only settings mention, and preserve nonzero suite results. No database, live auth, provider, or real package command is used by this guard. |
+| `node --test scripts/ci/api-test-coverage.test.mjs` | Included in the existing validation job; asserts the exact step-scoped disposable database URL before running local command stubs, rejects shared/secret-backed URL substitutions, checks effective image-access/palettes/settings selection, rejects a comment-only settings mention, and preserves nonzero suite results. No database, live auth, provider, or real package command is used by this guard. |
 | `pnpm run test:regression-guard` | Included; tests the regression-guard checker and local task-plan runner using temporary fixtures. |
 | `pnpm --filter @workspace/api-server run test:outline` | Included; local Express tests use fixtures and stubbed provider dependencies. |
 | `pnpm --filter @workspace/api-server run test:image-upscale` | Included; provider transport is stubbed; no paid request. |
@@ -180,6 +180,38 @@ policy was inspected or changed for this update; there was no remote trigger,
 dispatch, rerun, push, deployment, secret/environment change, or branch-rule
 change. The earlier installation/run observations below are historical and
 must not be read as current remote evidence.
+
+## Disposable database target regression fixtures
+
+The portable API coverage guard now checks the existing database step's exact
+`env` stanza against the disposable PostgreSQL service URL before creating or
+executing its command stubs. Narrow in-memory workflow fixtures replace only
+that step's URL with either a synthetic shared host (`shared-db.invalid`) or
+the literal GitHub expression `${{ secrets.DATABASE_URL }}`; both must be
+rejected by the connection-boundary assertion. The unchanged workflow remains
+the positive control and still selects all three suites. These checks inspect
+text only: they do not resolve a secret, connect to PostgreSQL, or run pnpm.
+They deliberately support the current step shape, not generic YAML discovery.
+They do not claim to detect arbitrary shell-level connection overrides.
+
+The check remains directly covered by the existing PR/`main`-push validation
+job; no additional workflow or duplicated command was introduced. The service,
+suite commands, action pins, permissions, and workflow file were not changed.
+Remote activation, passing status, and merge requirements remain unknown;
+no remote action was taken.
+
+On 2026-10-11, the owner explicitly authorized one task-scoped local launch of
+`node --test scripts/ci/api-test-coverage.test.mjs`. No active checked validation
+route was verified and no project-wide governance activation is claimed.
+An independent Python monotonic supervisor applied a 30-second execution cap,
+10-second cleanup allowance, and 1 MiB combined-output cap to a private process
+group. The existing tests retain 10-second per-test limits and 5-second shell
+child limits; there are no hooks. Output and source digests were recorded under
+the ignored `generated-artifacts/ci-database-boundary/` directory.
+The single launch exited **0**, with **9/9 tests passing**, none cancelled or
+skipped, in about **0.16 seconds**. The owned process group was confirmed gone.
+No database, browser, build, provider, or real package test was launched.
+This is focused local fixture evidence, not a passing full CI pipeline.
 
 ## Event scopes and security
 

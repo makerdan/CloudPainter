@@ -9,6 +9,7 @@ const workflow = readFileSync(new URL('../../.github/workflows/cloudpainter-ci.y
 const databaseStep = 'Run database tests against the disposable PostgreSQL service';
 const guardStep = 'Guard executable API database coverage';
 const suites = ['test:image-access', 'test:palettes', 'test:settings'];
+const disposableDatabaseUrl = 'postgresql://postgres:ci-test-password@127.0.0.1:5432/cloudpainter_test';
 
 // Deliberately supports only this workflow's existing step indentation and run
 // formats. Fail on a changed shape rather than mistaking comments/docs for code.
@@ -20,12 +21,19 @@ function stepBody(source, name) {
 
 function databaseScript(source) {
   const body = stepBody(source, databaseStep);
+  const environment = body.match(/^        env:\n((?:          [^\n]*\n)+)(?=        run:)/m);
+  assert.ok(environment, 'Expected the database step to declare its disposable environment');
+  assert.equal(environment[1], `          DATABASE_URL: ${disposableDatabaseUrl}\n`,
+    'Database tests must target only the disposable PostgreSQL service URL');
   const match = body.match(/^        run: \|\n((?:          [^\n]*\n|\n)+)$/m);
   assert.ok(match, 'Expected the database step to end with its inline shell script');
   return match[1].replace(/^          /gm, '');
 }
 
 function runDatabaseStage(source, failingSuite = '') {
+  // Validate the step-scoped connection boundary before creating/running stubs.
+  // The URL is inspected as text only; it is never resolved or used to connect.
+  const script = databaseScript(source);
   const directory = mkdtempSync(join(tmpdir(), 'api-ci-coverage-'));
   try {
     // No pnpm, database, credentials, provider or real package hook is invoked.
@@ -37,7 +45,7 @@ fi
 if [ "$4" = "$FAILING_SUITE" ]; then exit 23; fi
 exit 0
 `, { mode: 0o700 });
-    const result = spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', databaseScript(source)], {
+    const result = spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script], {
       cwd: directory,
       // Do not inherit database, Clerk or provider environment variables.
       env: {
@@ -76,6 +84,23 @@ test('the existing validation job selects the portable coverage guard', { timeou
 test('the executable database stage selects all three API suites', { timeout: 10000 }, () => {
   runDatabaseStage(workflow);
 });
+
+for (const [label, target] of [
+  ['shared database URL', 'postgresql://fixture-user:fixture-password@shared-db.invalid:5432/shared'],
+  ['secret-backed database URL', '${{ secrets.DATABASE_URL }}'],
+]) {
+  test(`replacing the disposable target with a ${label} is rejected`, { timeout: 10000 }, () => {
+    const body = stepBody(workflow, databaseStep);
+    const mutatedBody = body.replace(
+      `          DATABASE_URL: ${disposableDatabaseUrl}\n`,
+      `          DATABASE_URL: ${target}\n`,
+    );
+    assert.notEqual(mutatedBody, body, 'Connection fixture must replace the database step URL');
+    const mutated = workflow.replace(body, mutatedBody);
+    assert.throws(() => runDatabaseStage(mutated),
+      /Database tests must target only the disposable PostgreSQL service URL/);
+  });
+}
 
 for (const suite of suites) {
   test(`${suite} failure makes the database stage fail after running its siblings`, { timeout: 10000 }, () => {
