@@ -9,15 +9,22 @@ env.backends.onnx.wasm!.numThreads = 1;
 type Input = { mode: 'local' | 'edge'; pixels: Uint8ClampedArray; width: number; height: number; sensitivity: number };
 
 self.onmessage = async (event: MessageEvent<Input>) => {
+  let phase: 'input preparation' | 'loading' | 'inference' | 'edge tracing' = 'input preparation';
   try {
     const input = event.data;
     if (!Number.isInteger(input.width) || !Number.isInteger(input.height) || input.width < 1 || input.height < 1
       || input.width * input.height > 512 * 512 || input.pixels.length !== input.width * input.height * 4) throw new Error('Image exceeds inference limits.');
-    if (input.mode === 'edge') { self.postMessage({ candidates: traceEdges(input) }); return; }
+    if (input.mode === 'edge') {
+      phase = 'edge tracing';
+      self.postMessage({ candidates: traceEdges(input) });
+      return;
+    }
     self.postMessage({ status: 'Downloading/loading local segmentation model… No photo pixels are uploaded.' });
+    phase = 'loading';
     const segmenter = await pipeline('image-segmentation', 'Xenova/detr-resnet-50-panoptic', {
       device: 'wasm', dtype: 'q8',
     });
+    phase = 'inference';
     try {
       // The model's default preprocessor enlarges small photos to 800px.
       // Bound the actual inference tensor as well as the original pixel copy.
@@ -43,7 +50,9 @@ self.onmessage = async (event: MessageEvent<Input>) => {
       }
       self.postMessage({ candidates });
     } finally { await segmenter.dispose(); }
-  } catch {
-    self.postMessage({ error: 'Local inference failed. Check model-download access or try a smaller region or Trace an edge. No hosted fallback was used.' });
+  } catch (error) {
+    const detail = error instanceof Error && error.message ? ` ${error.message}` : '';
+    const operation = phase === 'edge tracing' ? 'Edge tracing' : `Local model ${phase}`;
+    self.postMessage({ error: `${operation} failed.${detail} No hosted fallback was used.` });
   }
 };

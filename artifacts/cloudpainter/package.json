@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:image-dimensions": "node --experimental-strip-types --test src/lib/imageDimensions.test.ts",
     "test:outline": "node --experimental-strip-types --test --test-timeout=10000 src/lib/outlinePrivacy.test.ts",
+    "test:outline-model-browser": "node --test --test-timeout=230000 tests/outline-subject-regression.browser.mjs",
     "test:outline-ui": "vitest run --config vitest.outline.config.ts",
     "test:stroke-renderer": "node --experimental-strip-types --test --test-timeout=10000 src/lib/strokeRenderer.test.ts",
     "test:layer-clipboard": "node --experimental-strip-types --test --test-timeout=10000 src/lib/layerClipboard.test.ts",

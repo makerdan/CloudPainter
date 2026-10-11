@@ -16,3 +16,4 @@
 - [Poe Assistant upscaling](topaz-poe-route.md) — use the user's exact 4x/8x prompt with fixed Assistant; Poe chooses the provider.
 - [Poe mask semantics and privacy](poe-mask-privacy.md) — generated masks need review; “use mask” and ignored storage flags do not prove exact segmentation or zero retention.
 - [Markdown line-field parsing](markdown-line-field-parsing.md) — use horizontal whitespace in line-oriented Markdown field regexes; `\s*` can cross into the next field.
+- [On-device outline fixtures](on-device-outline-fixtures.md) — validate public animal fixtures against the actual local model; labels and photo contents alone do not guarantee usable masks.
