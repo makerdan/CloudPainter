@@ -278,6 +278,56 @@ build, real package suite or remote action ran. Remote activation, passing
 status and required-check policy remain unknown; this focused result is not
 Failure Gate activation or a full CI pass.
 
+
+## PostgreSQL service job-scoping regression fixtures
+
+Nine narrow in-memory fixtures in `scripts/ci/api-test-coverage.test.mjs`
+exercise the service agreement guard's job boundary without changing the real
+workflow. An independently declared synthetic PostgreSQL service has the valid
+image, environment and port mapping. Four negative controls place that service
+in another job, before or after `validation`, while validation's actual service
+is either absent or has a mismatched database name. Two further negative
+controls retain the entire valid service as indented comments inside validation.
+All six must fail at the intended missing-service or environment-agreement
+assertion, not an incidental step-parser failure.
+
+Three positive controls retain validation's unchanged service while adding an
+unrelated job before or after it, or an unrelated sibling service. Those services
+deliberately use different database/host-port settings; the original database
+script must remain identical and acceptable. Every fixture leaves the executable
+database step unchanged. These checks call only the text guard/script extractor,
+not shell stubs, package commands, YAML discovery or PostgreSQL.
+
+On 2026-10-11, the owner explicitly approved one focused local launch with
+Failure Gate inactive for this operation only. No active checked runner or
+project-wide governance activation is claimed. The exact test command was:
+
+```sh
+node --test --test-timeout=10000 --test-concurrency=1 --test-reporter=tap \
+  '--test-name-pattern=^PostgreSQL service job scope:' \
+  scripts/ci/api-test-coverage.test.mjs
+```
+
+It exited **0**, with **9/9 selected tests passing**, zero failures, skips or
+cancellations, in **0.14 seconds** of supervised elapsed time on Node 24.13.0.
+An independent Python monotonic supervisor enforced a 30-second execution
+deadline, 10-second cleanup/termination-verification allowance, and 1 MiB output
+cap. The selected tests retain explicit 10-second limits and have no hooks or
+child-shell launches. Test-file and workflow SHA-256 hashes matched before and
+after execution; the owned process group was confirmed stopped. The supervisor,
+TAP output and raw results/hashes are in ignored
+`generated-artifacts/ci-service-job-scope/`.
+
+CI coverage is **direct, configured** through the existing
+`node --test scripts/ci/api-test-coverage.test.mjs` step in the PR/`main`-push
+validation job. The local selector narrows this owner-approved execution only;
+it does not change canonical CI coverage or add a duplicate command/workflow.
+The real `.github/workflows/cloudpainter-ci.yml`, commands, service settings,
+permissions and action pins are unchanged. No database connection, secret
+lookup, real package suite, build, browser or remote operation occurred.
+Remote activation, passing runs and required-check policy remain **unknown**.
+This is focused fixture evidence, not a full-suite or full-CI pass.
+
 ## Shell-level database target regression fixtures
 
 The guard now initializes the stub shell with the same disposable `DATABASE_URL`

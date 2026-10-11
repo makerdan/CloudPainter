@@ -253,6 +253,97 @@ for (const [label, replacement] of [
   });
 }
 
+// Independent synthetic decoy, not copied from the service under test. Keep
+// these fixtures text-only: no YAML discovery, shell stubs or connections.
+const decoyPostgresService = [
+  '    services:',
+  '      postgres:',
+  '        image: postgres:16.10-bookworm',
+  '        env:',
+  '          POSTGRES_DB: cloudpainter_test',
+  '          POSTGRES_USER: postgres',
+  '          POSTGRES_PASSWORD: ci-test-password',
+  '        ports:',
+  '          - 5432:5432',
+  '        options: >-',
+  '          --health-cmd "pg_isready -U postgres -d cloudpainter_test"',
+  '          --health-interval 5s',
+  '          --health-timeout 5s',
+  '          --health-retries 12',
+  '',
+].join('\n');
+const decoyJob = `  fixture-decoy:\n    runs-on: ubuntu-24.04\n${decoyPostgresService}`;
+
+function serviceScopeFixture(state, decoy, placement) {
+  const marker = '    services:\n      postgres:\n';
+  assert.equal(workflow.split(marker).length, 2, 'Expected one original service stanza');
+  const originalService = marker + workflow.split(marker)[1].split('    steps:\n')[0];
+  assert.ok(originalService.endsWith('\n'), 'Expected the service to precede steps');
+  const replacement = state === 'missing' ? '' : state === 'mismatched'
+    ? originalService.replace('POSTGRES_DB: cloudpainter_test', 'POSTGRES_DB: fixture_wrong_database')
+    : originalService;
+  let source = workflow.replace(originalService, replacement);
+  if (placement === 'before') {
+    assert.equal(source.split('  validation:\n').length, 2);
+    source = source.replace('  validation:\n', `${decoy}  validation:\n`);
+  } else {
+    assert.equal(source.split('  ci-required:\n').length, 2);
+    source = source.replace('  ci-required:\n', `${decoy}  ci-required:\n`);
+  }
+  assert.notEqual(source, workflow, 'Scoping fixture must change the workflow text');
+  assert.equal(stepBody(source, databaseStep), stepBody(workflow, databaseStep),
+    'Scoping fixture must leave the database step unchanged');
+  return source;
+}
+
+for (const state of ['missing', 'mismatched']) {
+  const expected = state === 'missing'
+    ? /Expected exactly one disposable PostgreSQL service in validation/
+    : /PostgreSQL service environment must match the disposable database URL/;
+  for (const placement of ['before', 'after']) {
+    test(`PostgreSQL service job scope: ${state} validation service rejects valid decoy job ${placement}`,
+      { timeout: 10000 }, () => {
+        const source = serviceScopeFixture(state, decoyJob, placement);
+        assert.ok(source.includes(decoyJob), 'The other job must retain its valid service');
+        assert.throws(() => databaseScript(source), expected);
+      });
+  }
+  test(`PostgreSQL service job scope: ${state} validation service rejects comment-only decoy`,
+    { timeout: 10000 }, () => {
+      // Indented comments stay inside validation, but contain no YAML service.
+      const comment = decoyPostgresService.trimEnd().split('\n')
+        .map(line => `    # ${line.trimStart()}\n`).join('');
+      const source = serviceScopeFixture(state, comment, 'before')
+        .replace(`${comment}  validation:\n`, `  validation:\n${comment}`);
+      assert.ok(source.includes(comment), 'The complete valid service must remain only a comment');
+      assert.throws(() => databaseScript(source), expected);
+    });
+}
+
+for (const placement of ['before', 'after']) {
+  test(`PostgreSQL service job scope: unchanged validation accepts unrelated job ${placement}`,
+    { timeout: 10000 }, () => {
+      const unrelated = decoyJob.replace('POSTGRES_DB: cloudpainter_test', 'POSTGRES_DB: fixture_other_database')
+        .replace('- 5432:5432', '- 55432:5432');
+      const source = serviceScopeFixture('unchanged', unrelated, placement);
+      assert.equal(databaseScript(source), databaseScript(workflow),
+        'Unrelated job service settings must not affect the unchanged validation service');
+    });
+}
+
+test('PostgreSQL service job scope: unchanged validation accepts unrelated sibling service',
+  { timeout: 10000 }, () => {
+    const sibling = decoyPostgresService.replace('    services:\n', '')
+      .replace('      postgres:\n', '      fixture-other-postgres:\n')
+      .replace('POSTGRES_DB: cloudpainter_test', 'POSTGRES_DB: fixture_other_database')
+      .replace('- 5432:5432', '- 55432:5432');
+    const source = workflow.replace('    steps:\n', `${sibling}    steps:\n`);
+    assert.notEqual(source, workflow, 'Sibling fixture must add a service');
+    assert.equal(stepBody(source, databaseStep), stepBody(workflow, databaseStep));
+    assert.equal(databaseScript(source), databaseScript(workflow),
+      'An unrelated sibling service must not affect the unchanged validation service');
+  });
+
 for (const [label, original, replacement, expected] of [
   ['missing service', '      postgres:\n', '      removed-postgres:\n',
     /Expected exactly one disposable PostgreSQL service in validation/],
