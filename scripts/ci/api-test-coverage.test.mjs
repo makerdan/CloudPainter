@@ -311,6 +311,44 @@ for (const [label, target] of [
   }
 }
 
+for (const redirectedSuite of suites) {
+  test(`redirecting only ${redirectedSuite} is rejected at the effective boundary`, { timeout: 10000 }, () => {
+    const sharedTarget = 'postgresql://fixture-user:fixture-password@shared-db.invalid:5432/shared';
+    const body = stepBody(workflow, databaseStep);
+    const command = '            pnpm --filter @workspace/api-server run "$check"\n';
+    assert.equal(body.split(command).length, 2, 'Fixture must target exactly one database command');
+    const mutatedBody = body.replace(command, [
+      `            if [ "$check" = "${redirectedSuite}" ]; then`,
+      `              export DATABASE_URL="${sharedTarget}"`,
+      '            else',
+      `              export DATABASE_URL="${disposableDatabaseUrl}"`,
+      '            fi',
+      command.trimEnd(),
+      '',
+    ].join('\n'));
+    assert.notEqual(mutatedBody, body, 'Single-suite fixture must change executable shell commands');
+    const mutated = workflow.replace(body, mutatedBody);
+    assert.equal(
+      mutatedBody.split('        run: |\n')[0],
+      body.split('        run: |\n')[0],
+      'Single-suite fixture must leave the step environment unchanged',
+    );
+    databaseScript(mutated); // The declared disposable environment still passes.
+    // runDatabaseStage checks all three exact calls before its connection check.
+    // Inspect that assertion's observations to prove only the selected suite
+    // redirected, including disposable siblings after an early redirect.
+    assert.throws(() => runDatabaseStage(mutated), error => {
+      assert.equal(error.code, 'ERR_ASSERTION');
+      assert.match(error.message,
+        /^Effective API suite DATABASE_URL must target only the disposable PostgreSQL service URL/);
+      assert.deepEqual(error.expected, suites.map(suite => `${suite}\t${disposableDatabaseUrl}`));
+      assert.deepEqual(error.actual, suites.map(suite =>
+        `${suite}\t${suite === redirectedSuite ? sharedTarget : disposableDatabaseUrl}`));
+      return true;
+    });
+  });
+}
+
 test('a comment naming another target does not redirect the effective connection', { timeout: 10000 }, () => {
   const body = stepBody(workflow, databaseStep);
   const mutated = workflow.replace(body, body.replace(
