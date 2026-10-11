@@ -65,6 +65,8 @@ type Project = {
   title: string;
   photoZoom: number;
   photoPan: { x: number; y: number };
+  referencePhotoVisible: boolean;
+  referencePhotoOpacity: number;
 };
 
 const STORE_KEY = 'cloudpainter-project-v1';
@@ -82,11 +84,17 @@ const freshProject = (): Project => {
   return {
     image: null, width: 1200, height: 800, layers: [layer], selectedLayerId: layer.id,
     title: 'Untitled idea', photoZoom: 1, photoPan: { x: 0, y: 0 },
+    referencePhotoVisible: true, referencePhotoOpacity: 100,
   };
 };
 
 function normalizeProjectView(project: Project): Project {
-  const candidate = project as Project & { photoZoom?: unknown; photoPan?: { x?: unknown; y?: unknown } | null };
+  const candidate = project as Project & {
+    photoZoom?: unknown;
+    photoPan?: { x?: unknown; y?: unknown } | null;
+    referencePhotoVisible?: unknown;
+    referencePhotoOpacity?: unknown;
+  };
   const photoZoom = typeof candidate.photoZoom === 'number' && Number.isFinite(candidate.photoZoom)
     ? Math.max(1, Math.min(4, candidate.photoZoom))
     : 1;
@@ -96,7 +104,14 @@ function normalizeProjectView(project: Project): Project {
         y: typeof candidate.photoPan.y === 'number' && Number.isFinite(candidate.photoPan.y) ? candidate.photoPan.y : 0,
       }
     : { x: 0, y: 0 };
-  return { ...project, photoZoom, photoPan };
+  const referencePhotoVisible = typeof candidate.referencePhotoVisible === 'boolean'
+    ? candidate.referencePhotoVisible
+    : true;
+  const referencePhotoOpacity = typeof candidate.referencePhotoOpacity === 'number'
+    && Number.isFinite(candidate.referencePhotoOpacity)
+    ? Math.round(Math.max(0, Math.min(100, candidate.referencePhotoOpacity)))
+    : 100;
+  return { ...project, photoZoom, photoPan, referencePhotoVisible, referencePhotoOpacity };
 }
 
 function readProject(): Project {
@@ -271,7 +286,7 @@ async function composeProjectCanvas(
   if (!context) throw new Error('Could not create the PNG export. Try again or use a smaller canvas.');
   context.setTransform(layout.scale, 0, 0, layout.scale, layout.offsetX, layout.offsetY);
 
-  if (project.image) {
+  if (project.image && project.referencePhotoVisible && project.referencePhotoOpacity > 0) {
     const photo = new Image();
     await new Promise<void>((resolve, reject) => {
       photo.onload = () => resolve();
@@ -280,8 +295,11 @@ async function composeProjectCanvas(
     });
     try {
       const imageSize = fitDimensionsWithinBounds(photo.naturalWidth, photo.naturalHeight, project.width, project.height);
+      context.globalAlpha = project.referencePhotoOpacity / 100;
       context.drawImage(photo, (project.width - imageSize.width) / 2, (project.height - imageSize.height) / 2, imageSize.width, imageSize.height);
+      context.globalAlpha = 1;
     } catch {
+      context.globalAlpha = 1;
       throw new Error('Could not include the reference photo in the PNG export. Try again or remove the photo before exporting.');
     }
   }
@@ -630,6 +648,7 @@ function Home() {
       const nextProject: Project = {
         image: source, width, height, layers: [layer], selectedLayerId: layer.id,
         title: prompt.slice(0, 42) || 'Generated idea', photoZoom: 1, photoPan: { x: 0, y: 0 },
+        referencePhotoVisible: true, referencePhotoOpacity: 100,
       };
       const estimate = await refreshStorageEstimate();
       const currentProject = latestProject.current;
@@ -706,6 +725,7 @@ function Home() {
           layers: [layer], selectedLayerId: layer.id,
           title: file.name.replace(/\.[^.]+$/, '').slice(0, 42) || 'Untitled idea',
           photoZoom: 1, photoPan: { x: 0, y: 0 },
+          referencePhotoVisible: true, referencePhotoOpacity: 100,
         }));
         announce('Photo added. Your original stays untouched.');
       };
@@ -724,6 +744,7 @@ function Home() {
     setProject(current => ({
       ...current, image: null, width: 1200, height: 800, layers: [layer], selectedLayerId: layer.id,
       title: 'Untitled idea', photoZoom: 1, photoPan: { x: 0, y: 0 },
+      referencePhotoVisible: true, referencePhotoOpacity: 100,
     }));
     announce('A fresh transparent canvas is ready.');
   };
@@ -1119,13 +1140,49 @@ function Home() {
                 )}
               </TooltipButton>
               {project.image && (
-                <TooltipButton description="Remove the reference photo and keep your drawing layers." type="button" className="icon-button source-remove" aria-label="Remove photo" onClick={() => { resetPhotoView(); updateProject(current => ({ ...current, image: null })); }} data-testid="button-remove-photo"><X size={14} /></TooltipButton>
+                <TooltipButton description="Remove the reference photo and keep your drawing layers." type="button" className="icon-button source-remove" aria-label="Remove photo" onClick={() => { resetPhotoView(); updateProject(current => ({ ...current, image: null, referencePhotoVisible: true, referencePhotoOpacity: 100 })); }} data-testid="button-remove-photo"><X size={14} /></TooltipButton>
               )}
             </div>
             <div className="source-actions">
               <TooltipButton description="Start a fresh transparent canvas, replacing the current photo and all drawing layers." className="button" onClick={startBlank} data-testid="button-blank"><Plus size={13} /> Blank canvas</TooltipButton>
               <input ref={fileInput} hidden type="file" accept="image/*" onChange={handleFile} data-testid="input-photo" />
             </div>
+            {project.image && (
+              <div className="reference-photo-display" role="group" aria-label="Reference photo display controls">
+                <TooltipButton
+                  description={project.referencePhotoVisible ? 'Hide the reference photo beneath your drawing without removing it.' : 'Show the reference photo beneath your drawing again.'}
+                  type="button"
+                  className="button"
+                  aria-label={project.referencePhotoVisible ? 'Hide reference photo' : 'Show reference photo'}
+                  aria-pressed={project.referencePhotoVisible}
+                  onClick={() => updateProject(current => ({ ...current, referencePhotoVisible: !current.referencePhotoVisible }))}
+                  data-testid="button-reference-photo-visibility"
+                >
+                  {project.referencePhotoVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {project.referencePhotoVisible ? 'Hide photo' : 'Show photo'}
+                </TooltipButton>
+                <label className="reference-photo-opacity">
+                  <span className="reference-photo-opacity-label">
+                    <span>Reference photo opacity</span>
+                    <output htmlFor="reference-photo-opacity" aria-live="polite" data-testid="reference-photo-opacity-value">
+                      {project.referencePhotoOpacity}%
+                    </output>
+                  </span>
+                  <input
+                    id="reference-photo-opacity"
+                    className="range-input"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={project.referencePhotoOpacity}
+                    onChange={event => updateProject(current => ({ ...current, referencePhotoOpacity: Number(event.target.value) }))}
+                    aria-label="Reference photo opacity"
+                    data-testid="input-reference-photo-opacity"
+                  />
+                </label>
+              </div>
+            )}
             {storageEstimate && (
               <p className="storage-usage" role="status" aria-live="polite" data-testid="storage-usage">
                 CloudPainter storage: about {formatStorageSize(storageEstimate.cloudPainterBytes)}
@@ -1259,7 +1316,15 @@ function Home() {
                   onPointerUp={finishPhotoPan}
                   onPointerCancel={finishPhotoPan}
                 >
-                  {project.image && <img className="base-photo" src={project.image} alt="" draggable={false} />}
+                  {project.image && (
+                    <img
+                      className="base-photo"
+                      src={project.image}
+                      alt=""
+                      draggable={false}
+                      style={{ opacity: project.referencePhotoVisible ? project.referencePhotoOpacity / 100 : 0 }}
+                    />
+                  )}
                   {project.layers.map((layer, index) => (
                     <canvas
                       key={layer.id}
