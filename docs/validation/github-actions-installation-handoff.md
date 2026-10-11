@@ -113,7 +113,7 @@ a 45-minute timeout. The aggregate job has a five-minute timeout.
 | `pnpm --filter @workspace/api-spec run codegen` | Included before compilation. Then `git diff --exit-code -- lib/api-client-react/src/generated lib/api-zod/src/generated` and an untracked-file check fail if generated outputs are stale or newly emitted. |
 | `pnpm run build` with `PORT=4173 BASE_PATH=/` | Included; this root command runs `pnpm run typecheck` and all package builds. Covers `artifacts/api-server`, `artifacts/cloudpainter`, and `artifacts/mockup-sandbox` build/typecheck scripts, plus the workspace TypeScript project build. |
 | `node --test scripts/ci/check-required-results.test.mjs` | Included; tests both the exported classifier and actual CLI exits, JSON parsing, required-job argument validation, and fail-closed results with synthetic environments. |
-| `node --test scripts/ci/api-test-coverage.test.mjs` | Included in the existing validation job; asserts the exact step-scoped disposable database URL and matching PostgreSQL service environment/port mapping before running local command stubs, rejects missing/mismatched service configuration and shared/secret-backed URL substitutions, checks effective image-access/palettes/settings selection, rejects a comment-only settings mention, and preserves nonzero suite results. No database, live auth, provider, or real package command is used by this guard. |
+| `node --test scripts/ci/api-test-coverage.test.mjs` | Included in the existing validation job; asserts the exact step-scoped disposable database URL and matching PostgreSQL service environment/port mapping before running local command stubs, rejects missing/mismatched service configuration, checks each stub's effective `DATABASE_URL`, rejects shared/secret-backed env and shell overrides, checks effective image-access/palettes/settings selection, rejects a comment-only settings mention, and preserves nonzero suite results. No database, live auth, provider, or real package command is used by this guard. |
 | `pnpm run test:regression-guard` | Included; tests the regression-guard checker and local task-plan runner using temporary fixtures. |
 | `pnpm --filter @workspace/api-server run test:outline` | Included; local Express tests use fixtures and stubbed provider dependencies. |
 | `pnpm --filter @workspace/api-server run test:image-upscale` | Included; provider transport is stubbed; no paid request. |
@@ -220,7 +220,8 @@ rejected by the connection-boundary assertion. The unchanged workflow remains
 the positive control and still selects all three suites. These checks inspect
 text only: they do not resolve a secret, connect to PostgreSQL, or run pnpm.
 They deliberately support the current step shape, not generic YAML discovery.
-They do not claim to detect arbitrary shell-level connection overrides.
+That initial version did not detect shell-level connection overrides; the
+following update adds a narrowly scoped effective-boundary check.
 
 The check remains directly covered by the existing PR/`main`-push validation
 job; no additional workflow or duplicated command was introduced. The service,
@@ -276,6 +277,47 @@ other security settings remain unchanged. No database, provider, browser,
 build, real package suite or remote action ran. Remote activation, passing
 status and required-check policy remain unknown; this focused result is not
 Failure Gate activation or a full CI pass.
+
+## Shell-level database target regression fixtures
+
+The guard now initializes the stub shell with the same disposable `DATABASE_URL`
+as the step environment and records the effective value received by each of the
+three `pnpm` stubs. The boundary assertion requires every recorded suite/value
+pair to match the disposable target. It therefore does not rely on the unchanged
+workflow `env` stanza to rule out a later override.
+
+Eight narrow, in-memory fixtures retain the correct step environment but inject
+a synthetic shared URL or the literal `${{ secrets.DATABASE_URL }}` through a
+plain shell assignment, an exported assignment, a command-local assignment, or
+an `env` command-local override. Each must fail specifically with the effective
+connection-boundary assertion, not suite selection or shell execution failure.
+The one supported secret expression is replaced with inert synthetic text before
+Bash runs, simulating substitution without looking up credentials. Other GitHub
+expressions fail closed before shell execution. A comment-only override is a
+positive control; the current workflow and all existing failure/selection
+fixtures still pass.
+
+On 2026-10-11, the owner authorized the focused offline run with Failure Gate
+inactive for this operation only. The only test command launched was:
+`node --test --test-timeout=10000 --test-concurrency=1 scripts/ci/api-test-coverage.test.mjs`.
+It exited **0**, with **18/18 tests passing**, no skipped or cancelled tests,
+and approximately **0.33 seconds** of supervised elapsed time. Each test retains
+a 10-second limit; each shell child retains a 5-second limit, SIGKILL on timeout,
+and a 64-KiB output bound. There are no hooks. An independent Python monotonic
+supervisor enforced a 60-second execution deadline, 10-second cleanup allowance,
+and 64-KiB combined-output cap. Test/workflow hashes matched before and after
+execution, and the owned process group was confirmed stopped.
+Logs, input hashes, and supervisor source are retained in the ignored
+`generated-artifacts/ci-shell-database-boundary/` directory.
+
+The workflow file, service, suites, permissions, and action pins are unchanged.
+The existing PR/`main`-push guard step directly covers the new portable fixtures;
+no duplicate command, generic discovery, or new workflow was added. This checks
+the effective environment at the stubbed package-command boundary, not arbitrary
+package internals or malicious shell containment. No database connection, secret
+resolution, real package hook, browser, build, or remote action was performed.
+This is focused local fixture evidence, not Failure Gate activation or a full CI
+pass. Remote activation, passing status, and merge requirements remain unknown.
 
 ## Event scopes and security
 

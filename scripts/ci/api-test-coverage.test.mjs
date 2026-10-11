@@ -152,12 +152,19 @@ function databaseScript(source) {
 function runDatabaseStage(source, failingSuite = '') {
   // Validate the step-scoped connection boundary before creating/running stubs.
   // The URL is inspected as text only; it is never resolved or used to connect.
-  const script = databaseScript(source);
+  // Simulate only this fixture's GitHub substitution with inert text, never a
+  // secret lookup. Passing the raw expression to Bash could instead produce a
+  // bad-substitution error and miss the effective connection-boundary assertion.
+  const script = databaseScript(source).replaceAll(
+    '${{ secrets.DATABASE_URL }}', 'offline-secret-database-target',
+  );
+  assert.ok(!script.includes('${{'), 'Unsupported GitHub expression in offline database fixture');
   const directory = mkdtempSync(join(tmpdir(), 'api-ci-coverage-'));
   try {
     // No pnpm, database, credentials, provider or real package hook is invoked.
     writeFileSync(join(directory, 'pnpm'), `#!/bin/sh
 printf '%s\\n' "$*" >> "$CALLS_FILE"
+printf '%s\\t%s\\n' "$4" "\${DATABASE_URL-}" >> "$CONNECTIONS_FILE"
 if [ "$1" != "--filter" ] || [ "$2" != "@workspace/api-server" ] || [ "$3" != "run" ] || [ "$#" -ne 4 ]; then
   exit 98
 fi
@@ -170,6 +177,8 @@ exit 0
       env: {
         PATH: `${directory}:${process.env.PATH}`,
         CALLS_FILE: join(directory, 'calls'),
+        CONNECTIONS_FILE: join(directory, 'connections'),
+        DATABASE_URL: disposableDatabaseUrl,
         FAILING_SUITE: failingSuite,
       },
       encoding: 'utf8',
@@ -182,6 +191,9 @@ exit 0
     const calls = readFileSync(join(directory, 'calls'), 'utf8').trim().split('\n');
     assert.deepEqual(calls, suites.map(suite => `--filter @workspace/api-server run ${suite}`),
       'Effective API suite selection must include image-access, palettes and settings exactly once');
+    const connections = readFileSync(join(directory, 'connections'), 'utf8').trim().split('\n');
+    assert.deepEqual(connections, suites.map(suite => `${suite}\t${disposableDatabaseUrl}`),
+      'Effective API suite DATABASE_URL must target only the disposable PostgreSQL service URL');
     assert.equal(result.status, failingSuite ? 1 : 0,
       'The database stage must fail if any selected suite fails');
     if (failingSuite) {
@@ -261,6 +273,50 @@ for (const [label, target] of [
       /Database tests must target only the disposable PostgreSQL service URL/);
   });
 }
+
+for (const [label, target] of [
+  ['shared database URL', 'postgresql://fixture-user:fixture-password@shared-db.invalid:5432/shared'],
+  ['secret-backed database URL', '${{ secrets.DATABASE_URL }}'],
+]) {
+  for (const [scope, rewrite] of [
+    ['shell assignment', body => body.replace(
+      '          failed=0\n', `          failed=0\n          DATABASE_URL="${target}"\n`,
+    )],
+    ['exported shell assignment', body => body.replace(
+      '          failed=0\n', `          failed=0\n          export DATABASE_URL="${target}"\n`,
+    )],
+    ['command-local assignment', body => body.replace(
+      '            pnpm --filter', `            DATABASE_URL="${target}" pnpm --filter`,
+    )],
+    ['command-local env override', body => body.replace(
+      '            pnpm --filter', `            env DATABASE_URL="${target}" pnpm --filter`,
+    )],
+  ]) {
+    test(`${scope} to a ${label} is rejected at the effective boundary`, { timeout: 10000 }, () => {
+      const body = stepBody(workflow, databaseStep);
+      const mutatedBody = rewrite(body);
+      assert.notEqual(mutatedBody, body, 'Override fixture must change executable shell commands');
+      const mutated = workflow.replace(body, mutatedBody);
+      // The original env assertion still passes; only the stub-observed target
+      // may reject this mutation, not suite selection or an incidental shell exit.
+      databaseScript(mutated);
+      assert.throws(() => runDatabaseStage(mutated), {
+        code: 'ERR_ASSERTION',
+        message: /^Effective API suite DATABASE_URL must target only the disposable PostgreSQL service URL/,
+      });
+    });
+  }
+}
+
+test('a comment naming another target does not redirect the effective connection', { timeout: 10000 }, () => {
+  const body = stepBody(workflow, databaseStep);
+  const mutated = workflow.replace(body, body.replace(
+    '          failed=0\n',
+    '          failed=0\n          # DATABASE_URL="postgresql://shared-db.invalid/shared"\n',
+  ));
+  assert.notEqual(mutated, workflow, 'Comment fixture must change the database script');
+  runDatabaseStage(mutated);
+});
 
 for (const suite of suites) {
   test(`${suite} failure makes the database stage fail after running its siblings`, { timeout: 10000 }, () => {
