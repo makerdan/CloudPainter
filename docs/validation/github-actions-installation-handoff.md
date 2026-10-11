@@ -113,7 +113,7 @@ a 45-minute timeout. The aggregate job has a five-minute timeout.
 | `pnpm --filter @workspace/api-spec run codegen` | Included before compilation. Then `git diff --exit-code -- lib/api-client-react/src/generated lib/api-zod/src/generated` and an untracked-file check fail if generated outputs are stale or newly emitted. |
 | `pnpm run build` with `PORT=4173 BASE_PATH=/` | Included; this root command runs `pnpm run typecheck` and all package builds. Covers `artifacts/api-server`, `artifacts/cloudpainter`, and `artifacts/mockup-sandbox` build/typecheck scripts, plus the workspace TypeScript project build. |
 | `node --test scripts/ci/check-required-results.test.mjs` | Included; tests both the exported classifier and actual CLI exits, JSON parsing, required-job argument validation, and fail-closed results with synthetic environments. |
-| `node --test scripts/ci/api-test-coverage.test.mjs` | Included in the existing validation job; asserts the exact step-scoped disposable database URL before running local command stubs, rejects shared/secret-backed URL substitutions, checks effective image-access/palettes/settings selection, rejects a comment-only settings mention, and preserves nonzero suite results. No database, live auth, provider, or real package command is used by this guard. |
+| `node --test scripts/ci/api-test-coverage.test.mjs` | Included in the existing validation job; asserts the exact step-scoped disposable database URL and matching PostgreSQL service environment/port mapping before running local command stubs, rejects missing/mismatched service configuration and shared/secret-backed URL substitutions, checks effective image-access/palettes/settings selection, rejects a comment-only settings mention, and preserves nonzero suite results. No database, live auth, provider, or real package command is used by this guard. |
 | `pnpm run test:regression-guard` | Included; tests the regression-guard checker and local task-plan runner using temporary fixtures. |
 | `pnpm --filter @workspace/api-server run test:outline` | Included; local Express tests use fixtures and stubbed provider dependencies. |
 | `pnpm --filter @workspace/api-server run test:image-upscale` | Included; provider transport is stubbed; no paid request. |
@@ -240,6 +240,42 @@ The single launch exited **0**, with **9/9 tests passing**, none cancelled or
 skipped, in about **0.16 seconds**. The owned process group was confirmed gone.
 No database, browser, build, provider, or real package test was launched.
 This is focused local fixture evidence, not a passing full CI pipeline.
+
+## Disposable PostgreSQL service agreement fixtures
+
+The guard now inspects only the existing `validation` job's `postgres` service
+using its current indentation and stanza shape, not generic YAML/service
+discovery. Before any command stub runs, it requires a PostgreSQL image,
+the exact service environment matching the pinned URL's database name, user
+and password, and the URL's host port mapped to PostgreSQL container port 5432.
+Unexpected shapes fail closed; a URL is parsed only as text, never connected.
+
+The unchanged service has a dedicated text-only positive control. Thirteen
+in-memory negative fixtures independently remove/rename the service, remove
+its image, remove its environment, remove or mismatch each of the database
+name/user/password fields, remove the ports stanza or mapping, and mismatch
+the host or container port. Each fixture leaves the database step unchanged
+and must fail at its intended service assertion without executing shell stubs.
+Replacement values are synthetic; no runtime secrets are read.
+
+The owner authorized one task-scoped local run with Failure Gate inactive for
+this operation only. On 2026-10-11, `node --test
+scripts/ci/api-test-coverage.test.mjs` exited **0**, with **23/23 tests passing**,
+zero skips or cancellations, in about **0.21 seconds** under an independent
+Python monotonic supervisor. Limits were 30 seconds execution, 10 seconds
+cleanup/termination verification, and 1 MiB combined output. Existing tests
+retain 10-second per-test and 5-second shell-child limits; there are no hooks.
+The suite and workflow hashes were unchanged during execution and the owned
+process group was confirmed gone. Logs, hashes and supervision source are in
+ignored `generated-artifacts/ci-service-agreement/`.
+
+These fixtures extend the guard already directly selected by the existing
+PR/`main`-push validation job. No new workflow or duplicate command was added.
+The workflow file, service settings, commands, action pins, permissions and
+other security settings remain unchanged. No database, provider, browser,
+build, real package suite or remote action ran. Remote activation, passing
+status and required-check policy remain unknown; this focused result is not
+Failure Gate activation or a full CI pass.
 
 ## Event scopes and security
 

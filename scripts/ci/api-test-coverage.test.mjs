@@ -113,7 +113,32 @@ function stepBody(source, name) {
   return source.split(marker)[1].split(/(?=^      - |^  [\w-]+:)/m)[0];
 }
 
+function assertDisposableService(source) {
+  // Inspect only validation's existing postgres service, never another job or
+  // a comment. This intentionally fails closed when its YAML shape changes.
+  const validation = source.match(/^  validation:\n((?:    [^\n]*\n|\n)+)/m)?.[1];
+  assert.ok(validation, 'Expected the existing validation job');
+  const marker = '    services:\n      postgres:\n';
+  assert.equal(validation.split(marker).length, 2,
+    'Expected exactly one disposable PostgreSQL service in validation');
+  const service = validation.split(marker)[1].split(/(?=^    \S|^      \S)/m)[0];
+  assert.match(service, /^        image: postgres:[^\s]+\n/m,
+    'Expected the disposable PostgreSQL service image');
+  const target = new URL(disposableDatabaseUrl); // Text parsing only; no connection.
+  const environment = service.match(/^        env:\n((?:          [^\n]*\n)+)/m)?.[1];
+  assert.equal(environment, [
+    `          POSTGRES_DB: ${target.pathname.slice(1)}`,
+    `          POSTGRES_USER: ${target.username}`,
+    `          POSTGRES_PASSWORD: ${target.password}`,
+    '',
+  ].join('\n'), 'PostgreSQL service environment must match the disposable database URL');
+  const ports = service.match(/^        ports:\n((?:          [^\n]*\n)+)/m)?.[1];
+  assert.equal(ports, `          - ${target.port}:5432\n`,
+    'PostgreSQL service ports must map the disposable URL port to PostgreSQL port 5432');
+}
+
 function databaseScript(source) {
+  assertDisposableService(source);
   const body = stepBody(source, databaseStep);
   const environment = body.match(/^        env:\n((?:          [^\n]*\n)+)(?=        run:)/m);
   assert.ok(environment, 'Expected the database step to declare its disposable environment');
@@ -178,6 +203,47 @@ test('the existing validation job selects the portable coverage guard', { timeou
 test('the executable database stage selects all three API suites', { timeout: 10000 }, () => {
   runDatabaseStage(workflow);
 });
+
+test('the unchanged PostgreSQL service agrees with the disposable URL as text', { timeout: 10000 }, () => {
+  assertDisposableService(workflow);
+});
+
+for (const [label, original, replacement, expected] of [
+  ['missing service', '      postgres:\n', '      removed-postgres:\n',
+    /Expected exactly one disposable PostgreSQL service in validation/],
+  ['missing image', '        image: postgres:16.10-bookworm\n', '',
+    /Expected the disposable PostgreSQL service image/],
+  ['missing service environment', '        env:\n', '        removed-env:\n',
+    /PostgreSQL service environment must match/],
+  ...[
+    ['database name', 'POSTGRES_DB', 'cloudpainter_test', 'fixture_database'],
+    ['user', 'POSTGRES_USER', 'postgres', 'fixture_user'],
+    ['password', 'POSTGRES_PASSWORD', 'ci-test-password', 'fixture_password'],
+  ].flatMap(([label, key, value, mismatched]) => [
+    [`missing ${label}`, `          ${key}: ${value}\n`, '',
+      /PostgreSQL service environment must match/],
+    [`mismatched ${label}`, `          ${key}: ${value}\n`, `          ${key}: ${mismatched}\n`,
+      /PostgreSQL service environment must match/],
+  ]),
+  ['missing ports block', '        ports:\n', '        removed-ports:\n',
+    /PostgreSQL service ports must map/],
+  ['missing port mapping', '          - 5432:5432\n', '',
+    /PostgreSQL service ports must map/],
+  ['mismatched host port', '          - 5432:5432\n', '          - 55432:5432\n',
+    /PostgreSQL service ports must map/],
+  ['mismatched container port', '          - 5432:5432\n', '          - 5432:55432\n',
+    /PostgreSQL service ports must map/],
+]) {
+  test(`PostgreSQL service ${label} is rejected by its intended assertion`, { timeout: 10000 }, () => {
+    // Replace only the first occurrence (the service), retaining the step URL.
+    const mutated = workflow.replace(original, replacement);
+    assert.notEqual(mutated, workflow, 'Service fixture must change the workflow text');
+    assert.equal(stepBody(mutated, databaseStep), stepBody(workflow, databaseStep),
+      'Service fixture must leave the database step unchanged');
+    // No shell stubs or real commands run in these negative text fixtures.
+    assert.throws(() => databaseScript(mutated), expected);
+  });
+}
 
 for (const [label, target] of [
   ['shared database URL', 'postgresql://fixture-user:fixture-password@shared-db.invalid:5432/shared'],
