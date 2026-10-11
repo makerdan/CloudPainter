@@ -1403,12 +1403,12 @@ test(`undo and redo preserve ${referencePhotoVisible ? 'visible' : 'hidden'} ref
   };
 
   await page.getByTestId('button-undo').click();
-  await assertCurrentProject(afterUndo);
+  expect(await savedProject(page)).toEqual(settingsProject);
   await page.reload();
   await assertCurrentProject(afterUndo);
 
   await page.getByTestId('button-redo').click();
-  await assertCurrentProject(settingsProject);
+  expect(await savedProject(page)).toEqual(afterUndo);
   await page.reload();
   await assertCurrentProject(settingsProject);
 });
