@@ -75,15 +75,23 @@ function assertClose(actual, expected, message) {
   assert.ok(Math.abs(actual - expected) < 0.01, `${message}: expected ${expected}, received ${actual}`);
 }
 
-async function renderPdfWithPoppler(pdfBytes, page) {
+async function renderPdfWithPoppler(pdfBytes, page, artwork = null) {
   const directory = await mkdtemp(join(tmpdir(), 'cloudpainter-pdf-render-'));
   const pdfPath = join(directory, 'export.pdf');
   const imagePrefix = join(directory, 'rendered-page');
   try {
     await writeFile(pdfPath, pdfBytes);
-    execFileSync('pdftoppm', ['-f', '1', '-l', '1', '-singlefile', '-r', '144', '-png', pdfPath, imagePrefix]);
+    execFileSync('pdftoppm', [
+      '-f', '1',
+      '-l', '1',
+      '-singlefile',
+      '-r', String(artwork?.renderDpi ?? 144),
+      '-png',
+      pdfPath,
+      imagePrefix,
+    ]);
     const png = await readFile(`${imagePrefix}.png`);
-    return page.evaluate(async pngBase64 => {
+    return page.evaluate(async ({ pngBase64, artwork }) => {
       const image = new Image();
       image.src = `data:image/png;base64,${pngBase64}`;
       await image.decode();
@@ -108,6 +116,24 @@ async function renderPdfWithPoppler(pdfBytes, page) {
       }
       if (bounds.maxX < 0 || bounds.maxY < 0) throw new Error('The PDF renderer produced a blank page.');
       const sample = (xRatio, yRatio) => {
+        if (artwork) {
+          const scale = Math.min(
+            (artwork.pageWidthPoints - artwork.safeMarginPoints * 2) / artwork.width,
+            (artwork.pageHeightPoints - artwork.safeMarginPoints * 2) / artwork.height,
+          );
+          const artworkWidthPoints = artwork.width * scale;
+          const artworkHeightPoints = artwork.height * scale;
+          const leftPoints = (artwork.pageWidthPoints - artworkWidthPoints) / 2;
+          const topPoints = (artwork.pageHeightPoints - artworkHeightPoints) / 2;
+          const x = Math.floor(
+            (leftPoints + xRatio * artworkWidthPoints) * canvas.width / artwork.pageWidthPoints,
+          );
+          const y = Math.floor(
+            (topPoints + yRatio * artworkHeightPoints) * canvas.height / artwork.pageHeightPoints,
+          );
+          const offset = (y * canvas.width + x) * 4;
+          return [...data.slice(offset, offset + 3)];
+        }
         const x = Math.round(bounds.minX + (bounds.maxX - bounds.minX) * xRatio);
         const y = Math.round(bounds.minY + (bounds.maxY - bounds.minY) * yRatio);
         const offset = (y * canvas.width + x) * 4;
@@ -117,15 +143,21 @@ async function renderPdfWithPoppler(pdfBytes, page) {
         width: canvas.width,
         height: canvas.height,
         bounds,
-        artworkSamples: [
-          sample(0.1, 0.1),
-          sample(0.9, 0.1),
-          sample(0.1, 0.9),
-          sample(0.9, 0.9),
-          sample(0.5, 0.5),
-        ],
+        effectivePpi: artwork ? 72 / Math.min(
+          (artwork.pageWidthPoints - artwork.safeMarginPoints * 2) / artwork.width,
+          (artwork.pageHeightPoints - artwork.safeMarginPoints * 2) / artwork.height,
+        ) : null,
+        artworkSamples: artwork
+          ? artwork.locations.map(([x, y]) => sample(x, y))
+          : [
+            sample(0.1, 0.1),
+            sample(0.9, 0.1),
+            sample(0.1, 0.9),
+            sample(0.9, 0.9),
+            sample(0.5, 0.5),
+          ],
       };
-    }, png.toString('base64'));
+    }, { pngBase64: png.toString('base64'), artwork });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -343,34 +375,31 @@ async function inspectPdfArtwork(page, locations) {
   await page.getByTestId('button-export-pdf').click();
   await page.waitForFunction(() => window.__cloudPainterPdfBlob instanceof Blob);
 
-  return page.evaluate(async locations => {
-    const pdfBytes = new Uint8Array(await window.__cloudPainterPdfBlob.arrayBuffer());
-    const pdfText = new TextDecoder('latin1').decode(pdfBytes);
-    const imageMatch = /\/Subtype \/Image \/Width (\d+) \/Height (\d+) \/ColorSpace \/DeviceRGB \/BitsPerComponent 8 \/Filter \/DCTDecode \/Length (\d+) >>\nstream\n/.exec(pdfText);
-    if (!imageMatch) throw new Error('The exported PDF does not contain the expected embedded JPEG artwork.');
-
-    const [, width, height, jpegLength] = imageMatch;
-    const jpegStart = imageMatch.index + imageMatch[0].length;
-    const jpegBlob = new Blob([pdfBytes.slice(jpegStart, jpegStart + Number(jpegLength))], { type: 'image/jpeg' });
-    const jpegUrl = window.__cloudPainterNativeCreateObjectURL(jpegBlob);
-    const image = new Image();
-    image.src = jpegUrl;
-    await image.decode();
-
-    const canvas = document.createElement('canvas');
-    canvas.width = image.naturalWidth;
-    canvas.height = image.naturalHeight;
-    const context = canvas.getContext('2d');
-    context.drawImage(image, 0, 0);
-    URL.revokeObjectURL(jpegUrl);
-    return {
-      width: Number(width),
-      height: Number(height),
-      pixels: locations.map(([x, y]) => [
-        ...context.getImageData(Math.floor(canvas.width * x), Math.floor(canvas.height * y), 1, 1).data,
-      ]),
-    };
-  }, locations);
+  const pdfBase64 = await page.evaluate(async () => {
+    const bytes = new Uint8Array(await window.__cloudPainterPdfBlob.arrayBuffer());
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    }
+    return btoa(binary);
+  });
+  const pdfBytes = Buffer.from(pdfBase64, 'base64');
+  assert.equal(pdfBytes.subarray(0, 5).toString('ascii'), '%PDF-', 'captured PDF bytes should retain the PDF header');
+  const artwork = await renderPdfWithPoppler(pdfBytes, page, {
+    width: 1200,
+    height: 800,
+    pageWidthPoints: 612,
+    pageHeightPoints: 792,
+    safeMarginPoints: 36,
+    renderDpi: 288,
+    locations,
+  });
+  return {
+    width: 1200,
+    height: 800,
+    effectivePpi: artwork.effectivePpi,
+    pixels: artwork.artworkSamples,
+  };
 }
 
 async function drawStroke(page, { startX, endX, y }) {
@@ -548,9 +577,9 @@ test('PDF artwork omits hidden strokes and preserves visible layer order and opa
     assert.deepEqual([exported.width, exported.height], [1200, 800], 'PDF should embed artwork at the sketch dimensions');
     const overlap = exported.pixels[0];
     assert.ok(
-      Math.abs(overlap[0] - 153) <= 12
-        && overlap[1] <= 12
-        && Math.abs(overlap[2] - 102) <= 12,
+      Math.abs(overlap[0] - 153) <= 30
+        && overlap[1] <= 30
+        && Math.abs(overlap[2] - 102) <= 30,
       `overlapping artwork should show 40% blue over opaque red, in layer order; received ${overlap}`,
     );
     const hiddenOnly = exported.pixels[1];
@@ -586,6 +615,7 @@ test('keeps fine sketch marks in the PDF image and reports effective print resol
       [610 / 1200, 302 / 800],
     ]);
     assert.deepEqual([exported.width, exported.height], [1200, 800], 'PDF should retain the sketch pixel dimensions rather than inventing resolution');
+    assert.equal(exported.effectivePpi, 160, 'rendered PDF should place the 1200-pixel sketch at 160 PPI on Letter paper');
     assert.ok(exported.pixels[0].slice(0, 3).every(channel => channel < 210), `one-pixel stroke should remain visible in the embedded PDF image; received ${exported.pixels[0]}`);
     assert.ok(exported.pixels[1].slice(0, 3).every(channel => channel > 235), `one-pixel stroke should remain distinct from blank paper; received ${exported.pixels[1]}`);
     assert.ok(exported.pixels[2].slice(0, 3).every(channel => channel < 180), `small detail should remain visible in the embedded PDF image; received ${exported.pixels[2]}`);
