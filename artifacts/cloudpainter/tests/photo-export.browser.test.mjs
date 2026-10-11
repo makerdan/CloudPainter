@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:net';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { after, before, test } from 'node:test';
 import { chromium } from 'playwright-core';
@@ -71,6 +73,62 @@ after(async () => {
 
 function assertClose(actual, expected, message) {
   assert.ok(Math.abs(actual - expected) < 0.01, `${message}: expected ${expected}, received ${actual}`);
+}
+
+async function renderPdfWithPoppler(pdfBytes, page) {
+  const directory = await mkdtemp(join(tmpdir(), 'cloudpainter-pdf-render-'));
+  const pdfPath = join(directory, 'export.pdf');
+  const imagePrefix = join(directory, 'rendered-page');
+  try {
+    await writeFile(pdfPath, pdfBytes);
+    execFileSync('pdftoppm', ['-f', '1', '-l', '1', '-singlefile', '-r', '144', '-png', pdfPath, imagePrefix]);
+    const png = await readFile(`${imagePrefix}.png`);
+    return page.evaluate(async pngBase64 => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${pngBase64}`;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Could not inspect the PDF renderer output.');
+      context.drawImage(image, 0, 0);
+      const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+      const bounds = { minX: canvas.width, minY: canvas.height, maxX: -1, maxY: -1 };
+      for (let y = 0; y < canvas.height; y += 1) {
+        for (let x = 0; x < canvas.width; x += 1) {
+          const offset = (y * canvas.width + x) * 4;
+          if (data[offset] < 240 || data[offset + 1] < 240 || data[offset + 2] < 240) {
+            bounds.minX = Math.min(bounds.minX, x);
+            bounds.minY = Math.min(bounds.minY, y);
+            bounds.maxX = Math.max(bounds.maxX, x);
+            bounds.maxY = Math.max(bounds.maxY, y);
+          }
+        }
+      }
+      if (bounds.maxX < 0 || bounds.maxY < 0) throw new Error('The PDF renderer produced a blank page.');
+      const sample = (xRatio, yRatio) => {
+        const x = Math.round(bounds.minX + (bounds.maxX - bounds.minX) * xRatio);
+        const y = Math.round(bounds.minY + (bounds.maxY - bounds.minY) * yRatio);
+        const offset = (y * canvas.width + x) * 4;
+        return [...data.slice(offset, offset + 3)];
+      };
+      return {
+        width: canvas.width,
+        height: canvas.height,
+        bounds,
+        artworkSamples: [
+          sample(0.1, 0.1),
+          sample(0.9, 0.1),
+          sample(0.1, 0.9),
+          sample(0.9, 0.9),
+          sample(0.5, 0.5),
+        ],
+      };
+    }, png.toString('base64'));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }
 
 async function makePhotoFile(page, width, height, name) {
@@ -695,6 +753,35 @@ test('downloads complete Letter and A4 PDFs in portrait and landscape without ch
               artwork.pixels[index].every((channel, channelIndex) => Math.abs(channel - expected[channelIndex]) < 45),
               `${paper.name} ${orientation}: embedded image should preserve artwork marker ${index + 1}; received ${artwork.pixels[index]}`,
           );
+          }
+
+          const rendered = await renderPdfWithPoppler(pdfBytes, page);
+          const pointPerPixelX = pageWidth / rendered.width;
+          const pointPerPixelY = pageHeight / rendered.height;
+          const renderedArtwork = {
+            left: rendered.bounds.minX * pointPerPixelX,
+            top: rendered.bounds.minY * pointPerPixelY,
+            right: (rendered.bounds.maxX + 1) * pointPerPixelX,
+            bottom: (rendered.bounds.maxY + 1) * pointPerPixelY,
+          };
+          const rendererTolerancePoints = 2;
+          assert.ok(
+            Math.abs((renderedArtwork.left + renderedArtwork.right) / 2 - pageWidth / 2) <= rendererTolerancePoints
+              && Math.abs((renderedArtwork.top + renderedArtwork.bottom) / 2 - pageHeight / 2) <= rendererTolerancePoints,
+            `${paper.name} ${orientation}: PDF viewer rendering should keep the artwork centered`,
+          );
+          assert.ok(
+            renderedArtwork.left >= margin.points - rendererTolerancePoints
+              && renderedArtwork.top >= margin.points - rendererTolerancePoints
+              && renderedArtwork.right <= pageWidth - margin.points + rendererTolerancePoints
+              && renderedArtwork.bottom <= pageHeight - margin.points + rendererTolerancePoints,
+            `${paper.name} ${orientation}: rendered artwork should stay within the selected ${margin.value}-inch print-safe margin`,
+          );
+          for (const [index, expected] of expectedColors.slice(0, 5).entries()) {
+            assert.ok(
+              rendered.artworkSamples[index].every((channel, channelIndex) => Math.abs(channel - expected[channelIndex]) < 55),
+              `${paper.name} ${orientation}: PDF viewer rendering should preserve artwork marker ${index + 1}; received ${rendered.artworkSamples[index]}`,
+            );
           }
         }
       }
