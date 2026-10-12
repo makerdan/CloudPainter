@@ -1440,6 +1440,78 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
   });
 }
 
+test('unsaved drawing stays editable and saves after browser storage recovers', async ({ page }) => {
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  const storedBefore = await page.evaluate(key => localStorage.getItem(key), STORE_KEY);
+  expect(storedBefore).not.toBeNull();
+
+  await page.clock.install();
+  const pauseTime = new Date(await page.evaluate(() => Date.now() + 1_000));
+  await page.clock.pauseAt(pauseTime);
+  await page.evaluate(key => {
+    const originalSetItem = Storage.prototype.setItem;
+    const fixture = {
+      writable: false,
+      originalSetItem,
+      attempts: [] as string[],
+    };
+    (window as typeof window & { projectStorageFailureFixture?: typeof fixture })
+      .projectStorageFailureFixture = fixture;
+    Storage.prototype.setItem = function (storageKey, value) {
+      if (this === localStorage && storageKey === key && !fixture.writable) {
+        fixture.attempts.push(value);
+        throw new DOMException('Test project quota exceeded', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, storageKey, value);
+    };
+  }, STORE_KEY);
+
+  try {
+    await addSyntheticStroke(page);
+    await expect(page.getByTestId('status-save')).toHaveText('Saving…');
+    await page.clock.runFor(500);
+    await expect(page.getByTestId('status-save')).toHaveText('Storage is full');
+    await expect(page.getByText('Saved in this browser', { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('button-undo')).toBeEnabled();
+    expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.475 }))[3]).toBeGreaterThan(0);
+    expect(await page.evaluate(key => localStorage.getItem(key), STORE_KEY)).toBe(storedBefore);
+
+    await page.evaluate(() => {
+      const fixture = (window as typeof window & {
+        projectStorageFailureFixture: { writable: boolean };
+      }).projectStorageFailureFixture;
+      fixture.writable = true;
+    });
+    await addSyntheticStroke(page);
+    await expect(page.getByTestId('status-save')).toHaveText('Saving…');
+    await page.clock.runFor(500);
+    await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+
+    const recovered = await savedProject(page);
+    expect(recovered.layers[0].strokes).toHaveLength(2);
+    const attempts = await page.evaluate(() => (
+      window as typeof window & { projectStorageFailureFixture: { attempts: string[] } }
+    ).projectStorageFailureFixture.attempts);
+    expect(attempts).toHaveLength(1);
+    expect(JSON.parse(attempts[0]).layers[0].strokes).toHaveLength(1);
+
+    await page.reload();
+    await page.clock.runFor(500);
+    await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+    expect((await savedProject(page)).layers[0].strokes).toHaveLength(2);
+    await expect(page.getByTestId('button-undo')).toBeEnabled();
+  } finally {
+    await page.evaluate(() => {
+      const fixtureWindow = window as typeof window & {
+        projectStorageFailureFixture?: { originalSetItem: typeof Storage.prototype.setItem };
+      };
+      const fixture = fixtureWindow.projectStorageFailureFixture;
+      if (fixture) Storage.prototype.setItem = fixture.originalSetItem;
+      delete fixtureWindow.projectStorageFailureFixture;
+    });
+  }
+});
+
 for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) {
   test(`denied initial project reads keep drawing usable and report failed ${savePath}`, async ({ page }) => {
     const photo = await png(page, 'denied-read.png', 480, 320);
