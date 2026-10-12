@@ -75,6 +75,48 @@ Fix the bug that reverses drawing layers in exported images.
 ## Steps
 1. Correct the export ordering.
 `;
+const MATERIAL_RISK_PLANS = {
+  "visual-correction.md": `# Keep saved drawings aligned after resizing
+
+## What & Why
+The reference photo and saved strokes drift apart after switching canvas dimensions.
+`,
+  "behavior-change.md": `# Keep layer selection predictable
+
+## What & Why
+Clicking a layer name opens its rename field rather than selecting the layer.
+`,
+  "error-path.md": `# Keep image loading from getting stuck
+
+## What & Why
+When photo decoding cannot complete, the panel remains on its loading state forever and offers no way forward.
+`,
+  "privacy-boundary.md": `# Keep profiles separate
+
+## What & Why
+One profile can display sketches belonging to another profile after switching workspaces.
+`,
+  "data-integrity.md": `# Keep the newest sketch name
+
+## What & Why
+The earlier label is stored when a second rename finishes first.
+`,
+  "lifecycle.md": `# Release editor documents when leaving
+
+## What & Why
+Closing the editor leaves the hidden drawing document left behind after the screen disappears.
+`,
+  "reliability.md": `# Keep large references usable
+
+## What & Why
+The drawing tab becomes unresponsive for several minutes while opening panoramic images.
+`,
+  "compatibility.md": `# Keep older sketches readable
+
+## What & Why
+Previously saved sketches will not open in the new viewer after its required drawing field changes.
+`,
+};
 
 function fixture(t, files = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "regression-guard-"));
@@ -171,6 +213,74 @@ ${exampleFields}
     TASK_PLAN_FILE: path.join(directory, "active-fields-with-examples.md"),
   });
   assert.equal(validWithExamples.status, 0, validWithExamples.stderr);
+});
+
+test("strict mode requires guards for material risks phrased without trigger keywords", (t) => {
+  const directory = fixture(t, MATERIAL_RISK_PLANS);
+  for (const name of Object.keys(MATERIAL_RISK_PLANS)) {
+    const result = runChecker([], { TASK_PLAN_FILE: path.join(directory, name) });
+    assert.equal(result.status, 1, `${name}: ${result.stderr}`);
+    assert.match(result.stderr, /qualifying plan is missing ## Regression Guard/);
+  }
+
+  const excluded = fixture(t, {
+    "additive.md": EXCLUDED_ADDITIVE_PLAN,
+    "internal-refactor.md": `# Rename a helper for clarity
+
+## What & Why
+Rename one local helper to match the naming convention; this has no effect on visible output, saved content, or supported workflows.
+`,
+  });
+  for (const name of ["additive.md", "internal-refactor.md"]) {
+    const result = runChecker([], { TASK_PLAN_FILE: path.join(excluded, name) });
+    assert.equal(result.status, 0, `${name}: ${result.stderr}`);
+  }
+});
+
+test("section parsing ignores fenced and quoted example headings", (t) => {
+  const examples = `\`\`\`markdown
+## Regression Guard
+**Covers:** <FILL IN: illustrative only>
+## Validation
+example validation
+## Relevant files
+example.ts
+\`\`\`
+
+> ## Regression Guard
+> **Covers:** Another example only.
+> ## Relevant files
+> example.ts
+
+`;
+  const plan = VALID_PLAN.replace("## Relevant files", `${examples}## Relevant files`);
+  const directory = fixture(t, { "examples.md": plan });
+  const result = runChecker([], { TASK_PLAN_FILE: path.join(directory, "examples.md") });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("bug examples in fences and blockquotes do not qualify unrelated plans", (t) => {
+  const plan = `# Document the color palette examples
+
+## What & Why
+Add documentation showing the available palette swatches.
+
+\`\`\`markdown
+# Fix a broken drawing flow
+Wrong saved placement can corrupt data and expose another user's sketch.
+## Regression Guard
+**Covers:** Example only.
+\`\`\`
+
+> Fix the stale layer order after export.
+> The old behavior loses drawings and breaks saved-file compatibility.
+
+## Done looks like
+- The palette documentation is available.
+`;
+  const directory = fixture(t, { "quoted-bugs.md": plan });
+  const result = runChecker([], { TASK_PLAN_FILE: path.join(directory, "quoted-bugs.md") });
+  assert.equal(result.status, 0, result.stderr);
 });
 
 test("strict mode exempts additive and DELETE-prefixed plans", (t) => {
@@ -272,6 +382,71 @@ test("--fix-stub inserts only for qualifying plans, and is a no-op on a second r
   const second = runChecker(["--fix-stub"], { TASK_PLAN_FILE: target });
   assert.equal(second.status, 0, second.stderr);
   assert.match(second.stdout, /inserted 0 stubs/);
+});
+
+test("--fix-stub leaves malformed existing guard sections byte-for-byte unchanged", (t) => {
+  const guards = {
+    normal: `## Regression Guard
+**Covers:** TBD
+**Test location:** <FILL IN>
+**What it checks:** Not yet specified.
+`,
+    na: `## Regression Guard
+**N/A**
+**Why N/A:** Hard to test.
+`,
+    self: `## Regression Guard
+**Self-satisfying** — this is done.
+`,
+  };
+  const files = Object.fromEntries(
+    Object.entries(guards).map(([name, guard]) => [
+      `${name}.md`,
+      `${QUALIFYING_MISSING_PLAN}\n${guard}\n## Relevant files\n- scripts/check-regression-guard.mjs\n`,
+    ]),
+  );
+  const directory = fixture(t, files);
+
+  for (const name of Object.keys(guards)) {
+    const target = path.join(directory, `${name}.md`);
+    const original = fs.readFileSync(target, "utf8");
+    const result = runChecker(["--fix-stub"], { TASK_PLAN_FILE: target });
+    assert.equal(result.status, 0, `${name}: ${result.stderr}`);
+    assert.match(result.stdout, /inserted 0 stubs/);
+    assert.equal(fs.readFileSync(target, "utf8"), original, `${name} was modified`);
+  }
+});
+
+test("--fix-stub inserts at real headings and preserves all existing plan text", (t) => {
+  const original = `${QUALIFYING_MISSING_PLAN}
+\`\`\`markdown
+## Regression Guard
+**Covers:** an example section
+## Relevant files
+- example.ts
+\`\`\`
+
+> ## Relevant files
+> quoted-example.ts
+
+## Relevant files
+- scripts/check-regression-guard.mjs
+  \n`;
+  const target = path.join(fixture(t), "plan.md");
+  fs.writeFileSync(target, original);
+  const insertionIndex = original.lastIndexOf("## Relevant files");
+  const before = original.slice(0, insertionIndex);
+  const after = original.slice(insertionIndex);
+  const stub = `## Regression Guard
+**Covers:** <FILL IN: concrete scenario, boundary, invariant, lifecycle, reliability property, or contract>
+**Test location:** <FILL IN: test file path>
+**What it checks:** <FILL IN: specific assertion that catches recurrence>`;
+  const expected = `${before}${stub}\n\n${after}`;
+
+  const result = runChecker(["--fix-stub"], { TASK_PLAN_FILE: target });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /inserted 1 stub/);
+  assert.equal(fs.readFileSync(target, "utf8"), expected);
 });
 
 test("--stubs-only ignores missing sections but rejects placeholders in existing sections", (t) => {

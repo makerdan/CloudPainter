@@ -66,13 +66,78 @@ function listPlanFiles(selectedPath) {
   return files.sort();
 }
 
-function extractPlanBody(content) {
+function maskMarkdownExamples(content) {
+  let fence = null;
+  let inBlockquote = false;
   return content
-    .replace(/^## (?:Regression Guard|Out of scope|Relevant files|Pre-existing failures to ignore|Validation)\s*\n[\s\S]*?(?=^## |\s*$)/gim, "\n");
+    .split(/(?<=\n)/)
+    .map((line) => {
+      const lineContent = line.replace(/[\r\n]+$/, "");
+      const mask = () => line.replace(/[^\r\n]/g, " ");
+
+      if (fence) {
+        const closing = new RegExp(`^ {0,3}${fence.character}{${fence.length},}[\\t ]*$`);
+        if (closing.test(lineContent)) fence = null;
+        return mask();
+      }
+
+      if (/^ {0,3}>/.test(lineContent)) {
+        inBlockquote = true;
+        return mask();
+      }
+      if (inBlockquote) {
+        if (lineContent.trim()) return mask();
+        inBlockquote = false;
+      }
+
+      const opening = lineContent.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+      if (!opening) return line;
+      if (opening[1][0] === "`" && opening[2].includes("`")) return line;
+      fence = { character: opening[1][0], length: opening[1].length };
+      return mask();
+    })
+    .join("");
+}
+
+function secondLevelHeadings(content) {
+  const activeContent = maskMarkdownExamples(content);
+  return [...activeContent.matchAll(/^## (.+?)\s*$/gm)].map((match) => ({
+    index: match.index,
+    name: match[1].trim().toLowerCase(),
+  }));
+}
+
+function extractPlanBody(content) {
+  const activeContent = maskMarkdownExamples(content);
+  const ignoredSections = new Set([
+    "regression guard",
+    "out of scope",
+    "relevant files",
+    "pre-existing failures to ignore",
+    "validation",
+  ]);
+  const headings = secondLevelHeadings(activeContent);
+  const ranges = headings.flatMap((heading, index) => {
+    if (!ignoredSections.has(heading.name)) return [];
+    return [{
+      start: heading.index,
+      end: headings[index + 1]?.index ?? activeContent.length,
+    }];
+  });
+
+  if (!ranges.length) return activeContent;
+  let result = "";
+  let cursor = 0;
+  for (const range of ranges) {
+    result += activeContent.slice(cursor, range.start);
+    result += activeContent.slice(range.start, range.end).replace(/[^\r\n]/g, " ");
+    cursor = range.end;
+  }
+  return result + activeContent.slice(cursor);
 }
 
 function getTitle(content) {
-  return content.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "";
+  return maskMarkdownExamples(content).match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "";
 }
 
 function isDeletePlan(title) {
@@ -130,19 +195,30 @@ function classifyPlan(content) {
     /\b(?:try\s*\/\s*catch|error boundary|error handling|error-response shape|fallback branch|retry logic|timeout logic|validation reject)\b/i,
     /\b(?:replace(?:s|d|ing)? prior behavior|change(?:s|d|ing)? existing behavior|alter(?:s|ed|ing)? existing behavior|different default|redirected flow|changes? what an existing feature does)\b/i,
   ];
-  return strongSignals.some((pattern) => pattern.test(body))
+  const semanticRiskSignals = [
+    /\b(?:misalign(?:s|ed|ment)?|drift(?:s|ed)? apart|out of alignment|wrong scale)\b/i,
+    /\b(?:instead of|rather than)\b[\s\S]{0,100}\b(?:click|tap|select|open|close|save|rename|export|import|load)\b|\b(?:click|tap|select|open|close|save|rename|export|import|load)\b[\s\S]{0,100}\b(?:instead of|rather than)\b/i,
+    /\b(?:stuck|unresponsive|stops responding|never finishes|spins forever|remains? .{0,50} forever)\b/i,
+    /\b(?:one|another|different)\s+(?:account|profile|user)\b[\s\S]{0,120}\b(?:see|show|display|open|read)\b[\s\S]{0,120}\b(?:other|another|different|earlier|previous)\s+(?:account|profile|user)\b/i,
+    /\b(?:earlier|first|older|previous)\s+(?:name|label|value|version|edit)\b[\s\S]{0,120}\b(?:saved|stored|wins|replaces|appears)\b/i,
+    /\b(?:closing|closed|leaving|removed|unmounted)\b[\s\S]{0,120}\b(?:still running|left behind|remains|continues|holds)\b/i,
+    /\b(?:unresponsive|cannot accept input|stops responding|takes minutes to)\b/i,
+    /\b(?:older|earlier|previously saved)\s+(?:sketch(?:es)?|files?|records?|documents?)\b[\s\S]{0,120}\b(?:cannot|won't|will not|stop opening|stop loading|refuse to open)\b/i,
+  ];
+  return [...strongSignals, ...semanticRiskSignals].some((pattern) => pattern.test(body))
     ? { qualifies: true, reason: "material-change signal found" }
     : { qualifies: false, reason: "no qualifying material-change signal found" };
 }
 
 function findSections(content) {
-  const matches = [...content.matchAll(GUARD_HEADING)];
+  const activeContent = maskMarkdownExamples(content);
+  const matches = [...activeContent.matchAll(GUARD_HEADING)];
   return matches.map((match) => {
     const start = match.index;
     const afterHeading = start + match[0].length;
-    const nextHeading = content.slice(afterHeading).search(/^##\s+/m);
-    const end = nextHeading < 0 ? content.length : afterHeading + nextHeading;
-    return { start, end, text: content.slice(afterHeading, end) };
+    const nextHeading = activeContent.slice(afterHeading).search(/^##\s+/m);
+    const end = nextHeading < 0 ? activeContent.length : afterHeading + nextHeading;
+    return { start, end, text: activeContent.slice(afterHeading, end) };
   });
 }
 
@@ -296,7 +372,8 @@ function checkSection(section, planPath, sectionIndex, mode, classification) {
 }
 
 function checkPlacement(content, section, planPath) {
-  const headingMatches = [...content.matchAll(/^## (.+?)\s*$/gm)];
+  const activeContent = maskMarkdownExamples(content);
+  const headingMatches = [...activeContent.matchAll(/^## (.+?)\s*$/gm)];
   const indexOfHeading = (name) =>
     headingMatches.find((heading) => heading[1].trim().toLowerCase() === name)?.index ?? -1;
   const relevant = indexOfHeading("relevant files");
@@ -321,28 +398,32 @@ function insertStub(content) {
     "**Covers:** <FILL IN: concrete scenario, boundary, invariant, lifecycle, reliability property, or contract>",
     "**Test location:** <FILL IN: test file path>",
     "**What it checks:** <FILL IN: specific assertion that catches recurrence>",
-    "",
   ].join("\n");
-  const headingMatches = [...content.matchAll(/^## (.+?)\s*$/gm)];
-  const relevant = headingMatches.find((heading) => heading[1].trim().toLowerCase() === "relevant files");
+  const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
+  const headings = secondLevelHeadings(content);
+  const relevant = headings.find((heading) => heading.name === "relevant files");
   let insertionIndex;
   if (relevant) {
     insertionIndex = relevant.index;
   } else {
     const priorSectionNames = new Set(["validation", "pre-existing failures to ignore"]);
-    const priorSections = headingMatches.filter((heading) =>
-      priorSectionNames.has(heading[1].trim().toLowerCase()));
+    const priorSections = headings.filter((heading) => priorSectionNames.has(heading.name));
     if (priorSections.length) {
       const last = priorSections.reduce((a, b) => (a.index > b.index ? a : b));
-      const nextHeading = headingMatches.find((heading) => heading.index > last.index);
+      const nextHeading = headings.find((heading) => heading.index > last.index);
       insertionIndex = nextHeading?.index ?? content.length;
     } else {
       insertionIndex = content.length;
     }
   }
-  const before = content.slice(0, insertionIndex).replace(/\s*$/, "");
-  const after = content.slice(insertionIndex).replace(/^\s*/, "");
-  return `${before}\n\n${stub}${after ? `\n${after}` : ""}\n`;
+  const before = content.slice(0, insertionIndex);
+  const after = content.slice(insertionIndex);
+  const leading = before.length === 0 || new RegExp(`(?:\\r?\\n){2}$`).test(before)
+    ? ""
+    : before.endsWith(lineEnding)
+      ? lineEnding
+      : lineEnding + lineEnding;
+  return `${before}${leading}${stub}${after ? `${lineEnding}${lineEnding}${after}` : lineEnding}`;
 }
 
 function readPlans(files) {
