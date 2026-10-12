@@ -3469,3 +3469,126 @@ async function panBy(page: Page, deltaX: number, deltaY: number) {
   await page.mouse.move(stage!.x + stage!.width / 2 + deltaX, stage!.y + stage!.height / 2 + deltaY);
   await page.mouse.up();
 }
+
+test('editable project backups round trip between isolated browsers and reject invalid files without replacing work', async ({ browser }) => {
+  const baseURL = process.env.CLOUDPAINTER_TEST_URL;
+  if (!baseURL) throw new Error('Set CLOUDPAINTER_TEST_URL to the running CloudPainter preview URL.');
+  const sourceContext = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } });
+  const targetContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const assertSourceNoProviderRequests = await installProviderRequestGuard(sourceContext);
+  const assertTargetNoProviderRequests = await installProviderRequestGuard(targetContext);
+  for (const context of [sourceContext, targetContext]) {
+    await context.route('**/api/images/config', route => route.fulfill({
+      json: { configured: false, signedIn: false, allowed: false, dailyLimit: 0, remaining: 0, globalRemaining: 0 },
+    }));
+    await context.route('**/api/images/generate', route => route.fulfill({
+      status: 401,
+      json: { error: 'Sign in is required to generate images.' },
+    }));
+  }
+
+  try {
+    const sourcePage = await sourceContext.newPage();
+    await sourcePage.goto('about:blank');
+    const image = await sourcePage.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 24;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = '#7699b2';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/png');
+    });
+    const sourceProject = {
+      image,
+      width: 640,
+      height: 480,
+      layers: [
+        {
+          id: 'backup-ink',
+          name: 'Ink layer',
+          visible: true,
+          opacity: 0.74,
+          strokes: [{ points: [{ x: 0.2, y: 0.3 }, { x: 0.7, y: 0.4 }], color: '#173f55', size: 8, tool: 'pen' }],
+          redo: [{ kind: 'clear' }],
+        },
+        {
+          id: 'backup-color',
+          name: 'Color notes',
+          visible: false,
+          opacity: 0.42,
+          strokes: [{ kind: 'background-fill', color: '#fffefa' }],
+          redo: [],
+        },
+      ],
+      selectedLayerId: 'backup-ink',
+      title: 'Portable sketch',
+      photoZoom: 1.5,
+      photoPan: { x: 14, y: -9 },
+      referencePhotoVisible: false,
+      referencePhotoOpacity: 42,
+    };
+    await sourceContext.addInitScript(({ key, project }) => {
+      localStorage.setItem(key, JSON.stringify(project));
+    }, { key: STORE_KEY, project: sourceProject });
+    await sourcePage.goto(baseURL);
+    await expect(sourcePage.getByTestId('img-reference')).toHaveAttribute('src', image);
+    await expect.poll(() => savedProjectRaw(sourcePage)).toMatchObject(sourceProject);
+
+    await sourcePage.getByTestId('button-export-menu').click();
+    const downloadPromise = sourcePage.waitForEvent('download');
+    await sourcePage.getByTestId('button-export-project-backup').click();
+    const download = await downloadPromise;
+    const downloadedPath = await download.path();
+    expect(downloadedPath).not.toBeNull();
+    const backupBytes = await readFile(downloadedPath!);
+
+    const targetPage = await targetContext.newPage();
+    await targetPage.goto(baseURL);
+    await targetPage.getByTestId('button-export-menu').click();
+    await targetPage.getByTestId('input-project-backup').setInputFiles({
+      name: download.suggestedFilename(),
+      mimeType: 'application/json',
+      buffer: backupBytes,
+    });
+    await expect(targetPage.getByTestId('status-toast')).toContainText('Editable project imported');
+    await expect(targetPage.getByTestId('img-reference')).toHaveAttribute('src', image);
+    await expect(targetPage.getByTestId('input-photo-zoom')).toHaveValue('150');
+    await expect(targetPage.getByTestId('input-reference-photo-opacity')).toHaveValue('42');
+    await expect(targetPage.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(() => savedProjectRaw(targetPage)).toMatchObject(sourceProject);
+    await expect(targetPage.getByTestId('canvas-layer-backup-ink')).toBeVisible();
+    await expect(targetPage.getByTestId('canvas-layer-backup-color')).toHaveCSS('opacity', '0');
+
+    await drawNormalizedLine(targetPage, { x: 0.2, y: 0.72 }, { x: 0.76, y: 0.72 });
+    await expect.poll(async () => (await savedProjectRaw(targetPage))?.layers[0]?.strokes.length).toBe(2);
+    const artworkBeforeInvalidImport = await savedProjectRaw(targetPage);
+    const historyBeforeInvalidImport = await savedProjectHistoryRaw(targetPage);
+
+    await targetPage.getByTestId('button-export-menu').click();
+    await targetPage.getByTestId('input-project-backup').setInputFiles({
+      name: 'unsupported.cloudpainter.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify({ format: 'cloudpainter-project', version: 999, project: sourceProject })),
+    });
+    await expect(targetPage.getByTestId('status-toast')).toContainText('version is not supported');
+    expect(await savedProjectRaw(targetPage)).toEqual(artworkBeforeInvalidImport);
+    expect(await savedProjectHistoryRaw(targetPage)).toEqual(historyBeforeInvalidImport);
+
+    await targetPage.getByTestId('button-export-menu').click();
+    await targetPage.getByTestId('input-project-backup').setInputFiles({
+      name: 'oversized.cloudpainter.json',
+      mimeType: 'application/json',
+      buffer: Buffer.alloc(2 * 1024 * 1024 + 1),
+    });
+    await expect(targetPage.getByTestId('status-toast')).toContainText('larger than 2 MB');
+    expect(await savedProjectRaw(targetPage)).toEqual(artworkBeforeInvalidImport);
+    expect(await savedProjectHistoryRaw(targetPage)).toEqual(historyBeforeInvalidImport);
+
+    assertSourceNoProviderRequests();
+    assertTargetNoProviderRequests();
+  } finally {
+    await sourceContext.close();
+    await targetContext.close();
+  }
+});

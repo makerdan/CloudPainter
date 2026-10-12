@@ -6,6 +6,7 @@ import {
   Copy,
   ClipboardPaste,
   ChevronDown,
+  Download,
   Eye,
   EyeOff,
   Eraser,
@@ -51,30 +52,19 @@ import { AccountSettingsProvider, useAccountSettings } from '@/components/Accoun
 import SettingsPage from '@/components/SettingsPage';
 import { OutlinePanel } from '@/components/OutlinePanel';
 import { viewportToProject } from '@/lib/outlineGeometry';
-import { clearDrawing, copyDrawing, hasDrawing, normalizeDrawingEntries, pasteIntoLayers, renderDrawing, undoDrawing, redoDrawing, type DrawingClipboard, type DrawingEntry } from '@/lib/layerClipboard';
+import { clearDrawing, copyDrawing, hasDrawing, normalizeDrawingEntries, pasteIntoLayers, renderDrawing, undoDrawing, redoDrawing, type DrawingClipboard } from '@/lib/layerClipboard';
 import { editorDefaultsFromSettings } from '@/lib/settingsPersistence';
+import {
+  createProjectBackup,
+  MAX_PROJECT_BACKUP_BYTES,
+  parseProjectBackup,
+  type EditableProject,
+  type ProjectBackupLayer,
+} from '@/lib/projectBackup';
 import AdminAccountsPage from '@/pages/AdminAccountsPage';
 
-type PaintLayer = {
-  id: string;
-  name: string;
-  visible: boolean;
-  opacity: number;
-  strokes: DrawingEntry[];
-  redo: DrawingEntry[];
-};
-type Project = {
-  image: string | null;
-  width: number;
-  height: number;
-  layers: PaintLayer[];
-  selectedLayerId: string;
-  title: string;
-  photoZoom: number;
-  photoPan: { x: number; y: number };
-  referencePhotoVisible: boolean;
-  referencePhotoOpacity: number;
-};
+type PaintLayer = ProjectBackupLayer;
+type Project = EditableProject;
 type SavedProject = Project & { savedId: string };
 
 const RECOVERED_PROJECTS = new WeakSet<Project>();
@@ -618,9 +608,11 @@ function Home() {
   const [pdfSafeMargin, setPdfSafeMargin] = useState<PdfSafeMargin>('0.5');
   const [pdfArtworkPreview, setPdfArtworkPreview] = useState<string | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [projectBackupLoading, setProjectBackupLoading] = useState(false);
   const [panMode, setPanMode] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const projectBackupInput = useRef<HTMLInputElement>(null);
   const stageWrapRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
@@ -1310,6 +1302,121 @@ function Home() {
     if (nextZoom === 1) setPanMode(false);
   };
 
+  const exportProjectBackup = () => {
+    try {
+      const contents = createProjectBackup(project);
+      const downloadUrl = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
+      const link = document.createElement('a');
+      const title = project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea';
+      link.download = `${title}.cloudpainter.json`;
+      link.href = downloadUrl;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      announce('Editable project backup downloaded. It stays on your device.');
+    } catch (error) {
+      announce(error instanceof Error ? error.message : 'Could not create this project backup.');
+    }
+  };
+
+  const importProjectBackup = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    if (photoLoading || projectBackupLoading) {
+      announce('Wait for the current file to finish before importing a project backup.');
+      return;
+    }
+    if (file.size > MAX_PROJECT_BACKUP_BYTES) {
+      announce('This project backup is larger than 2 MB. Choose a smaller project or photo.');
+      return;
+    }
+
+    const photoRequestAtStart = photoImportId.current;
+    setProjectBackupLoading(true);
+    try {
+      const bytes = await file.arrayBuffer();
+      if (bytes.byteLength > MAX_PROJECT_BACKUP_BYTES) {
+        throw new Error('This project backup is larger than 2 MB. Choose a smaller project or photo.');
+      }
+      let contents: string;
+      try {
+        contents = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      } catch {
+        throw new Error('This file is not a readable CloudPainter project backup.');
+      }
+      const nextProject = parseProjectBackup(contents);
+      if (nextProject.image) {
+        const photo = new Image();
+        photo.src = nextProject.image;
+        try {
+          await photo.decode();
+        } catch {
+          throw new Error('The reference photo in this backup could not be opened. Your sketch is unchanged.');
+        }
+        if (photo.naturalWidth < 1 || photo.naturalHeight < 1
+          || photo.naturalWidth > 2000 || photo.naturalHeight > 2000) {
+          throw new Error('The reference photo in this backup is outside the supported size. Your sketch is unchanged.');
+        }
+      }
+      if (photoRequestAtStart !== photoImportId.current || photoLoading) {
+        throw new Error('A photo import started while this backup was being checked. Your sketch is unchanged.');
+      }
+
+      const estimate = await refreshStorageEstimate();
+      const currentProject = latestProject.current;
+      const nextHistory = withSavedProject(readProjectHistory(), currentProject);
+      if (!confirmHistoryWriteIfStorageIsLow(estimate, nextProject, nextHistory)) {
+        announce('Project import cancelled. Your sketch is unchanged.');
+        return;
+      }
+
+      const currentSnapshot = localStorage.getItem(STORE_KEY);
+      const currentSerialized = JSON.stringify(currentProject);
+      if (projectConflict.current
+        || (currentSnapshot !== persistedProjectSnapshot.current && currentSnapshot !== currentSerialized)) {
+        reportProjectConflict();
+        announce('Another tab has newer sketch changes. Resolve that conflict before importing a backup.');
+        return;
+      }
+
+      const nextSnapshot = JSON.stringify(nextProject);
+      const nextHistorySnapshot = JSON.stringify(nextHistory);
+      const previousHistorySnapshot = localStorage.getItem(PROJECT_HISTORY_KEY);
+      try {
+        localStorage.setItem(PROJECT_HISTORY_KEY, nextHistorySnapshot);
+        localStorage.setItem(STORE_KEY, nextSnapshot);
+      } catch {
+        try {
+          if (previousHistorySnapshot === null) localStorage.removeItem(PROJECT_HISTORY_KEY);
+          else localStorage.setItem(PROJECT_HISTORY_KEY, previousHistorySnapshot);
+        } catch {
+          // The active sketch remains in memory; a failed history rollback only leaves its recovery copy.
+        }
+        throw new Error('Could not save this backup in browser storage. Your current sketch is unchanged.');
+      }
+
+      persistedProjectSnapshot.current = nextSnapshot;
+      projectConflict.current = false;
+      setStorageConflict(false);
+      setProjectHistory(nextHistory);
+      setDraft(null);
+      drawingRef.current = false;
+      panningRef.current = null;
+      touchPointersRef.current.clear();
+      setPanMode(false);
+      setDrawingClipboard(null);
+      setProject(nextProject);
+      setExportMenuOpen(false);
+      void refreshStorageEstimate();
+      announce('Editable project imported. Your previous sketch is saved in Saved sketches.');
+    } catch (error) {
+      announce(error instanceof Error ? error.message : 'Could not read this project backup. Your sketch is unchanged.');
+    } finally {
+      setProjectBackupLoading(false);
+    }
+  };
+
   const exportPng = async () => {
     try {
       const { canvas } = await composeProjectCanvas(project, canvasRefs.current, exportSize, paperOrientation);
@@ -1517,6 +1624,39 @@ function Home() {
                     <TooltipButton description="Download the full sketch centered inside the selected print-safe margin on a Letter or A4 page." className="button export-menu-action" onClick={() => { setExportMenuOpen(false); void exportPdf(); }} data-testid="button-export-pdf"><FileDown size={14} /> Export PDF</TooltipButton>
                   </section>
                 </div>
+                <section className="project-backup-actions" aria-labelledby="project-backup-heading">
+                  <div>
+                    <h3 id="project-backup-heading">Editable project backup</h3>
+                    <p>Keep a local copy with its photo, layers, strokes, and canvas settings. Backups are limited to 2 MB.</p>
+                  </div>
+                  <div className="project-backup-buttons">
+                    <TooltipButton
+                      description="Download a versioned, editable copy of this project to your device."
+                      className="button"
+                      onClick={exportProjectBackup}
+                      data-testid="button-export-project-backup"
+                    >
+                      <Download size={14} /> Download backup
+                    </TooltipButton>
+                    <TooltipButton
+                      description="Open a local project backup. The current sketch is saved in Saved sketches first."
+                      className="button button-primary"
+                      onClick={() => projectBackupInput.current?.click()}
+                      disabled={projectBackupLoading || photoLoading}
+                      data-testid="button-import-project-backup"
+                    >
+                      <Upload size={14} /> {projectBackupLoading ? 'Checking backup…' : 'Import backup'}
+                    </TooltipButton>
+                    <input
+                      ref={projectBackupInput}
+                      hidden
+                      type="file"
+                      accept="application/json,.json"
+                      onChange={event => { void importProjectBackup(event); }}
+                      data-testid="input-project-backup"
+                    />
+                  </div>
+                </section>
               </PopoverContent>
             </Popover>
           </div>
