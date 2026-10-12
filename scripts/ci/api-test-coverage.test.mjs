@@ -10,6 +10,7 @@ const databaseStep = 'Run database tests against the disposable PostgreSQL servi
 const guardStep = 'Guard executable API database coverage';
 const suites = ['test:image-access', 'test:palettes', 'test:settings'];
 const disposableDatabaseUrl = 'postgresql://postgres:ci-test-password@127.0.0.1:5432/cloudpainter_test';
+const disposablePostgresImage = 'postgres:16.10-bookworm';
 const portableStep = 'Run portable unit and mocked-provider suites';
 // Independent executable coverage contract: do not derive expectations from the
 // workflow under test (that would accept omitted or substituted commands).
@@ -343,8 +344,8 @@ function assertDisposableService(source) {
   assert.equal(validation.split(marker).length, 2,
     'Expected exactly one disposable PostgreSQL service in validation');
   const service = validation.split(marker)[1].split(/(?=^    \S|^      \S)/m)[0];
-  assert.match(service, /^        image: postgres:[^\s]+\n/m,
-    'Expected the disposable PostgreSQL service image');
+  assert.equal(service.match(/^        image: ([^\s]+)\n/m)?.[1], disposablePostgresImage,
+    `PostgreSQL service image must remain ${disposablePostgresImage}`);
   const target = new URL(disposableDatabaseUrl); // Text parsing only; no connection.
   const environment = service.match(/^        env:\n((?:          [^\n]*\n)+)/m)?.[1];
   assert.equal(environment, [
@@ -361,6 +362,14 @@ function assertDisposableService(source) {
   assert.deepEqual(healthCommands, [
     `          --health-cmd "pg_isready -U ${target.username} -d ${target.pathname.slice(1)}"`,
   ], 'PostgreSQL health command must use pg_isready with the disposable URL user and database');
+  const readinessLimits = options?.split('\n')
+    .filter(line => /^--health-(?:interval|timeout|retries)\b/.test(line.trimStart()))
+    .map(line => line.trim());
+  assert.deepEqual(readinessLimits, [
+    '--health-interval 5s',
+    '--health-timeout 5s',
+    '--health-retries 12',
+  ], 'PostgreSQL readiness limits must remain bounded at interval 5s, timeout 5s, retries 12');
 }
 
 function databaseScript(source) {
@@ -469,6 +478,62 @@ for (const [label, replacement] of [
       message: /^PostgreSQL health command must use pg_isready with the disposable URL user and database/,
     });
   });
+}
+
+test('PostgreSQL service image must match the agreed version', { timeout: 10000 }, () => {
+  const original = `        image: ${disposablePostgresImage}\n`;
+  const mutated = workflow.replace(original, '        image: postgres:17.0-bookworm\n');
+  assert.notEqual(mutated, workflow, 'Version fixture must change exactly the service image');
+  assert.equal(stepBody(mutated, databaseStep), stepBody(workflow, databaseStep),
+    'Version fixture must leave the database step unchanged');
+  assert.throws(() => databaseScript(mutated), {
+    code: 'ERR_ASSERTION',
+    message: /^PostgreSQL service image must remain postgres:16\.10-bookworm/,
+  });
+});
+
+test('PostgreSQL service image must reject a mutable tag', { timeout: 10000 }, () => {
+  const original = `        image: ${disposablePostgresImage}\n`;
+  const mutated = workflow.replace(original, '        image: postgres:16\n');
+  assert.notEqual(mutated, workflow, 'Mutable-tag fixture must change exactly the service image');
+  assert.equal(stepBody(mutated, databaseStep), stepBody(workflow, databaseStep),
+    'Mutable-tag fixture must leave the database step unchanged');
+  assert.throws(() => databaseScript(mutated), {
+    code: 'ERR_ASSERTION',
+    message: /^PostgreSQL service image must remain postgres:16\.10-bookworm/,
+  });
+});
+
+for (const [setting, originalValue, replacement] of [
+  ['interval', '5s', null],
+  ['interval', '5s', '0s'],
+  ['interval', '5s', '10s'],
+  ['interval', '5s', '999999999s'],
+  ['timeout', '5s', null],
+  ['timeout', '5s', '0s'],
+  ['timeout', '5s', '10s'],
+  ['timeout', '5s', '999999999s'],
+  ['retries', '12', null],
+  ['retries', '12', '0'],
+  ['retries', '12', '10'],
+  ['retries', '12', '999999999'],
+]) {
+  test(`PostgreSQL readiness ${setting} ${replacement === null ? 'is required' : `rejects ${replacement}`}`,
+    { timeout: 10000 }, () => {
+      const original = `          --health-${setting} ${originalValue}\n`;
+      const changed = replacement === null ? '' : `          --health-${setting} ${replacement}\n`;
+      assert.equal(workflow.split(original).length, 2,
+        `Readiness fixture must target exactly one health ${setting}`);
+      const mutated = workflow.replace(original, changed);
+      assert.notEqual(mutated, workflow, 'Readiness fixture must change the workflow text');
+      assert.equal(stepBody(mutated, databaseStep), stepBody(workflow, databaseStep),
+        'Readiness fixture must leave the database step unchanged');
+      // Text parsing only: this must reject before any service or command is started.
+      assert.throws(() => databaseScript(mutated), {
+        code: 'ERR_ASSERTION',
+        message: /^PostgreSQL readiness limits must remain bounded at interval 5s, timeout 5s, retries 12/,
+      });
+    });
 }
 
 // Independent synthetic decoy, not copied from the service under test. Keep

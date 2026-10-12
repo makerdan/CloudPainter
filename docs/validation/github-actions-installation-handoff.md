@@ -369,6 +369,34 @@ resolution, real package hook, browser, build, or remote action was performed.
 This is focused local fixture evidence, not Failure Gate activation or a full CI
 pass. Remote activation, passing status, and merge requirements remain unknown.
 
+## PostgreSQL image and readiness-limit guard
+
+The G33 consolidation retains both original goals: the service image must remain
+`postgres:16.10-bookworm`, and the existing readiness interval, timeout, and
+retry count must remain `5s`, `5s`, and `12`. The regression fixtures are
+text-only mutations of the existing validation job. They reject a substituted
+or mutable image tag, and independently reject missing, zero, changed, or
+extremely large readiness values. Each negative fixture checks the intended
+diagnostic and leaves the database test step unchanged; no service, shell
+stub, database connection, or remote workflow is started by these fixtures.
+
+The source descriptions for the two consolidated goals required the unchanged
+workflow as the positive control, narrow version/timing mutations, preservation
+of the service and command configuration, and no PostgreSQL startup or Actions
+trigger. Their shared prerequisite, task #307, is merged; its existing
+`pg_isready` user/database guard is present and remains unchanged. The task
+records were read before implementation; their goals were not treated as
+permission to broaden the work.
+
+No new test command was launched for this update. Current host validation
+governance could not be established: the canonical checked-policy/registry
+files are absent, and the available repository evidence does not verify
+governance as inactive. Under the task's validation gate, this is UNKNOWN and
+blocks execution. Existing historical test results in this handoff do not
+authorize this update's validation. The focused fixtures therefore remain
+unexecuted here; no passing result is claimed. The CI workflow, image, health
+settings, validation command, permissions, and remote state were not changed.
+
 ## PostgreSQL health-command agreement fixtures (2026-10-11)
 
 The existing service agreement guard now reads only the current PostgreSQL
