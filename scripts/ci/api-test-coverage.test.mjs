@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import test from 'node:test';
 
 const workflow = readFileSync(new URL('../../.github/workflows/cloudpainter-ci.yml', import.meta.url), 'utf8');
@@ -149,26 +149,42 @@ function portableScript(source) {
 }
 
 function runPortableStage(source, failingChecks = []) {
-  const failingCommands = new Set(failingChecks.map(portableCommand));
+  const failureCodes = new Map(failingChecks.map((failure) => {
+    const check = Array.isArray(failure) ? failure : failure.check;
+    const code = Array.isArray(failure) ? 23 : failure.code;
+    assert.ok(portableChecks.some((candidate) => candidate === check
+      || (candidate[0] === check?.[0] && candidate[1] === check?.[1] && candidate[2] === check?.[2])),
+    'Failure injection must target an independently selected portable suite');
+    assert.ok(Number.isInteger(code) && code >= 1 && code <= 255,
+      'Failure injection must use a distinct valid nonzero exit code');
+    return [portableCommand(check), code];
+  }));
+  assert.equal(failureCodes.size, failingChecks.length, 'A suite may be assigned only one injected exit code');
   const script = portableScript(source);
   const bash = (process.env.PATH ?? '').split(':').map(path => join(path, 'bash')).find(existsSync);
   assert.ok(bash, 'Expected a local Bash executable');
   const directory = mkdtempSync(join(tmpdir(), 'portable-ci-coverage-'));
   try {
+    const injectedFailures = [...failureCodes.entries()];
+    const failureBranches = injectedFailures.map((_, index) =>
+      `if [ "$*" = "$FAILURE_COMMAND_${index + 1}" ]; then exit "$FAILURE_STATUS_${index + 1}"; fi`).join('\n');
     writeFileSync(join(directory, 'pnpm'), `#!/bin/sh
 printf '%s\\n' "$*" >> "$CALLS_FILE"
 if [ "$#" -ne 4 ] || [ "$1" != "--filter" ] || [ "$3" != "run" ]; then exit 98; fi
-# Delimit complete commands so shared suite names cannot fail other packages.
-case "$FAILING_CALLS" in *"|$*|"*) exit 23 ;; esac
+${failureBranches}
 exit 0
 `, { mode: 0o700 });
+    const failureEnvironment = Object.fromEntries(injectedFailures.flatMap(([command, code], index) => [
+      [`FAILURE_COMMAND_${index + 1}`, command],
+      [`FAILURE_STATUS_${index + 1}`, String(code)],
+    ]));
     const result = spawnSync(bash, ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script], {
       cwd: directory,
       // Only the stub is on PATH. No credentials or caller startup settings.
       env: {
         PATH: directory,
         CALLS_FILE: join(directory, 'calls'),
-        FAILING_CALLS: `|${[...failingCommands].join('|')}|`,
+        ...failureEnvironment,
       },
       encoding: 'utf8',
       timeout: 5000,
@@ -181,13 +197,125 @@ exit 0
     assert.deepEqual(calls, portableChecks.map(portableCommand),
       'Effective portable suite selection must run every exact package/suite once, including siblings after a failure');
     const reports = result.stdout.split('\n').filter(line => /^(PASSED:|FAILED \()/.test(line));
-    assert.deepEqual(reports, portableChecks.map(check => failingCommands.has(portableCommand(check))
-      ? `FAILED (${check[0]}): exit 23` : `PASSED: ${check[0]}`),
+    assert.deepEqual(reports, portableChecks.map(check => failureCodes.has(portableCommand(check))
+      ? `FAILED (${check[0]}): exit ${failureCodes.get(portableCommand(check))}` : `PASSED: ${check[0]}`),
     'Portable stage must preserve each command status and label');
-    assert.equal(result.status, failingCommands.size ? 1 : 0,
+    assert.equal(result.status, failureCodes.size ? 1 : 0,
       'The portable stage must fail if any selected suite fails');
     return result;
   } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+function processIsRunning(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const state = stat.slice(stat.lastIndexOf(')') + 1).trimStart()[0];
+    return state !== 'Z' && state !== 'X';
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ESRCH') return false;
+    throw error;
+  }
+}
+
+async function waitUntil(predicate, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return true;
+    await delay(10);
+  }
+  return predicate();
+}
+
+function signalOwnedGroup(groupId, signal) {
+  assert.ok(Number.isInteger(groupId) && groupId > 1 && groupId !== process.pid,
+    'Only the isolated fixture process group may be signaled');
+  try {
+    process.kill(-groupId, signal);
+  } catch (error) {
+    if (error.code !== 'ESRCH') throw error;
+  }
+}
+
+async function runHangingPortableStage(source) {
+  const script = portableScript(source);
+  const bash = (process.env.PATH ?? '').split(':').map(path => join(path, 'bash')).find(existsSync);
+  assert.ok(bash, 'Expected a local Bash executable');
+  const directory = mkdtempSync(join(tmpdir(), 'portable-ci-timeout-'));
+  const callsFile = join(directory, 'calls');
+  const pidsFile = join(directory, 'owned-pids');
+  writeFileSync(join(directory, 'pnpm'), `#!/bin/sh
+printf '%s\\n' "$*" >> "$CALLS_FILE"
+printf '%s\\n' "$$" > "$OWNED_PIDS_FILE"
+sleep 30 &
+child=$!
+printf '%s\\n' "$child" >> "$OWNED_PIDS_FILE"
+trap 'kill -TERM "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true; exit 143' TERM INT
+wait "$child"
+`, { mode: 0o700 });
+
+  let child;
+  let closed;
+  let output = '';
+  let errorOutput = '';
+  let timedOut = false;
+  let cleanupComplete = false;
+  const processIds = [];
+  try {
+    child = spawn(bash, ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script], {
+      cwd: directory,
+      // A fresh session gives this synthetic fixture an exact, private process
+      // group; timeout cleanup never signals the caller or workspace services.
+      detached: true,
+      env: {
+        PATH: `${directory}:${process.env.PATH ?? ''}`,
+        CALLS_FILE: callsFile,
+        OWNED_PIDS_FILE: pidsFile,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    assert.ok(child.pid && child.pid !== process.pid, 'The timeout fixture must have its own process identity');
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', chunk => { output += chunk; });
+    child.stderr.on('data', chunk => { errorOutput += chunk; });
+    closed = new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal })));
+
+    const stubStarted = await waitUntil(() => existsSync(pidsFile), 2_000);
+    assert.ok(stubStarted, 'The owned shell stub must start before its timeout is exercised');
+    const ready = await waitUntil(() => {
+      const pids = readFileSync(pidsFile, 'utf8').trim().split('\n');
+      if (pids.length !== 2 || pids.some(pid => !/^[1-9][0-9]*$/.test(pid))) return false;
+      processIds.splice(0, processIds.length, ...pids.map(Number));
+      return true;
+    }, 2_000);
+    assert.ok(ready, 'The fixture must record its shell and child process identities');
+    assert.equal((await Promise.race([closed, delay(150).then(() => null)])), null,
+      'The deliberate fixture must remain stuck until the supervisor deadline');
+
+    timedOut = true;
+    signalOwnedGroup(child.pid, 'SIGTERM');
+    const graceful = await Promise.race([closed, delay(250).then(() => null)]);
+    if (graceful === null) signalOwnedGroup(child.pid, 'SIGKILL');
+    const result = await Promise.race([closed, delay(2_000).then(() => null)]);
+    assert.ok(result, 'The owned shell tree must terminate within the bounded cleanup period');
+    const stopped = await waitUntil(() => processIds.every(pid => !processIsRunning(pid)), 1_000);
+    assert.ok(stopped, `Owned fixture descendants must stop: ${processIds.join(', ')}`);
+    cleanupComplete = true;
+    const calls = readFileSync(callsFile, 'utf8').trim().split('\n');
+    return { result, timedOut, output, errorOutput, processIds, calls };
+  } finally {
+    if (child?.pid && !cleanupComplete) {
+      signalOwnedGroup(child.pid, 'SIGKILL');
+      const stoppedChild = closed && await Promise.race([closed, delay(2_000).then(() => null)]);
+      assert.ok(stoppedChild, 'The fixture process must be reaped after forced cleanup');
+      const ownedProcesses = [child.pid, ...processIds];
+      const stoppedTree = await waitUntil(() => ownedProcesses.every(pid => !processIsRunning(pid)), 1_000);
+      assert.ok(stoppedTree, `No owned fixture process may remain: ${ownedProcesses.join(', ')}`);
+    }
     rmSync(directory, { recursive: true, force: true });
   }
 }
@@ -843,4 +971,22 @@ for (const [label, replacement] of [
 test('portable fixture rejects unapproved executable statements before spawning', { timeout: 10000 }, () => {
   const mutated = mutatePortableStage('set +e', 'set +e\n          curl https://provider.invalid');
   assert.throws(() => runPortableStage(mutated), /Unsupported portable fixture statement/);
+});
+
+test('portable stage preserves distinct original suite exit codes and still fails', { timeout: 10000 }, () => {
+  runPortableStage(workflow, [
+    { check: portableChecks[0], code: 17 },
+    { check: portableChecks.at(-1), code: 43 },
+  ]);
+});
+
+test('a timed-out portable shell fixture stops its owned descendants and cannot pass', { timeout: 15000 }, async () => {
+  const result = await runHangingPortableStage(workflow);
+  assert.equal(result.timedOut, true, 'The bounded fixture must report that its deadline expired');
+  assert.ok(result.result.signal !== null || result.result.code !== 0,
+    'A timed-out validation shell must not report success');
+  assert.deepEqual(result.calls, [portableCommand(portableChecks[0])],
+    'The fixture must stop during the first deliberately stalled suite');
+  assert.doesNotMatch(result.output, /^(?:PASSED:|FAILED \()/m,
+    'The stuck validation command must not be reported as passed or completed');
 });
