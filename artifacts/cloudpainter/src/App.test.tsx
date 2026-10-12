@@ -172,6 +172,67 @@ async function trackPicker(page: Page) {
   });
 }
 
+function layerRenameLifecycleProject(image: string) {
+  const stroke = (color: string, y: number) => ({
+    points: [{ x: 0.2, y }, { x: 0.7, y }],
+    color, size: 8, tool: 'pen',
+  });
+  return {
+    image,
+    width: 480,
+    height: 320,
+    title: 'Layer rename persistence',
+    selectedLayerId: 'lifecycle-middle',
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+    layers: [
+      {
+        id: 'lifecycle-bottom',
+        name: 'Background lines',
+        visible: true,
+        opacity: 0.65,
+        strokes: [stroke('#e53935', 0.25)],
+        redo: [stroke('#ff9800', 0.3)],
+      },
+      {
+        id: 'lifecycle-middle',
+        name: 'Selected details',
+        visible: true,
+        opacity: 0.45,
+        strokes: [stroke('#1e88e5', 0.5), stroke('#8e24aa', 0.55)],
+        redo: [stroke('#00acc1', 0.6)],
+      },
+      {
+        id: 'lifecycle-top',
+        name: 'Hidden highlights',
+        visible: false,
+        opacity: 0.8,
+        strokes: [stroke('#43a047', 0.75)],
+        redo: [stroke('#3949ab', 0.8)],
+      },
+    ],
+  };
+}
+
+async function seedLayerRenameLifecycleProject(page: Page, marker: string, project: object) {
+  await page.addInitScript(({ key, marker, project }) => {
+    if (sessionStorage.getItem(marker)) return;
+    localStorage.setItem(key, JSON.stringify(project));
+    sessionStorage.setItem(marker, 'true');
+  }, { key: STORE_KEY, marker: `${STORE_KEY}-${marker}`, project });
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toBeVisible();
+  await expect.poll(() => savedProject(page)).toEqual(project);
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+}
+
+async function freezeProjectAutosave(page: Page) {
+  const pageTime = await page.evaluate(() => Date.now());
+  await page.clock.install({ time: pageTime });
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/images/config', route => route.fulfill({
     json: { configured: false, signedIn: false, allowed: false, dailyLimit: 0, remaining: 0, globalRemaining: 0 },
@@ -2132,6 +2193,7 @@ test.describe('layer rename regression', () => {
       const ids = ['switch-bottom', 'switch-middle', 'switch-top'];
       const before = {
         photoZoom: 1, photoPan: { x: 0, y: 0 },
+        referencePhotoVisible: true, referencePhotoOpacity: 100,
         image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
         width: 480, height: 320, title: 'Independent rename drafts', selectedLayerId: ids[1],
         layers: ids.map((id, index) => ({
@@ -2245,6 +2307,7 @@ test.describe('layer rename regression', () => {
         // opacity and a stable ID. The unselected target is deliberately hidden.
         const before = {
           photoZoom: 1, photoPan: { x: 0, y: 0 },
+          referencePhotoVisible: true, referencePhotoOpacity: 100,
           image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
           width: 480, height: 320, title: 'Preserve my named sketch',
           selectedLayerId: 'rename-middle',
@@ -2331,6 +2394,127 @@ test.describe('layer rename regression', () => {
       });
     }
   }
+
+  test('a confirmed rename survives a reload before the 500ms autosave', async ({ page }) => {
+    const photo = await png(page, 'rename-immediate-reload.png', 480, 320);
+    const before = layerRenameLifecycleProject(`data:image/png;base64,${photo.buffer.toString('base64')}`);
+    await seedLayerRenameLifecycleProject(page, 'immediate-reload', before);
+    await freezeProjectAutosave(page);
+
+    const id = 'lifecycle-top';
+    const input = page.getByTestId(`input-rename-${id}`);
+    await page.getByTestId(`button-rename-${id}`).click();
+    await expect(input).toHaveValue('Hidden highlights');
+    await input.fill('Renamed highlights');
+    await input.press('Enter');
+
+    // The frozen debounce proves localStorage is still at the old snapshot;
+    // navigation must persist the committed project through pagehide.
+    expect(await savedProject(page)).toEqual(before);
+    await expect(page.getByTestId('status-save')).toHaveText('Saving…');
+    await page.reload();
+
+    const expected = {
+      ...before,
+      layers: before.layers.map(layer => layer.id === id
+        ? { ...layer, name: 'Renamed highlights' }
+        : layer),
+    };
+    await expect.poll(() => savedProject(page)).toEqual(expected);
+    await expect(page.getByTestId(`button-select-layer-${id}`)).toHaveText('Renamed highlights');
+    await expect(page.getByTestId('layer-row-lifecycle-middle')).toHaveClass(/active/);
+  });
+
+  for (const [draft, label] of [['', 'empty'], ['   ', 'whitespace-only']] as const) {
+    test(`a ${label} second draft cannot replace the first layer name`, async ({ page }) => {
+      const photo = await png(page, `rename-${label}-second-draft.png`, 480, 320);
+      const before = layerRenameLifecycleProject(`data:image/png;base64,${photo.buffer.toString('base64')}`);
+      await seedLayerRenameLifecycleProject(page, `second-draft-${label}`, before);
+      await freezeProjectAutosave(page);
+
+      const firstId = 'lifecycle-bottom';
+      const secondId = 'lifecycle-middle';
+      const thirdId = 'lifecycle-top';
+      const firstInput = page.getByTestId(`input-rename-${firstId}`);
+      const secondInput = page.getByTestId(`input-rename-${secondId}`);
+      const thirdInput = page.getByTestId(`input-rename-${thirdId}`);
+
+      await page.getByTestId(`button-rename-${firstId}`).click();
+      await firstInput.fill('Confirmed background');
+      // Clicking the next rename control commits the first draft on blur.
+      await page.getByTestId(`button-rename-${secondId}`).click();
+      await expect(secondInput).toHaveValue('Selected details');
+      await secondInput.fill(draft);
+      // Blur the blank second draft while opening a third field.
+      await page.getByTestId(`button-rename-${thirdId}`).click();
+      await expect(thirdInput).toHaveValue('Hidden highlights');
+      await thirdInput.press('Escape');
+
+      const expected = {
+        ...before,
+        layers: before.layers.map(layer => layer.id === firstId
+          ? { ...layer, name: 'Confirmed background' }
+          : layer),
+      };
+      await page.clock.runFor(600);
+      await expect.poll(() => savedProject(page)).toEqual(expected);
+      await page.reload();
+      await expect.poll(() => savedProject(page)).toEqual(expected);
+      for (const layer of expected.layers) {
+        await expect(page.getByTestId(`button-select-layer-${layer.id}`)).toHaveText(layer.name);
+      }
+      await expect(page.getByTestId('layer-row-lifecycle-middle')).toHaveClass(/active/);
+    });
+  }
+
+  test('cancelling a pending second rename reopens with saved names and accepts a fresh draft', async ({ page }) => {
+    const photo = await png(page, 'rename-reopen-cancelled.png', 480, 320);
+    const before = layerRenameLifecycleProject(`data:image/png;base64,${photo.buffer.toString('base64')}`);
+    await seedLayerRenameLifecycleProject(page, 'reopen-cancelled', before);
+    await freezeProjectAutosave(page);
+
+    const firstId = 'lifecycle-bottom';
+    const secondId = 'lifecycle-top';
+    const firstInput = page.getByTestId(`input-rename-${firstId}`);
+    const secondInput = page.getByTestId(`input-rename-${secondId}`);
+
+    await page.getByTestId(`button-rename-${firstId}`).click();
+    await firstInput.fill('Confirmed background');
+    // This commits the first name and opens the second field while its
+    // debounced localStorage write is deliberately held.
+    await page.getByTestId(`button-rename-${secondId}`).click();
+    await expect(secondInput).toHaveValue('Hidden highlights');
+    expect(await savedProject(page)).toEqual(before);
+    await expect(page.getByTestId('status-save')).toHaveText('Saving…');
+
+    await secondInput.fill('Discarded highlights');
+    await secondInput.press('Escape');
+    expect(await savedProject(page)).toEqual(before);
+
+    await page.getByTestId(`button-rename-${firstId}`).click();
+    await expect(firstInput).toHaveValue('Confirmed background');
+    await firstInput.press('Escape');
+    await page.getByTestId(`button-rename-${secondId}`).click();
+    await expect(secondInput).toHaveValue('Hidden highlights');
+    await secondInput.fill('Fresh highlights');
+    await secondInput.press('Enter');
+
+    const expected = {
+      ...before,
+      layers: before.layers.map(layer => {
+        if (layer.id === firstId) return { ...layer, name: 'Confirmed background' };
+        if (layer.id === secondId) return { ...layer, name: 'Fresh highlights' };
+        return layer;
+      }),
+    };
+    await page.clock.runFor(600);
+    await expect.poll(() => savedProject(page)).toEqual(expected);
+    await page.reload();
+    await expect.poll(() => savedProject(page)).toEqual(expected);
+    await expect(page.getByTestId(`button-select-layer-${firstId}`)).toHaveText('Confirmed background');
+    await expect(page.getByTestId(`button-select-layer-${secondId}`)).toHaveText('Fresh highlights');
+    await expect(page.getByTestId('layer-row-lifecycle-middle')).toHaveClass(/active/);
+  });
 });
 
 test('strokes stay on the same photo details across zoom and pan, and hidden layers allow photo dragging', async ({ page }) => {
