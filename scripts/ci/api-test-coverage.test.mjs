@@ -10,6 +10,14 @@ const databaseStep = 'Run database tests against the disposable PostgreSQL servi
 const guardStep = 'Guard executable API database coverage';
 const suites = ['test:image-access', 'test:palettes', 'test:settings'];
 const disposableDatabaseUrl = 'postgresql://postgres:ci-test-password@127.0.0.1:5432/cloudpainter_test';
+const databaseChecks = [
+  ['test:image-access', 'tests/image-access.test.ts'],
+  ['test:palettes', 'src/routes/palettes.test.ts'],
+  ['test:settings', 'src/routes/settings.test.ts'],
+];
+const apiManifestPath = 'artifacts/api-server/package.json';
+const apiManifest = JSON.parse(readFileSync(new URL(`../../${apiManifestPath}`, import.meta.url), 'utf8'));
+const databasePackageDirectory = apiManifestPath.slice(0, -'/package.json'.length);
 const disposablePostgresImage = 'postgres:16.10-bookworm';
 const portableStep = 'Run portable unit and mocked-provider suites';
 // Independent executable coverage contract: do not derive expectations from the
@@ -122,6 +130,77 @@ function assertPortablePackageScripts(source, manifests, fileAvailable = isRepos
       assert.ok(fileAvailable(`${directory}/${target}`),
         `${context}: referenced file must exist: ${target}`);
     }
+  }
+}
+
+// The three database suites are an independent exact contract. Inspect their
+// manifest command strings and literal targets; never invoke a manifest script.
+function assertDatabasePackageScripts(manifest, fileAvailable = isRepositoryFile) {
+  assert.equal(manifest.name, '@workspace/api-server',
+    'Database checks must come from the API server manifest');
+  assert.ok(manifest.scripts && typeof manifest.scripts === 'object',
+    'Expected API server package scripts');
+  for (const [suite, target] of databaseChecks) {
+    const context = `@workspace/api-server run ${suite}`;
+    const command = manifest.scripts[suite];
+    assert.ok(typeof command === 'string' && command.trim().length > 0,
+      `${context} must have a nonempty package script`);
+    assert.equal(command, `tsx --test ${target}`,
+      `${context} must retain its authorized test runner and literal target`);
+    assert.deepEqual(literalScriptFiles(command, context), [target],
+      `${context} must select only its authorized literal target`);
+    assert.ok(fileAvailable(`${databasePackageDirectory}/${target}`),
+      `${context}: referenced file must exist: ${target}`);
+  }
+}
+
+const databaseFixtureTargets = new Set([
+  disposableDatabaseUrl,
+  'postgresql://fixture-user:fixture-password@shared-db.invalid:5432/shared',
+  '${{ secrets.DATABASE_URL }}',
+  'offline-secret-database-target',
+  '',
+]);
+
+function assertDatabaseShellAdmission(script) {
+  const admitted = new Set([
+    'set +e',
+    'failed=0',
+    "printf '\\n=== api-server %s ===\\n' \"$check\"",
+    'pnpm --filter @workspace/api-server run "$check"',
+    'status=$?',
+    'if [ "$status" -ne 0 ]; then',
+    "printf 'FAILED (%s): exit %s\\n' \"$check\" \"$status\"",
+    'failed=1',
+    'else',
+    "printf 'PASSED: %s\\n' \"$check\"",
+    'fi',
+    'done',
+    'exit "$failed"',
+    'unset DATABASE_URL',
+    'DATABASE_URL=""',
+    'exit 0',
+  ]);
+
+  for (const line of script.split('\n').map(value => value.trim())) {
+    if (!line || line.startsWith('#') || admitted.has(line)) continue;
+    const loop = line.match(/^for check in ([a-z:-]+(?: [a-z:-]+)*); do$/);
+    if (loop) {
+      const selected = loop[1].split(' ');
+      if (selected.length > 0
+        && selected.every(suite => suites.includes(suite))
+        && new Set(selected).size === selected.length
+        && selected.join(' ') === suites.filter(suite => selected.includes(suite)).join(' ')) {
+        continue;
+      }
+    }
+    const assignment = line.match(/^(?:export )?DATABASE_URL="([^"\n]*)"$/);
+    if (assignment && databaseFixtureTargets.has(assignment[1])) continue;
+    const localPnpm = line.match(/^(?:DATABASE_URL|env DATABASE_URL)="([^"\n]*)" pnpm --filter @workspace\/api-server run "\$check"$/);
+    if (localPnpm && databaseFixtureTargets.has(localPnpm[1])) continue;
+    const branch = line.match(/^(?:if \[ "\$check" = "(test:image-access|test:palettes|test:settings)" \]; then|export DATABASE_URL="([^"\n]*)")$/);
+    if (branch && (!branch[2] || databaseFixtureTargets.has(branch[2]))) continue;
+    assert.fail(`Unsupported database shell statement: ${line}`);
   }
 }
 
@@ -335,11 +414,21 @@ function stepBody(source, name) {
   return source.split(marker)[1].split(/(?=^      - |^  [\w-]+:)/m)[0];
 }
 
+function jobBody(source, name) {
+  const marker = `  ${name}:\n`;
+  assert.equal(source.split(marker).length, 2, `Expected exactly one ${name} job`);
+  const jobsStart = source.indexOf('jobs:\n');
+  const jobStart = source.indexOf(marker);
+  assert.ok(jobsStart >= 0 && jobStart > jobsStart, `Expected ${name} under jobs`);
+  const contentStart = jobStart + marker.length;
+  const nextJob = source.slice(contentStart).search(/^  [A-Za-z0-9_-]+:\n/m);
+  return source.slice(contentStart, nextJob < 0 ? source.length : contentStart + nextJob);
+}
+
 function assertDisposableService(source) {
   // Inspect only validation's existing postgres service, never another job or
   // a comment. This intentionally fails closed when its YAML shape changes.
-  const validation = source.match(/^  validation:\n((?:    [^\n]*\n|\n)+)/m)?.[1];
-  assert.ok(validation, 'Expected the existing validation job');
+  const validation = jobBody(source, 'validation');
   const marker = '    services:\n      postgres:\n';
   assert.equal(validation.split(marker).length, 2,
     'Expected exactly one disposable PostgreSQL service in validation');
@@ -374,14 +463,20 @@ function assertDisposableService(source) {
 
 function databaseScript(source) {
   assertDisposableService(source);
-  const body = stepBody(source, databaseStep);
+  const marker = `      - name: ${databaseStep}\n`;
+  assert.equal(source.split(marker).length, 2,
+    'Expected exactly one database-test step in the complete workflow');
+  const validation = jobBody(source, 'validation');
+  const body = stepBody(validation, databaseStep);
   const environment = body.match(/^        env:\n((?:          [^\n]*\n)+)(?=        run:)/m);
   assert.ok(environment, 'Expected the database step to declare its disposable environment');
   assert.equal(environment[1], `          DATABASE_URL: ${disposableDatabaseUrl}\n`,
     'Database tests must target only the disposable PostgreSQL service URL');
   const match = body.match(/^        run: \|\n((?:          [^\n]*\n|\n)+)$/m);
   assert.ok(match, 'Expected the database step to end with its inline shell script');
-  return match[1].replace(/^          /gm, '');
+  const script = match[1].replace(/^          /gm, '');
+  assertDatabaseShellAdmission(script);
+  return script;
 }
 
 function runDatabaseStage(source, failingSuite = '') {
@@ -406,11 +501,25 @@ fi
 if [ "$4" = "$FAILING_SUITE" ]; then exit 23; fi
 exit 0
 `, { mode: 0o700 });
-    const result = spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script], {
+    writeFileSync(join(directory, 'env'), `#!/bin/sh
+case "$1" in
+  DATABASE_URL=*) DATABASE_URL=\${1#DATABASE_URL=} ;;
+  *) exit 97 ;;
+esac
+export DATABASE_URL
+shift
+if [ "$#" -ne 5 ] || [ "$1" != "pnpm" ] || [ "$2" != "--filter" ] \
+  || [ "$3" != "@workspace/api-server" ] || [ "$4" != "run" ]; then exit 97; fi
+exec "$@"
+`, { mode: 0o700 });
+    const bash = (process.env.PATH ?? '').split(':').map(path => join(path, 'bash')).find(existsSync);
+    assert.ok(bash, 'Expected a local Bash executable');
+    const result = spawnSync(bash, ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script], {
       cwd: directory,
       // Do not inherit database, Clerk or provider environment variables.
       env: {
-        PATH: `${directory}:${process.env.PATH}`,
+        // Only the purpose-built stubs are executable by the fixture shell.
+        PATH: directory,
         CALLS_FILE: join(directory, 'calls'),
         CONNECTIONS_FILE: join(directory, 'connections'),
         DATABASE_URL: disposableDatabaseUrl,
@@ -451,8 +560,112 @@ test('the executable database stage selects all three API suites', { timeout: 10
   runDatabaseStage(workflow);
 });
 
+test('database package manifests retain the authorized test commands and literal files', { timeout: 10000 }, () => {
+  assertDatabasePackageScripts(apiManifest);
+  const inspected = [];
+  assertDatabasePackageScripts(apiManifest, path => {
+    inspected.push(path);
+    return true;
+  });
+  assert.deepEqual(inspected, databaseChecks.map(([, target]) => `${databasePackageDirectory}/${target}`));
+});
+
+for (const [suite] of databaseChecks) {
+  for (const command of [
+    'node --test tests/anything.test.ts',
+    'tsx --test tests/anything.test.ts && touch /tmp/database-command-must-not-run',
+    'pnpm run test:settings',
+    'tsx --test "$TEST_FILE"',
+  ]) {
+    test(`${suite} rejects an unexpected manifest command without executing it: ${command}`,
+      { timeout: 10000 }, () => {
+        const fixture = structuredClone(apiManifest);
+        fixture.scripts[suite] = command;
+        let fileLookups = 0;
+        assert.throws(() => assertDatabasePackageScripts(fixture, () => {
+          fileLookups++;
+          return true;
+        }), /must retain its authorized test runner and literal target/);
+        assert.equal(fileLookups, databaseChecks.findIndex(([candidate]) => candidate === suite),
+          'Reject the command before inspecting its file or any later suite');
+      });
+  }
+}
+
 test('the unchanged PostgreSQL service agrees with the disposable URL as text', { timeout: 10000 }, () => {
   assertDisposableService(workflow);
+});
+
+function databaseStepBlock(source) {
+  const validation = jobBody(source, 'validation');
+  return `      - name: ${databaseStep}\n${stepBody(validation, databaseStep)}`;
+}
+
+function addDatabaseStepDecoyJob(source, block, placement) {
+  const decoy = `  fixture-database-decoy:\n    runs-on: ubuntu-24.04\n    steps:\n${block}`;
+  if (placement === 'before') {
+    assert.equal(source.split('  validation:\n').length, 2, 'Expected one validation job');
+    return source.replace('  validation:\n', `${decoy}  validation:\n`);
+  }
+  assert.equal(source.split('  ci-required:\n').length, 2, 'Expected one aggregate job');
+  return source.replace('  ci-required:\n', `${decoy}  ci-required:\n`);
+}
+
+for (const placement of ['before', 'after']) {
+  test(`database workflow job scope rejects a borrowed step in a decoy job ${placement} validation`,
+    { timeout: 10000 }, () => {
+      const block = databaseStepBlock(workflow);
+      const withoutValidationStep = workflow.replace(block, '');
+      assert.notEqual(withoutValidationStep, workflow, 'Fixture must remove the validation database step');
+      const mutated = addDatabaseStepDecoyJob(withoutValidationStep, block, placement);
+      assert.throws(() => databaseScript(mutated),
+        /Expected exactly one Run database tests against the disposable PostgreSQL service step/);
+    });
+
+  test(`database workflow job scope rejects an extra decoy step ${placement} validation`, { timeout: 10000 }, () => {
+    const mutated = addDatabaseStepDecoyJob(workflow, databaseStepBlock(workflow), placement);
+    assert.throws(() => databaseScript(mutated),
+      /Expected exactly one database-test step in the complete workflow/);
+  });
+
+  test(`database workflow job scope accepts unrelated job steps ${placement} validation`, { timeout: 10000 }, () => {
+    const decoy = `  fixture-unrelated:\n    runs-on: ubuntu-24.04\n    steps:\n      - name: Unrelated fixture step\n        run: echo inert\n`;
+    const mutated = placement === 'before'
+      ? workflow.replace('  validation:\n', `${decoy}  validation:\n`)
+      : workflow.replace('  ci-required:\n', `${decoy}  ci-required:\n`);
+    assert.equal(databaseScript(mutated), databaseScript(workflow),
+      'An unrelated job must not affect the intended database step');
+  });
+}
+
+const validationBlock = `  validation:\n${jobBody(workflow, 'validation')}`;
+for (const invalidFirst of [false, true]) {
+  test(`duplicate validation jobs are rejected before service inspection (${invalidFirst ? 'invalid first' : 'valid first'})`,
+    { timeout: 10000 }, () => {
+      const invalid = validationBlock.replace(
+        'POSTGRES_DB: cloudpainter_test',
+        'POSTGRES_DB: fixture_wrong_database',
+      );
+      assert.notEqual(invalid, validationBlock, 'Duplicate-job fixture must contain a mismatched service');
+      const blocks = invalidFirst ? [invalid, validationBlock] : [validationBlock, invalid];
+      const withoutValidation = workflow.replace(validationBlock, '');
+      const source = withoutValidation.replace('  ci-required:\n', `${blocks.join('')}  ci-required:\n`);
+      assert.throws(() => databaseScript(source), /Expected exactly one validation job/);
+    });
+}
+
+test('database command admission rejects an injected executable before shell execution', { timeout: 10000 }, () => {
+  const markerPath = join(tmpdir(), `database-command-must-not-run-${process.pid}`);
+  rmSync(markerPath, { force: true });
+  const body = stepBody(jobBody(workflow, 'validation'), databaseStep);
+  const original = '            pnpm --filter @workspace/api-server run "$check"\n';
+  assert.equal(body.split(original).length, 2, 'Fixture must target one database suite command');
+  const mutated = workflow.replace(body, body.replace(
+    original,
+    `            touch ${markerPath}\n${original}`,
+  ));
+  assert.throws(() => databaseScript(mutated), /Unsupported database shell statement/);
+  assert.equal(existsSync(markerPath), false, 'Rejected workflow command must not execute');
 });
 
 for (const [label, replacement] of [
@@ -631,7 +844,7 @@ for (const [label, original, replacement, expected] of [
   ['missing service', '      postgres:\n', '      removed-postgres:\n',
     /Expected exactly one disposable PostgreSQL service in validation/],
   ['missing image', '        image: postgres:16.10-bookworm\n', '',
-    /Expected the disposable PostgreSQL service image/],
+    /PostgreSQL service image must remain postgres:16\.10-bookworm/],
   ['missing service environment', '        env:\n', '        removed-env:\n',
     /PostgreSQL service environment must match/],
   ...[
@@ -751,6 +964,41 @@ for (const redirectedSuite of suites) {
       return true;
     });
   });
+}
+
+for (const clearedSuite of suites) {
+  for (const [label, clear] of [
+    ['unset', 'unset DATABASE_URL'],
+    ['empty', 'DATABASE_URL=""'],
+  ]) {
+    test(`clearing DATABASE_URL for only ${clearedSuite} is rejected while siblings retain the disposable target`,
+      { timeout: 10000 }, () => {
+        const body = stepBody(workflow, databaseStep);
+        const command = '            pnpm --filter @workspace/api-server run "$check"\n';
+        assert.equal(body.split(command).length, 2, 'Fixture must target one database command');
+        const mutation = [
+          `            if [ "$check" = "${clearedSuite}" ]; then`,
+          `              ${clear}`,
+          '            else',
+          `              export DATABASE_URL="${disposableDatabaseUrl}"`,
+          '            fi',
+          command.trimEnd(),
+          '',
+        ].join('\n');
+        const mutated = workflow.replace(body, body.replace(command, mutation));
+        databaseScript(mutated);
+        assert.throws(() => runDatabaseStage(mutated), error => {
+          assert.equal(error.code, 'ERR_ASSERTION');
+          assert.match(error.message,
+            /^Effective API suite DATABASE_URL must target only the disposable PostgreSQL service URL/);
+          assert.deepEqual(error.expected, suites.map(suite => `${suite}\t${disposableDatabaseUrl}`));
+          const expectedObserved = suites.map(suite =>
+            `${suite}\t${suite === clearedSuite ? '' : disposableDatabaseUrl}`).join('\n').trim().split('\n');
+          assert.deepEqual(error.actual, expectedObserved);
+          return true;
+        });
+      });
+  }
 }
 
 for (const [label, statement] of [

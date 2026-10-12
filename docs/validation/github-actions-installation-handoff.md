@@ -177,6 +177,34 @@ duplicate that coverage. It adds the previously omitted server-side persistence
 suite and a portable executable-selection guard, not a new workflow or a
 generic test-discovery framework.
 
+## Secure database test execution guard
+
+The existing offline guard now admits only the three authorized API database
+manifest commands with their literal test files. It parses only a bounded
+builtin shell shape; its shell fixture exposes only local `pnpm` and `env`
+stubs on `PATH`. Unsupported commands are rejected before a shell is started.
+For each suite, the fixture records the effective `DATABASE_URL` and requires
+the explicit disposable PostgreSQL target. Conditional `unset` and empty-value
+mutations for each individual suite are rejected while sibling suites retain
+the disposable target.
+
+The guard also requires exactly one database test step in the unique
+`validation` job. Text-only fixtures reject a borrowed or duplicate database
+step in decoy jobs placed before or after `validation`, duplicate
+`validation` job definitions with either valid/invalid ordering, and accept
+unrelated job steps. The workflow, PostgreSQL service, and CI validation
+coverage were not changed.
+
+On 2026-10-12, the focused
+`node --test scripts/ci/api-test-coverage.test.mjs` run passed 258/258 tests.
+It ran under a 60-second process-group deadline with a 10-second cleanup
+allowance and a 64-KiB output cap. The test process inherited only `PATH`;
+database-suite execution was simulated with local stubs and isolated
+text fixtures. No database, package scripts, credentials, or remote workflow
+were used. The bounded task authorization does not establish whether Failure
+Gate is active or inactive and is not recorded as checked Failure Gate
+evidence.
+
 Local checks on 2026-10-11:
 
 | Exact executed command | Raw result |
