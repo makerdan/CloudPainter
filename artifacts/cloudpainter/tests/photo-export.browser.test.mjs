@@ -276,7 +276,7 @@ async function makePhotoFile(page, width, height, name) {
   };
 }
 
-async function importPhoto(page, dimensions, name) {
+async function importPhoto(page, dimensions, name, { assertStageRatio = true } = {}) {
   const file = await makePhotoFile(page, dimensions.width, dimensions.height, name);
   await page.locator('[data-testid="input-photo"]').setInputFiles(file);
 
@@ -329,7 +329,9 @@ async function importPhoto(page, dimensions, name) {
   }, `${name}: stage should contain the original photo`);
   assert.ok(details.project.width > 0 && details.project.height > 0, `${name}: project dimensions should be visible`);
   assertClose(details.project.width / details.project.height, dimensions.width / dimensions.height, `${name}: project ratio`);
-  assertClose(details.stage.width / details.stage.height, dimensions.width / dimensions.height, `${name}: rendered stage ratio`);
+  if (assertStageRatio) {
+    assertClose(details.stage.width / details.stage.height, dimensions.width / dimensions.height, `${name}: rendered stage ratio`);
+  }
 
   return details.project;
 }
@@ -1125,6 +1127,127 @@ test('downloads complete Letter and A4 PDFs in portrait and landscape without ch
     }
 
     assert.deepEqual(await captureProjectState(page), before, 'PDF size and orientation choices must not change the editable sketch');
+  } finally {
+    await page.close();
+  }
+});
+
+test('keeps extreme-aspect PDF previews aligned with Letter and A4 downloads', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await page.goto(appUrl);
+    const papers = [
+      { value: 'letter', name: 'US Letter', portrait: { width: 612, height: 792 }, landscape: { width: 792, height: 612 } },
+      { value: 'a4', name: 'A4', portrait: { width: 595.28, height: 841.89 }, landscape: { width: 841.89, height: 595.28 } },
+    ];
+    const sketches = [
+      { name: 'very wide', width: 2000, height: 1 },
+      { name: 'very tall', width: 1, height: 2000 },
+    ];
+    for (const sketch of sketches) {
+      const dimensions = await importPhoto(
+        page,
+        sketch,
+        `extreme-${sketch.name.replace(' ', '-')}.png`,
+        { assertStageRatio: false },
+      );
+      await openExportMenu(page);
+      const resolutionStatus = page.getByTestId('pdf-resolution-status');
+      for (const paper of papers) {
+        await (await exportControl(page, 'select-pdf-paper')).selectOption(paper.value);
+        for (const orientation of ['portrait', 'landscape']) {
+          await (await exportControl(page, 'select-pdf-orientation')).selectOption(orientation);
+          await page.waitForFunction(() => {
+            const image = document.querySelector('[data-testid="pdf-layout-artwork-image"]');
+            return image instanceof SVGImageElement
+              && image.getAttribute('href')?.startsWith('data:image/jpeg;base64,');
+          }, null, { timeout: 5_000 });
+          const previewLayout = await page.evaluate(async () => {
+            const pagePreview = document.querySelector('[data-testid="pdf-layout-preview"] svg');
+            const safeArea = document.querySelector('[data-testid="pdf-layout-safe-area"]');
+            const artwork = document.querySelector('[data-testid="pdf-layout-artwork"]');
+            const artworkImage = document.querySelector('[data-testid="pdf-layout-artwork-image"]');
+            if (!(pagePreview instanceof SVGSVGElement)
+              || !(safeArea instanceof SVGRectElement)
+              || !(artwork instanceof SVGRectElement)
+              || !(artworkImage instanceof SVGImageElement)) {
+              throw new Error('The selected PDF layout preview is missing.');
+            }
+            const previewImage = new Image();
+            previewImage.src = artworkImage.getAttribute('href');
+            await previewImage.decode();
+            const readRect = element => ({
+              x: Number(element.getAttribute('x')),
+              y: Number(element.getAttribute('y')),
+              width: Number(element.getAttribute('width')),
+              height: Number(element.getAttribute('height')),
+            });
+            return {
+              pageWidth: Number(pagePreview.getAttribute('data-page-width')),
+              pageHeight: Number(pagePreview.getAttribute('data-page-height')),
+              margin: Number(pagePreview.getAttribute('data-safe-margin')),
+              safeArea: readRect(safeArea),
+              artwork: readRect(artwork),
+              image: {
+                ...readRect(artworkImage),
+                sourceWidth: previewImage.naturalWidth,
+                sourceHeight: previewImage.naturalHeight,
+              },
+            };
+          });
+          const pageSize = paper[orientation];
+          const margin = previewLayout.margin;
+          const layoutScale = Math.min(
+            (pageSize.width - margin * 2) / dimensions.width,
+            (pageSize.height - margin * 2) / dimensions.height,
+          );
+          const expectedPpi = Math.round(72 / layoutScale);
+          assert.match(
+            await resolutionStatus.innerText(),
+            new RegExp(`Approx\\. ${expectedPpi} PPI`),
+            `${sketch.name}, ${paper.name} ${orientation}: resolution should use the limiting page dimension`,
+          );
+          assertClose(
+            previewLayout.image.sourceWidth / previewLayout.image.sourceHeight,
+            dimensions.width / dimensions.height,
+            `${sketch.name}, ${paper.name} ${orientation}: preview raster should retain the full sketch aspect ratio`,
+          );
+          assert.deepEqual(
+            [previewLayout.image.x, previewLayout.image.y, previewLayout.image.width, previewLayout.image.height],
+            [previewLayout.artwork.x, previewLayout.artwork.y, previewLayout.artwork.width, previewLayout.artwork.height],
+            `${sketch.name}, ${paper.name} ${orientation}: preview image should fill its centered placement`,
+          );
+
+          const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            clickExportAction(page, 'button-export-pdf'),
+          ]);
+          const pdfBytes = await readFile(await download.path());
+          const pdf = pdfBytes.toString('latin1');
+          const pageBox = pdf.match(/\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/);
+          assert.ok(pageBox, `${sketch.name}, ${paper.name} ${orientation}: PDF should have a MediaBox`);
+          const pdfWidth = Number(pageBox[1]);
+          const pdfHeight = Number(pageBox[2]);
+          assertClose(pdfWidth, pageSize.width, `${sketch.name}, ${paper.name} ${orientation}: PDF page width`);
+          assertClose(pdfHeight, pageSize.height, `${sketch.name}, ${paper.name} ${orientation}: PDF page height`);
+          assertClose(previewLayout.pageWidth, pdfWidth, `${sketch.name}, ${paper.name} ${orientation}: preview page width should match the PDF`);
+          assertClose(previewLayout.pageHeight, pdfHeight, `${sketch.name}, ${paper.name} ${orientation}: preview page height should match the PDF`);
+          const content = pdf.match(/5 0 obj\n<< \/Length \d+ >>\nstream\n([\s\S]*?)endstream\nendobj/);
+          assert.ok(content, `${sketch.name}, ${paper.name} ${orientation}: PDF should include artwork placement instructions`);
+          const placement = content[1].match(/q ([\d.]+) 0 0 ([\d.]+) ([\d.-]+) ([\d.-]+) cm \/Im0 Do Q/);
+          assert.ok(placement, `${sketch.name}, ${paper.name} ${orientation}: PDF should place the artwork`);
+          const pdfArtwork = placement.slice(1).map(Number);
+          assertClose(previewLayout.artwork.x, pdfArtwork[2], `${sketch.name}, ${paper.name} ${orientation}: preview artwork left edge should match the PDF`);
+          assertClose(previewLayout.artwork.y, pdfArtwork[3], `${sketch.name}, ${paper.name} ${orientation}: preview artwork top edge should match the PDF`);
+          assertClose(previewLayout.artwork.width, pdfArtwork[0], `${sketch.name}, ${paper.name} ${orientation}: preview artwork width should match the PDF`);
+          assertClose(previewLayout.artwork.height, pdfArtwork[1], `${sketch.name}, ${paper.name} ${orientation}: preview artwork height should match the PDF`);
+          assert.ok(
+            Math.abs((pdfArtwork[0] / pdfArtwork[1]) / (dimensions.width / dimensions.height) - 1) < 0.001,
+            `${sketch.name}, ${paper.name} ${orientation}: PDF should retain the full sketch aspect ratio after four-decimal placement rounding`,
+          );
+        }
+      }
+    }
   } finally {
     await page.close();
   }

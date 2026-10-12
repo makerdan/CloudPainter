@@ -440,7 +440,9 @@ async function createPdfArtworkPreview(
   layerCanvases: Record<string, HTMLCanvasElement | null>,
 ): Promise<string> {
   const { canvas: artwork } = await composeProjectCanvas(project, layerCanvases, '1');
-  const previewScale = Math.min(1, 240 / artwork.width, 240 / artwork.height);
+  let previewScale = Math.min(1, 240 / Math.max(artwork.width, artwork.height));
+  const shortestSide = Math.min(artwork.width, artwork.height);
+  if (shortestSide * previewScale < 1) previewScale = 1 / shortestSide;
   const preview = document.createElement('canvas');
   preview.width = Math.max(1, Math.round(artwork.width * previewScale));
   preview.height = Math.max(1, Math.round(artwork.height * previewScale));
