@@ -1419,6 +1419,71 @@ test('Background fills cover the complete drawing layer in PNG and PDF exports',
   }
 });
 
+test('resetting a hidden, lowered-opacity photo exports its full-strength state without changing drawings', async () => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await page.goto(appUrl);
+    await importPhoto(page, { width: 600, height: 400 }, 'reset-photo-display-export.png');
+    await drawStroke(page, { startX: 0.3, endX: 0.7, y: 0.5 });
+    await waitForStrokeCount(page, 0, 1);
+
+    const surface = page.locator('canvas.draw-surface');
+    const drawingBeforeReset = await surface.evaluate(canvas => canvas.toDataURL('image/png'));
+    const layersBeforeReset = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null').layers,
+    );
+    const strokeSample = await surface.evaluate(canvas => {
+      const { data, width, height } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      const centerY = Math.round(height * 0.5);
+      for (let y = centerY - 2; y <= centerY + 2; y += 1) {
+        for (let x = Math.floor(width * 0.4); x <= Math.floor(width * 0.6); x += 1) {
+          const offset = (y * width + x) * 4;
+          if (data[offset + 3] === 255) {
+            return {
+              point: [(x + 0.5) / width, (y + 0.5) / height],
+              pixel: [...data.slice(offset, offset + 4)],
+            };
+          }
+        }
+      }
+      throw new Error('Could not find an opaque pixel in the drawing stroke.');
+    });
+
+    const source = await page.getByTestId('img-reference').getAttribute('src');
+    await page.getByTestId('input-reference-photo-opacity').fill('37');
+    await page.getByTestId('button-reference-photo-visibility').click();
+    assert.equal(await page.getByTestId('input-reference-photo-opacity').inputValue(), '37');
+    assert.equal(await page.getByTestId('button-reference-photo-visibility').getAttribute('aria-pressed'), 'false');
+    assert.equal(
+      await page.locator('.stage img.base-photo').evaluate(image => getComputedStyle(image).opacity),
+      '0',
+    );
+
+    const hiddenExport = await inspectExportedPixels(page, [strokeSample.point]);
+    assert.deepEqual(hiddenExport.pixels[0], strokeSample.pixel, 'the drawing remains in the PNG while the photo is hidden');
+
+    await page.getByTestId('button-reset-reference-photo-display').click();
+    assert.equal(await page.getByTestId('button-reference-photo-visibility').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.getByTestId('input-reference-photo-opacity').inputValue(), '100');
+    assert.equal(
+      await page.locator('.stage img.base-photo').evaluate(image => getComputedStyle(image).opacity),
+      '1',
+    );
+    assert.equal(await page.getByTestId('img-reference').getAttribute('src'), source);
+    assert.equal(await surface.evaluate(canvas => canvas.toDataURL('image/png')), drawingBeforeReset);
+    assert.deepEqual(
+      await page.evaluate(() => JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null').layers),
+      layersBeforeReset,
+    );
+
+    const resetExport = await inspectExportedPixels(page, [[0.5, 0.025], strokeSample.point]);
+    assert.deepEqual(resetExport.pixels[0], [48, 48, 48, 255], 'the PNG contains the photo at full opacity');
+    assert.deepEqual(resetExport.pixels[1], strokeSample.pixel, 'the reset does not alter the exported drawing pixel');
+  } finally {
+    await page.close();
+  }
+});
+
 test('does not download a sketch-only PNG when the photo fails to decode during export', async () => {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   try {

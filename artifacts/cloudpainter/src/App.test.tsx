@@ -1820,7 +1820,7 @@ test(redoOnly
   const before = {
     photoZoom: 1, photoPan: { x: 0, y: 0 },
     image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
-    referencePhotoVisible: true, referencePhotoOpacity: 100,
+    referencePhotoVisible: true, referencePhotoOpacity: 37,
     width: 480, height: 320, title: 'Keep the rest of my sketch',
     selectedLayerId: 'layer-clear-target',
     layers: [
@@ -1875,6 +1875,8 @@ test(redoOnly
   await expect(page.getByTestId('button-undo')).toBeEnabled({ enabled: !redoOnly });
   await expect(page.getByTestId('button-redo')).toBeDisabled();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0.37');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
   await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
   expect(await canvasPixel(page, 'canvas-layer-layer-keep-bottom', 240, 80)).toEqual(neighborPixel);
   if (!redoOnly) {
@@ -1885,6 +1887,8 @@ test(redoOnly
   await page.reload();
   await expect(page.getByTestId('img-reference')).toBeVisible();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0.37');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
   await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
   await expect(page.getByTestId('button-undo')).toBeEnabled({ enabled: !redoOnly });
   await expect(page.getByTestId('button-redo')).toBeDisabled();
@@ -2735,6 +2739,73 @@ test(`undo and redo preserve ${referencePhotoVisible ? 'visible' : 'hidden'} ref
   await assertCurrentProject(settingsProject);
 });
 }
+
+test('changing visible photo opacity after undo preserves redo and the selected setting across reloads', async ({ page }) => {
+  const photo = await png(page, 'opacity-after-undo.png', 600, 400);
+  await page.getByTestId('input-photo').setInputFiles(photo);
+  const preview = page.getByTestId('img-reference');
+  await expect(preview).toBeVisible();
+  const source = await preview.getAttribute('src');
+
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  await page.getByTestId('button-undo').click();
+  await expect(page.getByTestId('button-redo')).toBeEnabled();
+  await expect.poll(async () => {
+    const project = await savedProjectRaw(page);
+    return project && [
+      project.layers[0].strokes.length,
+      project.layers[0].redo.length,
+      project.referencePhotoVisible,
+      project.referencePhotoOpacity,
+    ];
+  }).toEqual([0, 1, true, 100]);
+
+  await page.getByTestId('input-reference-photo-opacity').fill('37');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0.37');
+  await expect.poll(async () => {
+    const project = await savedProjectRaw(page);
+    return project && [
+      project.layers[0].strokes.length,
+      project.layers[0].redo.length,
+      project.referencePhotoVisible,
+      project.referencePhotoOpacity,
+    ];
+  }).toEqual([0, 1, true, 37]);
+  await expect(page.getByTestId('button-redo')).toBeEnabled();
+
+  await page.getByTestId('button-redo').click();
+  await expect.poll(async () => {
+    const project = await savedProjectRaw(page);
+    return project && [
+      project.layers[0].strokes.length,
+      project.layers[0].redo.length,
+      project.referencePhotoVisible,
+      project.referencePhotoOpacity,
+    ];
+  }).toEqual([1, 0, true, 37]);
+  await expect(page.locator('.stage img.base-photo')).toHaveAttribute('src', source!);
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0.37');
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.475 }))[3]).toBeGreaterThan(0);
+
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', source!);
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0.37');
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+  await expect.poll(async () => {
+    const project = await savedProjectRaw(page);
+    return project && [
+      project.layers[0].strokes.length,
+      project.layers[0].redo.length,
+      project.referencePhotoVisible,
+      project.referencePhotoOpacity,
+    ];
+  }).toEqual([1, 0, true, 37]);
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.475 }))[3]).toBeGreaterThan(0);
+});
 
 test('undo restores an erased mark and redo removes it without changing the zoomed photo view', async ({ page }) => {
   const photo = await png(page, 'eraser-history.png', 600, 400);
