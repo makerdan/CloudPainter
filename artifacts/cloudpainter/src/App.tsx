@@ -565,6 +565,7 @@ function Home() {
   const [initialProject] = useState(readProjectSnapshot);
   const [project, setProject] = useState<Project>(initialProject.project);
   const persistedProjectSnapshot = useRef<string | null>(initialProject.snapshot);
+  const hasUnsavedProjectChanges = useRef(false);
   const projectConflict = useRef(false);
   const [storageConflict, setStorageConflict] = useState(false);
   const [initialHistory] = useState(readProjectHistoryState);
@@ -777,6 +778,7 @@ function Home() {
 
   const reportProjectConflict = useCallback(() => {
     projectConflict.current = true;
+    hasUnsavedProjectChanges.current = true;
     setStorageConflict(true);
     setSavedStatus('Changes from another tab need attention');
   }, []);
@@ -793,6 +795,7 @@ function Home() {
         if (currentSnapshot === persistedProjectSnapshot.current) return;
         if (currentSnapshot === JSON.stringify(latestProject.current)) {
           persistedProjectSnapshot.current = currentSnapshot;
+          hasUnsavedProjectChanges.current = false;
           setSavedStatus('Saved in this browser');
           return;
         }
@@ -805,6 +808,24 @@ function Home() {
     return () => window.removeEventListener('storage', detectProjectChange);
   }, [reportProjectConflict]);
 
+  useEffect(() => {
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedProjectChanges.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeLeaving);
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
+  }, []);
+
+  useEffect(() => {
+    if (draft) {
+      hasUnsavedProjectChanges.current = true;
+    } else if (JSON.stringify(project) === persistedProjectSnapshot.current) {
+      hasUnsavedProjectChanges.current = false;
+    }
+  }, [draft, project]);
+
   const persistProjectIfCurrent = useCallback((snapshot: Project) => {
     if (projectConflict.current) return;
     try {
@@ -813,6 +834,7 @@ function Home() {
       if (currentSnapshot !== persistedProjectSnapshot.current) {
         if (currentSnapshot === serialized) {
           persistedProjectSnapshot.current = currentSnapshot;
+          hasUnsavedProjectChanges.current = false;
           setSavedStatus('Saved in this browser');
           return;
         }
@@ -821,9 +843,11 @@ function Home() {
       }
       localStorage.setItem(STORE_KEY, serialized);
       persistedProjectSnapshot.current = serialized;
+      hasUnsavedProjectChanges.current = false;
       setSavedStatus('Saved in this browser');
       void refreshStorageEstimate();
     } catch {
+      hasUnsavedProjectChanges.current = true;
       setSavedStatus('Storage is full');
     }
   }, [refreshStorageEstimate, reportProjectConflict]);
@@ -832,6 +856,7 @@ function Home() {
     try {
       const snapshot = localStorage.getItem(STORE_KEY);
       persistedProjectSnapshot.current = snapshot;
+      hasUnsavedProjectChanges.current = false;
       projectConflict.current = false;
       setStorageConflict(false);
       setProject(projectFromSnapshot(snapshot));
@@ -854,6 +879,7 @@ function Home() {
       const nextHistory = withSavedProject(readProjectHistory(), preservedProject);
       localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
       persistedProjectSnapshot.current = snapshot;
+      hasUnsavedProjectChanges.current = false;
       projectConflict.current = false;
       setStorageConflict(false);
       setProjectHistory(nextHistory);
@@ -866,6 +892,7 @@ function Home() {
 
   useEffect(() => {
     if (projectConflict.current) return;
+    hasUnsavedProjectChanges.current = JSON.stringify(project) !== persistedProjectSnapshot.current;
     setSavedStatus('Saving…');
     const timer = window.setTimeout(() => {
       persistProjectIfCurrent(project);

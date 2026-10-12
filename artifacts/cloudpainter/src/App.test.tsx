@@ -1756,6 +1756,11 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
       }
       await expect(page.getByTestId('status-save')).toHaveText('Storage is full');
       await expect(page.getByText('Saved in this browser', { exact: true })).toHaveCount(0);
+      expect(await page.evaluate(() => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        return event.defaultPrevented;
+      })).toBe(true);
       const attempts = await page.evaluate(() => (
         window as typeof window & { storageFailureFixture: { attempts: string[] } }
       ).storageFailureFixture.attempts);
@@ -1834,6 +1839,11 @@ test('unsaved drawing stays editable and saves after browser storage recovers', 
     await expect(page.getByTestId('status-save')).toHaveText('Saving…');
     await page.clock.runFor(500);
     await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+    expect(await page.evaluate(() => {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    })).toBe(false);
 
     const recovered = await savedProject(page);
     expect(recovered.layers[0].strokes).toHaveLength(2);
@@ -1858,6 +1868,42 @@ test('unsaved drawing stays editable and saves after browser storage recovers', 
       delete fixtureWindow.projectStorageFailureFixture;
     });
   }
+});
+
+test('normal navigation proceeds without a leave warning after the sketch is saved', async ({ page }) => {
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  const dialogs: string[] = [];
+  page.on('dialog', async dialog => {
+    dialogs.push(dialog.type);
+    await dialog.accept();
+  });
+
+  await page.goto('about:blank');
+
+  await expect(page).toHaveURL('about:blank');
+  expect(dialogs).toEqual([]);
+});
+
+test('an in-progress stroke warns before leaving and clears the warning after it is saved', async ({ page }) => {
+  const surface = page.locator('canvas.draw-surface');
+  const bounds = await surface.boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.mouse.move(bounds!.x + bounds!.width * 0.3, bounds!.y + bounds!.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(bounds!.x + bounds!.width * 0.7, bounds!.y + bounds!.height * 0.65, { steps: 6 });
+  expect(await page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  })).toBe(true);
+
+  await page.mouse.up();
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  expect(await page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  })).toBe(false);
 });
 
 for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) {
