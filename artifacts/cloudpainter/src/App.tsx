@@ -1239,6 +1239,11 @@ function Home() {
     changeLayer(finished.layerId, layer => ({ ...layer, strokes: [...layer.strokes, finished.stroke], redo: [] }));
     setDraft(null);
   };
+  const cancelStroke = () => {
+    if (!drawingRef.current) return;
+    drawingRef.current = false;
+    setDraft(null);
+  };
 
   const undo = () => {
     if (!selectedLayer?.strokes.length) return;
@@ -1794,7 +1799,7 @@ function Home() {
                       onPointerDown={event => beginStroke(event, layer)}
                       onPointerMove={continueStroke}
                       onPointerUp={finishStroke}
-                      onPointerCancel={finishStroke}
+                      onPointerCancel={cancelStroke}
                       aria-label={`Drawing surface for ${layer.name}`}
                       data-testid={`canvas-layer-${layer.id}`}
                     />

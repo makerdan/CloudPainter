@@ -314,7 +314,12 @@ h1 { font-family:var(--font-display); font-size:33px; line-height:1.1; font-weig
   .intro-copy { font-size:12px; max-width:280px; }
   .workspace-grid { display:flex; flex-direction:column; gap:11px; min-height:0; }
   .editor { order:0; }
-  .stage-wrap { min-height:300px; padding:12px; }
+  .stage-wrap { min-height:360px; padding:72px 12px 12px; }
+  .view-controls { top:8px; right:8px; gap:2px; max-width:calc(100% - 16px); }
+  .view-control-button { width:44px; height:44px; }
+  .zoom-slider-label { gap:2px; }
+  .zoom-slider-label input { width:clamp(44px,16vw,64px); height:44px; }
+  .zoom-value { min-width:30px; }
   .stage { width:100%; }
   .toolbar { padding:7px; }
   .tool-group { min-width:0; flex-wrap:wrap; }

@@ -55,6 +55,71 @@ async function clickExportAction(page, testId) {
   await page.getByTestId(testId).click();
 }
 
+async function dispatchTouchPointers(page, events) {
+  await page.evaluate(async events => {
+    const surface = document.querySelector('canvas.draw-surface');
+    if (!(surface instanceof HTMLCanvasElement)) throw new Error('The drawing surface is not available.');
+    // Synthetic PointerEvents let the browser test control simultaneous pointers exactly.
+    Element.prototype.setPointerCapture = () => {};
+    Element.prototype.releasePointerCapture = () => {};
+    Element.prototype.hasPointerCapture = () => false;
+    const activePointers = new Set();
+    for (const { type, pointerId, x, y } of events) {
+      if (type === 'pointerdown') activePointers.add(pointerId);
+      surface.dispatchEvent(new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId,
+        pointerType: 'touch',
+        isPrimary: activePointers.size === 1,
+        button: 0,
+        buttons: type === 'pointerup' || type === 'pointercancel' ? 0 : 1,
+        clientX: x,
+        clientY: y,
+      }));
+      await new Promise(resolve => requestAnimationFrame(() => resolve()));
+      if (type === 'pointerup' || type === 'pointercancel') activePointers.delete(pointerId);
+    }
+  }, events);
+}
+
+async function savedDrawing(page) {
+  return page.evaluate(() => JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null'));
+}
+
+async function touchControl(page, locator) {
+  const bounds = await locator.boundingBox();
+  assert.ok(bounds, 'the mobile control should have a visible hit area');
+  try {
+    await locator.tap({ timeout: 1_500 });
+  } catch (error) {
+    throw new Error(`The mobile photo control was not touch-actionable: ${error.message}`);
+  }
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+async function waitForZoom(page, value) {
+  await page.waitForFunction(expected => {
+    const input = document.querySelector('[data-testid="input-photo-zoom"]');
+    return input instanceof HTMLInputElement && input.value === expected;
+  }, String(value), { timeout: 2_000 });
+}
+
+async function traceControlTouch(page, locator) {
+  await locator.evaluate(button => {
+    window.__photoControlTouchTrace = [];
+    for (const type of ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'click']) {
+      button.addEventListener(type, event => {
+        window.__photoControlTouchTrace.push({
+          type,
+          defaultPrevented: event.defaultPrevented,
+          disabled: button.disabled,
+        });
+      }, { capture: true });
+    }
+  });
+}
+
 before(async () => {
   const port = await findAvailablePort();
   appUrl = `http://127.0.0.1:${port}/`;
@@ -1450,5 +1515,211 @@ test('an unreadable photo reports an error without changing the open project', a
     assert.deepEqual(await captureProjectState(page), before, 'the original project should remain intact after reload');
   } finally {
     await page.close();
+  }
+});
+
+test('a pinch-to-one-finger transition and cancelled touch never commit drawing', async () => {
+  const page = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  try {
+    await page.goto(appUrl);
+    await importPhoto(page, { width: 480, height: 320 }, 'touch-gesture.png');
+    const stage = await page.getByTestId('canvas-stage').boundingBox();
+    assert.ok(stage, 'the photo drawing stage should be visible');
+    const y = stage.y + stage.height / 2;
+    await dispatchTouchPointers(page, [
+      { type: 'pointerdown', pointerId: 1, x: stage.x + stage.width * 0.4, y },
+      { type: 'pointerdown', pointerId: 2, x: stage.x + stage.width * 0.6, y },
+      { type: 'pointermove', pointerId: 1, x: stage.x + stage.width * 0.35, y },
+      { type: 'pointermove', pointerId: 2, x: stage.x + stage.width * 0.65, y },
+    ]);
+    assert.equal(await page.getByTestId('input-photo-zoom').inputValue(), '150');
+
+    // Lift one finger and move the remaining one: this must remain a photo
+    // gesture, not resume the draft stroke begun by the first pointer.
+    await dispatchTouchPointers(page, [
+      { type: 'pointerup', pointerId: 2, x: stage.x + stage.width * 0.65, y },
+      { type: 'pointermove', pointerId: 1, x: stage.x + stage.width * 0.3, y: y + 16 },
+      { type: 'pointerup', pointerId: 1, x: stage.x + stage.width * 0.3, y: y + 16 },
+    ]);
+    await page.waitForTimeout(700);
+    assert.equal((await savedDrawing(page)).layers[0].strokes.length, 0);
+
+    await dispatchTouchPointers(page, [
+      { type: 'pointerdown', pointerId: 3, x: stage.x + stage.width * 0.3, y },
+      { type: 'pointermove', pointerId: 3, x: stage.x + stage.width * 0.7, y: y + 20 },
+      { type: 'pointercancel', pointerId: 3, x: stage.x + stage.width * 0.7, y: y + 20 },
+    ]);
+    await page.waitForTimeout(700);
+    assert.equal((await savedDrawing(page)).layers[0].strokes.length, 0);
+
+    await dispatchTouchPointers(page, [
+      { type: 'pointerdown', pointerId: 4, x: stage.x + stage.width * 0.3, y },
+      { type: 'pointermove', pointerId: 4, x: stage.x + stage.width * 0.7, y: y + 24 },
+      { type: 'pointerup', pointerId: 4, x: stage.x + stage.width * 0.7, y: y + 24 },
+    ]);
+    await page.waitForFunction(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null');
+      return project?.layers?.[0]?.strokes?.length === 1;
+    }, null, { timeout: 2_000 });
+    await touchControl(page, page.getByTestId('button-zoom-in'));
+    await touchControl(page, page.getByTestId('button-pan-mode'));
+    assert.equal(await page.getByTestId('button-pan-mode').getAttribute('aria-pressed'), 'true');
+    await dispatchTouchPointers(page, [
+      { type: 'pointerdown', pointerId: 5, x: stage.x + stage.width / 2, y },
+      { type: 'pointermove', pointerId: 5, x: stage.x + stage.width / 2 + 24, y: y + 12 },
+      { type: 'pointerup', pointerId: 5, x: stage.x + stage.width / 2 + 24, y: y + 12 },
+    ]);
+    await page.waitForTimeout(700);
+    const project = await savedDrawing(page);
+    assert.equal(project.layers[0].strokes.length, 1, 'reposition mode must not add drawing strokes');
+    assert.notDeepEqual(project.photoPan, { x: 0, y: 0 }, 'reposition mode should move the photo view');
+  } finally {
+    await page.close();
+  }
+});
+
+test('pinch zoom and pan stay bounded and reset returns to the fitted photo', async () => {
+  const page = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  try {
+    await page.goto(appUrl);
+    await importPhoto(page, { width: 480, height: 320 }, 'bounded-touch-gesture.png');
+    const stage = await page.getByTestId('canvas-stage').boundingBox();
+    assert.ok(stage, 'the photo drawing stage should be visible');
+    const y = stage.y + stage.height / 2;
+    await dispatchTouchPointers(page, [
+      { type: 'pointerdown', pointerId: 11, x: stage.x + stage.width * 0.4, y },
+      { type: 'pointerdown', pointerId: 12, x: stage.x + stage.width * 0.6, y },
+      { type: 'pointermove', pointerId: 11, x: stage.x + stage.width * 2.5, y: stage.y + stage.height * 4 },
+      { type: 'pointermove', pointerId: 12, x: stage.x + stage.width * 4.5, y: stage.y + stage.height * 4 },
+    ]);
+    assert.equal(await page.getByTestId('input-photo-zoom').inputValue(), '400');
+    await page.waitForTimeout(700);
+    const zoomed = await savedDrawing(page);
+    const maxPan = { x: stage.width * (4 - 1) / 2 + 1, y: stage.height * (4 - 1) / 2 + 1 };
+    assert.ok(
+      Math.abs(zoomed.photoPan.x) <= maxPan.x,
+      `photoPan.x ${zoomed.photoPan.x} must stay within +/-${maxPan.x}`,
+    );
+    assert.ok(
+      Math.abs(zoomed.photoPan.y) <= maxPan.y,
+      `photoPan.y ${zoomed.photoPan.y} must stay within +/-${maxPan.y}`,
+    );
+
+    await touchControl(page, page.getByTestId('button-reset-photo-view'));
+    assert.equal(await page.getByTestId('input-photo-zoom').inputValue(), '100');
+    await page.waitForTimeout(700);
+    const reset = await savedDrawing(page);
+    assert.deepEqual(reset.photoPan, { x: 0, y: 0 });
+  } finally {
+    await page.close();
+  }
+});
+
+test('phone photo-view controls are separated and operable, while desktop sizing stays unchanged', async () => {
+  for (const width of [320, 390]) {
+    const page = await browser.newPage({
+      viewport: { width, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    try {
+      await page.goto(appUrl);
+      await importPhoto(page, { width: 480, height: 320 }, `phone-controls-${width}.png`);
+      const controls = await page.locator('.view-controls').boundingBox();
+      const stage = await page.getByTestId('canvas-stage').boundingBox();
+      assert.ok(controls && stage, 'photo controls and stage should be visible');
+      assert.ok(controls.x >= 0 && controls.x + controls.width <= width);
+      assert.ok(controls.y >= 0 && controls.y + controls.height <= 844);
+      assert.ok(controls.y + controls.height <= stage.y, 'controls must not cover the reference photo');
+
+      const targets = [
+        page.getByTestId('button-zoom-out'),
+        page.getByTestId('input-photo-zoom'),
+        page.getByTestId('button-zoom-in'),
+        page.getByTestId('button-pan-mode'),
+        page.getByTestId('button-reset-photo-view'),
+      ];
+      const rectangles = [];
+      for (const target of targets) {
+        const bounds = await target.boundingBox();
+        assert.ok(bounds, 'each photo control should be visible');
+        assert.ok(bounds.width >= 44 && bounds.height >= 44, 'each photo control needs a 44px touch target');
+        rectangles.push(bounds);
+      }
+      for (let left = 0; left < rectangles.length; left += 1) {
+        for (let right = left + 1; right < rectangles.length; right += 1) {
+          const a = rectangles[left];
+          const b = rectangles[right];
+          assert.ok(
+            a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y,
+            'photo controls must not overlap neighboring targets',
+          );
+        }
+      }
+
+      const zoom = page.getByTestId('input-photo-zoom');
+      await zoom.focus();
+      await page.keyboard.press('ArrowRight');
+      assert.equal(await zoom.inputValue(), '125', 'keyboard adjustment should still work');
+      const zoomIn = page.getByTestId('button-zoom-in');
+      await traceControlTouch(page, zoomIn);
+      await touchControl(page, zoomIn);
+      try {
+        await waitForZoom(page, 150);
+      } catch {
+        const trace = await page.evaluate(() => window.__photoControlTouchTrace ?? []);
+        assert.equal(await zoom.inputValue(), '150', `touch zoom-in did not update; received events: ${JSON.stringify(trace)}`);
+      }
+      assert.equal(await zoom.inputValue(), '150');
+      await touchControl(page, page.getByTestId('button-zoom-out'));
+      await waitForZoom(page, 125);
+      assert.equal(await zoom.inputValue(), '125');
+      const panMode = page.getByTestId('button-pan-mode');
+      await touchControl(page, panMode);
+      assert.equal(await panMode.getAttribute('aria-pressed'), 'true');
+      await touchControl(page, panMode);
+      assert.equal(await panMode.getAttribute('aria-pressed'), 'false');
+      await touchControl(page, page.getByTestId('button-reset-photo-view'));
+      await waitForZoom(page, 100);
+      assert.equal(await zoom.inputValue(), '100');
+    } finally {
+      await page.close();
+    }
+  }
+
+  const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await desktop.goto(appUrl);
+    await importPhoto(desktop, { width: 480, height: 320 }, 'desktop-controls.png');
+    const buttons = desktop.locator('.view-control-button');
+    for (let index = 0; index < await buttons.count(); index += 1) {
+      const bounds = await buttons.nth(index).boundingBox();
+      assert.ok(bounds);
+      assert.equal(bounds.width, 28);
+      assert.equal(bounds.height, 28);
+    }
+    const zoom = desktop.getByTestId('input-photo-zoom');
+    const zoomIn = desktop.getByTestId('button-zoom-in');
+    await zoomIn.focus();
+    await desktop.keyboard.press('Enter');
+    assert.equal(await zoom.inputValue(), '125');
+    const panMode = desktop.getByTestId('button-pan-mode');
+    await panMode.focus();
+    await desktop.keyboard.press('Space');
+    assert.equal(await panMode.getAttribute('aria-pressed'), 'true');
+    const reset = desktop.getByTestId('button-reset-photo-view');
+    await reset.focus();
+    await desktop.keyboard.press('Enter');
+    assert.equal(await zoom.inputValue(), '100');
+  } finally {
+    await desktop.close();
   }
 });

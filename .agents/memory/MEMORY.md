@@ -20,6 +20,7 @@
 - [Pointer pressure precision](pointer-pressure-precision.md) — browser pointer pressure is floating-point input; test it approximately without rounding persisted samples.
 - [Disposable Postgres on Nix](nix-disposable-postgres.md) — local ephemeral clusters may need a temporary Unix-socket directory because `/run/postgresql` may not exist.
 - [Long-stroke browser tests](long-stroke-browser-tests.md) — pace synthetic continuous pointer events across tasks so React commits drafts before pointer-up.
+- [Playwright touch actions](playwright-touch-actions.md) — prefer locator.tap for mobile controls; raw touchscreen.tap can emit no events on the target in this Chromium harness.
 - [PDF export browser fixtures](pdf-export-browser-fixtures.md) — object-URL capture hooks should preserve non-PDF URLs and wait specifically for PDF blobs.
 - [Node test timeout supervision](node-test-timeouts.md) — inject test deadlines through CLI arguments, not NODE_OPTIONS, including tsx-launched children.
 - [Postgres timestamp cursors](postgres-timestamp-cursors.md) — preserve microsecond timestamp precision in keyset cursors; JavaScript `Date` truncates it.
