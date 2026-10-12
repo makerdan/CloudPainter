@@ -295,6 +295,249 @@ test('undo and redo shortcuts stay native in editable text controls and work on 
   }
 });
 
+test('keyboard undo and redo flush the exact project before an immediate reload', { timeout: 60_000 }, async () => {
+  const browser = await launchShortcutTestBrowser();
+  try {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    const page = await context.newPage();
+    page.setDefaultTimeout(10_000);
+    const canvas = await createHistoryPhotoProject(page, 2);
+    const original = await storedProject(page);
+    const originalLayer = selectedLayer(original);
+    assert.equal(originalLayer.strokes.length, 2);
+    assert.equal(originalLayer.redo.length, 0);
+    assert.equal(original.referencePhotoVisible, false);
+    assert.equal(original.referencePhotoOpacity, 37);
+
+    await focusDrawingSurface(canvas);
+    await holdDebouncedProjectSaves(page);
+    await page.keyboard.press('Control+z');
+    await waitForHistoryButtons(page, true, true);
+    await nextAnimationFrame(page);
+    assert.equal(await storedProjectText(page), JSON.stringify(original), 'undo should remain pending until page exit');
+    assert.ok(await heldSaveCount(page));
+
+    const afterUndo = structuredClone(original);
+    const undoLayer = selectedLayer(afterUndo);
+    undoLayer.redo.push(undoLayer.strokes.pop());
+    await page.reload();
+    await assertReloadedProject(page, afterUndo);
+    await assertPhotoSettings(page, afterUndo);
+    await waitForHistoryButtons(page, true, true);
+
+    // Let the newly mounted page finish its initial no-op autosave before
+    // suspending only the next debounce window.
+    await page.waitForTimeout(600);
+    const beforeRedo = await storedProject(page);
+    await focusDrawingSurface(page.locator('canvas.draw-surface'));
+    await holdDebouncedProjectSaves(page);
+    await page.keyboard.press('Control+y');
+    await waitForHistoryButtons(page, true, false);
+    await nextAnimationFrame(page);
+    assert.equal(await storedProjectText(page), JSON.stringify(beforeRedo), 'redo should remain pending until page exit');
+    assert.ok(await heldSaveCount(page));
+
+    const afterRedo = structuredClone(beforeRedo);
+    const redoLayer = selectedLayer(afterRedo);
+    redoLayer.strokes.push(redoLayer.redo.pop());
+    await page.reload();
+    await assertReloadedProject(page, afterRedo);
+    await assertPhotoSettings(page, afterRedo);
+    await waitForHistoryButtons(page, true, false);
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+});
+
+test('rapid keyboard history sequences persist their final stroke and redo stacks before reload', { timeout: 60_000 }, async () => {
+  const browser = await launchShortcutTestBrowser();
+  try {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    const page = await context.newPage();
+    page.setDefaultTimeout(10_000);
+    const canvas = await createHistoryPhotoProject(page, 3);
+    const original = await storedProject(page);
+    assert.equal(selectedLayer(original).strokes.length, 3);
+    assert.equal(selectedLayer(original).redo.length, 0);
+
+    await focusDrawingSurface(canvas);
+    await holdDebouncedProjectSaves(page);
+    const sequence = [
+      ['Control+z', 'undo'],
+      ['Control+z', 'undo'],
+      ['Meta+y', 'redo'],
+      ['Meta+z', 'undo'],
+      ['Control+Shift+z', 'redo'],
+    ];
+    const expected = structuredClone(original);
+    const expectedLayer = selectedLayer(expected);
+    for (const [shortcut, action] of sequence) {
+      await page.keyboard.press(shortcut);
+      await nextAnimationFrame(page);
+      const stroke = action === 'undo' ? expectedLayer.strokes.pop() : expectedLayer.redo.pop();
+      assert.ok(stroke, `${shortcut} should have a drawing-history entry`);
+      if (action === 'undo') expectedLayer.redo.push(stroke);
+      else expectedLayer.strokes.push(stroke);
+    }
+
+    await waitForHistoryButtons(page, true, true);
+    assert.equal(await storedProjectText(page), JSON.stringify(original), 'rapid history changes should remain pending until page exit');
+    assert.ok(await heldSaveCount(page));
+    await page.reload();
+    await assertReloadedProject(page, expected);
+    await assertPhotoSettings(page, expected);
+    await waitForHistoryButtons(page, true, true);
+    assert.equal(selectedLayer(await storedProject(page)).strokes.length, 2);
+    assert.equal(selectedLayer(await storedProject(page)).redo.length, 1);
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+});
+
+async function launchShortcutTestBrowser() {
+  return chromium.launch({
+    executablePath: process.env.CHROMIUM_PATH || execFileSync('which', ['chromium'], { encoding: 'utf8' }).trim(),
+    args: ['--no-sandbox'],
+  });
+}
+
+async function createHistoryPhotoProject(page, strokeCount) {
+  await page.goto(url);
+  const canvas = page.locator('canvas.draw-surface');
+  await canvas.waitFor();
+  await waitForStoredHistory(page, 0, 0);
+
+  const pngData = await page.evaluate(() => {
+    const photo = document.createElement('canvas');
+    photo.width = 80;
+    photo.height = 60;
+    const context = photo.getContext('2d');
+    if (!context) throw new Error('Canvas is unavailable for the local photo fixture.');
+    context.fillStyle = '#b8d5ea';
+    context.fillRect(0, 0, photo.width, photo.height);
+    return photo.toDataURL('image/png').split(',')[1];
+  });
+  await page.getByTestId('input-photo').setInputFiles({
+    name: 'undo-history-source.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(pngData, 'base64'),
+  });
+  await page.waitForFunction(() => {
+    const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') || 'null');
+    return project?.title === 'undo-history-source' && project.image?.startsWith('data:image/png;base64,');
+  });
+
+  const opacity = page.getByTestId('input-reference-photo-opacity');
+  await opacity.focus();
+  await page.keyboard.press('Home');
+  for (let step = 0; step < 37; step += 1) await page.keyboard.press('ArrowRight');
+  await page.getByTestId('button-reference-photo-visibility').click();
+  await page.waitForFunction(() => {
+    const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') || 'null');
+    return project?.referencePhotoOpacity === 37 && project?.referencePhotoVisible === false;
+  });
+
+  for (let index = 0; index < strokeCount; index += 1) {
+    await addDistinctSyntheticStroke(page, index);
+    await waitForStoredHistory(page, index + 1, 0);
+  }
+  return canvas;
+}
+
+async function addDistinctSyntheticStroke(page, index) {
+  const canvas = page.locator('canvas.draw-surface');
+  const bounds = await canvas.boundingBox();
+  assert.ok(bounds);
+  const startY = bounds.y + bounds.height * (0.18 + index * 0.25);
+  const endY = startY + bounds.height * 0.04;
+  await page.mouse.move(bounds.x + bounds.width * 0.2, startY);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width * 0.8, endY, { steps: 6 });
+  await page.mouse.up();
+}
+
+async function focusDrawingSurface(canvas) {
+  await canvas.evaluate(element => {
+    element.tabIndex = 0;
+    element.focus();
+  });
+  assert.equal(await canvas.evaluate(element => document.activeElement === element), true);
+}
+
+async function holdDebouncedProjectSaves(page) {
+  await page.evaluate(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    const nativeClearTimeout = window.clearTimeout.bind(window);
+    const held = new Set();
+    let nextId = 0;
+    window.setTimeout = (callback, delay, ...args) => {
+      if (delay === 500) {
+        const id = 1_000_000_000 + ++nextId;
+        held.add(id);
+        return id;
+      }
+      return nativeSetTimeout(callback, delay, ...args);
+    };
+    window.clearTimeout = id => {
+      if (held.delete(id)) return;
+      nativeClearTimeout(id);
+    };
+    window.__heldProjectSaveCount = () => held.size;
+  });
+}
+
+async function heldSaveCount(page) {
+  return page.evaluate(() => window.__heldProjectSaveCount?.() ?? 0);
+}
+
+async function nextAnimationFrame(page) {
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => resolve())));
+}
+
+async function waitForHistoryButtons(page, undoEnabled, redoEnabled) {
+  await page.waitForFunction(({ undoEnabled, redoEnabled }) => {
+    const undo = document.querySelector('[data-testid="button-undo"]');
+    const redo = document.querySelector('[data-testid="button-redo"]');
+    return undo instanceof HTMLButtonElement
+      && redo instanceof HTMLButtonElement
+      && undo.disabled === !undoEnabled
+      && redo.disabled === !redoEnabled;
+  }, { undoEnabled, redoEnabled });
+}
+
+async function storedProject(page) {
+  return page.evaluate(() => JSON.parse(localStorage.getItem('cloudpainter-project-v1') || 'null'));
+}
+
+async function storedProjectText(page) {
+  return page.evaluate(() => localStorage.getItem('cloudpainter-project-v1'));
+}
+
+function selectedLayer(project) {
+  const layer = project.layers.find(item => item.id === project.selectedLayerId);
+  assert.ok(layer);
+  return layer;
+}
+
+async function assertReloadedProject(page, expected) {
+  await page.locator('canvas.draw-surface').waitFor();
+  await page.waitForFunction(expectedProject => {
+    return localStorage.getItem('cloudpainter-project-v1') === JSON.stringify(expectedProject);
+  }, expected);
+  assert.deepEqual(await storedProject(page), expected);
+}
+
+async function assertPhotoSettings(page, expected) {
+  const project = await storedProject(page);
+  assert.equal(project.image, expected.image);
+  assert.equal(project.referencePhotoVisible, false);
+  assert.equal(project.referencePhotoOpacity, 37);
+  assert.equal(await page.getByTestId('button-reference-photo-visibility').getAttribute('aria-pressed'), 'false');
+  assert.equal(await page.getByTestId('input-reference-photo-opacity').inputValue(), '37');
+}
+
 async function storedHistory(page) {
   return page.evaluate(() => {
     const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') || '{}');
