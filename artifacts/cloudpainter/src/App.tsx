@@ -397,26 +397,30 @@ async function composeProjectCanvas(
   return { canvas, scale: layout.scale };
 }
 
+async function createPdfArtworkPreview(
+  project: Project,
+  layerCanvases: Record<string, HTMLCanvasElement | null>,
+): Promise<string> {
+  const { canvas: artwork } = await composeProjectCanvas(project, layerCanvases, '1');
+  const previewScale = Math.min(1, 240 / artwork.width, 240 / artwork.height);
+  const preview = document.createElement('canvas');
+  preview.width = Math.max(1, Math.round(artwork.width * previewScale));
+  preview.height = Math.max(1, Math.round(artwork.height * previewScale));
+  const context = preview.getContext('2d');
+  if (!context) throw new Error('Could not prepare the PDF layout preview.');
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, preview.width, preview.height);
+  context.drawImage(artwork, 0, 0, preview.width, preview.height);
+  return preview.toDataURL('image/jpeg', 0.82);
+}
+
 function createPrintPdf(
   source: HTMLCanvasElement,
   paperSize: PdfPaperSize,
   orientation: PdfOrientation,
   safeMargin: PdfSafeMargin,
 ): Blob {
-  const portraitPage = paperSize === 'letter'
-    ? { width: 612, height: 792 }
-    : { width: 595.28, height: 841.89 };
-  const page = orientation === 'landscape'
-    ? { width: portraitPage.height, height: portraitPage.width }
-    : portraitPage;
-  const margin = PDF_SAFE_MARGIN_POINTS[safeMargin];
-  const printableWidth = page.width - margin * 2;
-  const printableHeight = page.height - margin * 2;
-  const scale = Math.min(printableWidth / source.width, printableHeight / source.height);
-  const artworkWidth = source.width * scale;
-  const artworkHeight = source.height * scale;
-  const artworkX = margin + (printableWidth - artworkWidth) / 2;
-  const artworkY = margin + (printableHeight - artworkHeight) / 2;
+  const layout = getPdfLayout(source.width, source.height, paperSize, orientation, safeMargin);
 
   const flattened = document.createElement('canvas');
   flattened.width = source.width;
@@ -434,7 +438,7 @@ function createPrintPdf(
   }
   const jpegBytes = Uint8Array.from(atob(jpegUrl.slice(jpegPrefix.length)), character => character.charCodeAt(0));
   const encode = (value: string) => new TextEncoder().encode(value);
-  const imagePlacement = `q ${artworkWidth.toFixed(4)} 0 0 ${artworkHeight.toFixed(4)} ${artworkX.toFixed(4)} ${artworkY.toFixed(4)} cm /Im0 Do Q\n`;
+  const imagePlacement = `q ${layout.artworkWidth.toFixed(4)} 0 0 ${layout.artworkHeight.toFixed(4)} ${layout.artworkX.toFixed(4)} ${layout.artworkY.toFixed(4)} cm /Im0 Do Q\n`;
   const imagePlacementBytes = encode(imagePlacement);
   const chunks: Uint8Array[] = [encode('%PDF-1.4\n')];
   const offsets = [0];
@@ -450,7 +454,7 @@ function createPrintPdf(
   appendObject(1, [encode('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n')]);
   appendObject(2, [encode('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n')]);
   appendObject(3, [encode(
-    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.width} ${page.height}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`,
+    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${layout.pageWidth} ${layout.pageHeight}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`,
   )]);
   appendObject(4, [
     encode(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${flattened.width} /Height ${flattened.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.byteLength} >>\nstream\n`),
@@ -481,13 +485,13 @@ function createPrintPdf(
   return new Blob([pdfBytes.buffer], { type: 'application/pdf' });
 }
 
-function getPdfEffectivePpi(
+function getPdfLayout(
   sourceWidth: number,
   sourceHeight: number,
   paperSize: PdfPaperSize,
   orientation: PdfOrientation,
   safeMargin: PdfSafeMargin,
-): number {
+) {
   const portraitPage = paperSize === 'letter'
     ? { width: 612, height: 792 }
     : { width: 595.28, height: 841.89 };
@@ -495,12 +499,27 @@ function getPdfEffectivePpi(
     ? { width: portraitPage.height, height: portraitPage.width }
     : portraitPage;
   const margin = PDF_SAFE_MARGIN_POINTS[safeMargin];
-  const scale = Math.min(
-    (page.width - margin * 2) / sourceWidth,
-    (page.height - margin * 2) / sourceHeight,
-  );
-  return 72 / scale;
+  const printableWidth = page.width - margin * 2;
+  const printableHeight = page.height - margin * 2;
+  const scale = Math.min(printableWidth / sourceWidth, printableHeight / sourceHeight);
+  const artworkWidth = sourceWidth * scale;
+  const artworkHeight = sourceHeight * scale;
+  const artworkX = margin + (printableWidth - artworkWidth) / 2;
+  const artworkY = margin + (printableHeight - artworkHeight) / 2;
+  return {
+    pageWidth: page.width,
+    pageHeight: page.height,
+    margin,
+    printableWidth,
+    printableHeight,
+    artworkWidth,
+    artworkHeight,
+    artworkX,
+    artworkY,
+    effectivePpi: 72 / scale,
+  };
 }
+
 function Home() {
   const accountSettings = useAccountSettings();
   const [initialProject] = useState(readProjectSnapshot);
@@ -555,6 +574,7 @@ function Home() {
   const [pdfPaperSize, setPdfPaperSize] = useState<PdfPaperSize>('letter');
   const [pdfOrientation, setPdfOrientation] = useState<PdfOrientation>('portrait');
   const [pdfSafeMargin, setPdfSafeMargin] = useState<PdfSafeMargin>('0.5');
+  const [pdfArtworkPreview, setPdfArtworkPreview] = useState<string | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [panMode, setPanMode] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
@@ -578,13 +598,14 @@ function Home() {
   } | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
   const selectedLayer = project.layers.find(layer => layer.id === project.selectedLayerId) ?? project.layers[0];
-  const pdfEffectivePpi = Math.round(getPdfEffectivePpi(
+  const pdfLayout = getPdfLayout(
     project.width,
     project.height,
     pdfPaperSize,
     pdfOrientation,
     pdfSafeMargin,
-  ));
+  );
+  const pdfEffectivePpi = Math.round(pdfLayout.effectivePpi);
   const visibleLayers = useMemo(() => [...project.layers].reverse(), [project.layers]);
   const stageSize = fitStageDimensions(
     project.width,
@@ -819,6 +840,23 @@ function Home() {
       if (draft?.layerId === layer.id) renderStroke(context, draft.stroke, project.width, project.height);
     });
   }, [project.layers, project.width, project.height, draft, renderStroke]);
+
+  useEffect(() => {
+    if (!exportMenuOpen) {
+      setPdfArtworkPreview(null);
+      return;
+    }
+    let current = true;
+    setPdfArtworkPreview(null);
+    void createPdfArtworkPreview(project, canvasRefs.current)
+      .then(preview => {
+        if (current) setPdfArtworkPreview(preview);
+      })
+      .catch(() => {
+        if (current) setPdfArtworkPreview(null);
+      });
+    return () => { current = false; };
+  }, [exportMenuOpen, project]);
 
   const updateProject = (updater: (current: Project) => Project) => setProject(current => updater(current));
   const setPhotoView = (zoom: number, pan: { x: number; y: number }) => updateProject(current => {
@@ -1251,7 +1289,7 @@ function Home() {
       link.href = downloadUrl;
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-      announce('PDF exported. Your browser saved the print-ready page.');
+      announce('PDF exported. Your browser saved the page.');
     } catch {
       announce('Could not create the PDF export. Try again or use a smaller sketch.');
     }
@@ -1363,6 +1401,58 @@ function Home() {
                         <option value="0.75">¾ in</option>
                       </select>
                     </label>
+                    <div className="pdf-layout-preview" data-testid="pdf-layout-preview">
+                      <svg
+                        className="pdf-layout-page"
+                        viewBox={`0 0 ${pdfLayout.pageWidth} ${pdfLayout.pageHeight}`}
+                        role="img"
+                        aria-label={`${pdfPaperSize === 'letter' ? 'US Letter' : 'A4'} ${pdfOrientation} layout preview. Dashed outline marks the print-safe area; the sketch is centered inside it.`}
+                        data-page-width={pdfLayout.pageWidth}
+                        data-page-height={pdfLayout.pageHeight}
+                        data-safe-margin={pdfLayout.margin}
+                      >
+                        <rect className="pdf-layout-page-paper" x="0" y="0" width={pdfLayout.pageWidth} height={pdfLayout.pageHeight} />
+                        <rect
+                          className="pdf-layout-safe-area"
+                          x={pdfLayout.margin}
+                          y={pdfLayout.margin}
+                          width={pdfLayout.printableWidth}
+                          height={pdfLayout.printableHeight}
+                          data-testid="pdf-layout-safe-area"
+                        />
+                        <rect
+                          className="pdf-layout-artwork"
+                          x={pdfLayout.artworkX}
+                          y={pdfLayout.artworkY}
+                          width={pdfLayout.artworkWidth}
+                          height={pdfLayout.artworkHeight}
+                          data-testid="pdf-layout-artwork"
+                        />
+                        {pdfArtworkPreview && (
+                          <image
+                            href={pdfArtworkPreview}
+                            x={pdfLayout.artworkX}
+                            y={pdfLayout.artworkY}
+                            width={pdfLayout.artworkWidth}
+                            height={pdfLayout.artworkHeight}
+                            preserveAspectRatio="none"
+                            data-testid="pdf-layout-artwork-image"
+                          />
+                        )}
+                      </svg>
+                      <p className="pdf-layout-caption">Dashed line: print-safe area · Shaded box: sketch placement</p>
+                    </div>
+                    <p
+                      className="pdf-resolution-status"
+                      data-quality={pdfEffectivePpi < 300 ? 'limited' : 'above-reference'}
+                      data-testid="pdf-resolution-status"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      Approx. {pdfEffectivePpi} PPI at this print size. {pdfEffectivePpi < 300
+                        ? 'Fine details may look soft at this size.'
+                        : 'At least 300 PPI at this print size.'}
+                    </p>
                     <TooltipButton description="Download the full sketch centered inside the selected print-safe margin on a Letter or A4 page." className="button export-menu-action" onClick={() => { setExportMenuOpen(false); void exportPdf(); }} data-testid="button-export-pdf"><FileDown size={14} /> Export PDF</TooltipButton>
                   </section>
                 </div>
@@ -1390,17 +1480,6 @@ function Home() {
       )}
 
       <section className="workspace">
-        <p
-          className="pdf-resolution-status"
-          data-quality={pdfEffectivePpi < 300 ? 'limited' : 'print-ready'}
-          data-testid="pdf-resolution-status"
-          role="status"
-          aria-live="polite"
-        >
-          Approx. {pdfEffectivePpi} PPI at this print size. {pdfEffectivePpi < 300
-            ? 'Fine details may soften; increase the safe margin to print the artwork smaller.'
-            : 'Suitable for fine details.'}
-        </p>
         <div className="intro-row">
           <div>
             <p className="eyebrow">A little room for what you see</p>

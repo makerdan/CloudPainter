@@ -736,9 +736,11 @@ test('keeps fine sketch marks in the PDF image and reports effective print resol
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   try {
     await page.goto(appUrl);
+    await openExportMenu(page);
     const resolutionStatus = page.getByTestId('pdf-resolution-status');
-    assert.match(await resolutionStatus.innerText(), /160 PPI.*Fine details may soften/);
+    assert.match(await resolutionStatus.innerText(), /160 PPI.*Fine details may look soft/);
     assert.equal(await resolutionStatus.getAttribute('data-quality'), 'limited');
+    assert.equal(await resolutionStatus.getAttribute('role'), 'status', 'softness feedback should be non-blocking status text');
 
     await page.evaluate(() => {
       const canvas = document.querySelector('canvas.draw-surface');
@@ -762,7 +764,7 @@ test('keeps fine sketch marks in the PDF image and reports effective print resol
     assert.ok(exported.pixels[3].slice(0, 3).every(channel => channel > 225), `small detail should remain distinct from blank paper; received ${exported.pixels[3]}`);
 
     await (await exportControl(page, 'select-pdf-orientation')).selectOption('landscape');
-    assert.match(await resolutionStatus.innerText(), /120 PPI.*Fine details may soften/);
+    assert.match(await resolutionStatus.innerText(), /120 PPI.*Fine details may look soft/);
   } finally {
     await page.close();
   }
@@ -772,11 +774,29 @@ test('keeps fine sketch marks in the PDF image and reports effective print resol
     await highResolutionPage.goto(appUrl);
     const dimensions = await importPhoto(highResolutionPage, { width: 2400, height: 1600 }, 'high-resolution-print.png');
     assert.deepEqual(dimensions, { width: 2000, height: 1333 }, 'photo imports should use the app-supported maximum sketch dimensions');
+    await openExportMenu(highResolutionPage);
     const resolutionStatus = highResolutionPage.getByTestId('pdf-resolution-status');
-    assert.match(await resolutionStatus.innerText(), /267 PPI.*Fine details may soften; increase the safe margin/);
+    assert.match(await resolutionStatus.innerText(), /267 PPI.*Fine details may look soft/);
     assert.equal(await resolutionStatus.getAttribute('data-quality'), 'limited');
   } finally {
     await highResolutionPage.close();
+  }
+
+  const lowResolutionPage = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  try {
+    await lowResolutionPage.goto(appUrl);
+    const dimensions = await importPhoto(lowResolutionPage, { width: 320, height: 200 }, 'low-resolution-print.png');
+    assert.deepEqual(dimensions, { width: 320, height: 200 }, 'the low-resolution fixture should retain its known source pixel dimensions');
+    await openExportMenu(lowResolutionPage);
+    const resolutionStatus = lowResolutionPage.getByTestId('pdf-resolution-status');
+    assert.match(await resolutionStatus.innerText(), /43 PPI.*Fine details may look soft/);
+    await (await exportControl(lowResolutionPage, 'select-pdf-margin')).selectOption('0.75');
+    assert.match(await resolutionStatus.innerText(), /46 PPI.*Fine details may look soft/, 'the selected safe margin should affect effective resolution');
+    await (await exportControl(lowResolutionPage, 'select-pdf-paper')).selectOption('a4');
+    await (await exportControl(lowResolutionPage, 'select-pdf-orientation')).selectOption('landscape');
+    assert.match(await resolutionStatus.innerText(), /31 PPI.*Fine details may look soft/, 'paper size and orientation should affect effective resolution');
+  } finally {
+    await lowResolutionPage.close();
   }
 });
 
@@ -879,6 +899,38 @@ test('downloads complete Letter and A4 PDFs in portrait and landscape without ch
           { value: '0.75', points: 54 },
         ]) {
           await (await exportControl(page, 'select-pdf-margin')).selectOption(margin.value);
+          await page.waitForFunction(() => {
+            const image = document.querySelector('[data-testid="pdf-layout-artwork-image"]');
+            return image instanceof SVGImageElement
+              && image.getAttribute('href')?.startsWith('data:image/jpeg;base64,');
+          }, null, { timeout: 5_000 });
+          const previewLayout = await page.evaluate(() => {
+            const pagePreview = document.querySelector('[data-testid="pdf-layout-preview"] svg');
+            const safeArea = document.querySelector('[data-testid="pdf-layout-safe-area"]');
+            const artwork = document.querySelector('[data-testid="pdf-layout-artwork"]');
+            const artworkImage = document.querySelector('[data-testid="pdf-layout-artwork-image"]');
+            if (!(pagePreview instanceof SVGSVGElement)
+              || !(safeArea instanceof SVGRectElement)
+              || !(artwork instanceof SVGRectElement)
+              || !(artworkImage instanceof SVGImageElement)) {
+              throw new Error('The selected PDF layout preview is missing.');
+            }
+            const readRect = element => ({
+              x: Number(element.getAttribute('x')),
+              y: Number(element.getAttribute('y')),
+              width: Number(element.getAttribute('width')),
+              height: Number(element.getAttribute('height')),
+            });
+            return {
+              pageWidth: Number(pagePreview.getAttribute('data-page-width')),
+              pageHeight: Number(pagePreview.getAttribute('data-page-height')),
+              margin: Number(pagePreview.getAttribute('data-safe-margin')),
+              safeArea: readRect(safeArea),
+              artwork: readRect(artwork),
+              artworkImage: readRect(artworkImage),
+            };
+          });
+          assertClose(previewLayout.margin, margin.points, `${paper.name} ${orientation}: preview safe margin`);
           const [download] = await Promise.all([
             page.waitForEvent('download'),
             clickExportAction(page, 'button-export-pdf'),
@@ -896,12 +948,23 @@ test('downloads complete Letter and A4 PDFs in portrait and landscape without ch
           const pageHeight = Number(pageBox[2]);
           assertClose(pageWidth, paper[orientation].width, `${paper.name} ${orientation}: page width in points`);
           assertClose(pageHeight, paper[orientation].height, `${paper.name} ${orientation}: page height in points`);
+          assertClose(previewLayout.pageWidth, pageWidth, `${paper.name} ${orientation}: preview page width should match the PDF`);
+          assertClose(previewLayout.pageHeight, pageHeight, `${paper.name} ${orientation}: preview page height should match the PDF`);
+          assertClose(previewLayout.safeArea.x, margin.points, `${paper.name} ${orientation}: preview printable area's left edge`);
+          assertClose(previewLayout.safeArea.y, margin.points, `${paper.name} ${orientation}: preview printable area's top edge`);
+          assertClose(previewLayout.safeArea.width, pageWidth - margin.points * 2, `${paper.name} ${orientation}: preview printable area width`);
+          assertClose(previewLayout.safeArea.height, pageHeight - margin.points * 2, `${paper.name} ${orientation}: preview printable area height`);
 
           const content = pdf.match(/5 0 obj\n<< \/Length \d+ >>\nstream\n([\s\S]*?)endstream\nendobj/);
           assert.ok(content, `${paper.name} ${orientation}: PDF should include its image placement instructions`);
           const placement = content[1].match(/q ([\d.]+) 0 0 ([\d.]+) ([\d.-]+) ([\d.-]+) cm \/Im0 Do Q/);
           assert.ok(placement, `${paper.name} ${orientation}: PDF should place the artwork as one complete image`);
           const [artworkWidth, artworkHeight, artworkX, artworkY] = placement.slice(1).map(Number);
+          assertClose(previewLayout.artwork.x, artworkX, `${paper.name} ${orientation}: preview artwork left edge should match the PDF`);
+          assertClose(previewLayout.artwork.y, artworkY, `${paper.name} ${orientation}: preview artwork top edge should match the PDF`);
+          assertClose(previewLayout.artwork.width, artworkWidth, `${paper.name} ${orientation}: preview artwork width should match the PDF`);
+          assertClose(previewLayout.artwork.height, artworkHeight, `${paper.name} ${orientation}: preview artwork height should match the PDF`);
+          assert.deepEqual(previewLayout.artworkImage, previewLayout.artwork, `${paper.name} ${orientation}: artwork image should fill the selected PDF placement`);
           assertClose(artworkWidth / artworkHeight, sourceRatio, `${paper.name} ${orientation}: artwork should keep the full sketch aspect ratio`);
           assertClose(artworkX + artworkWidth / 2, pageWidth / 2, `${paper.name} ${orientation}: artwork should be centered horizontally`);
           assertClose(artworkY + artworkHeight / 2, pageHeight / 2, `${paper.name} ${orientation}: artwork should be centered vertically`);

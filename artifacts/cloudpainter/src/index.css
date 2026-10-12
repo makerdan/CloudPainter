@@ -86,8 +86,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid #b9d66a; outline-
 .save-state { font-family:var(--font-mono); text-transform:uppercase; letter-spacing:.06em; color:#889087; font-size:11px; }
 .storage-usage { margin:10px 0; color:#68756d; font-size:12px; line-height:1.5; }
 .top-actions { display:flex; gap:9px; }
-.pdf-resolution-status { min-width:0; max-width:100%; margin:0 0 14px; overflow-wrap:anywhere; text-align:right; color:#7b2922; font-size:12px; line-height:1.4; }
-.pdf-resolution-status[data-quality="print-ready"] { color:#526057; }
+.pdf-resolution-status { min-width:0; max-width:100%; margin:0; padding:8px 9px; border:1px solid #e7c5a6; border-radius:8px; background:#fff8f0; overflow-wrap:anywhere; color:#7b3e20; font-size:12px; line-height:1.4; }
+.pdf-resolution-status[data-quality="above-reference"] { border-color:#d5dfd5; background:#f4f7f2; color:#526057; }
 .export-size-control { display:flex; align-items:center; gap:6px; color:#68756d; font-size:11px; font-weight:700; white-space:nowrap; }
 .export-size-control select { min-width:0; max-width:175px; border:1px solid #c7cec5; border-radius:8px; background:var(--paper); color:var(--ink); padding:7px 8px; font:inherit; font-size:12px; }
 .export-size-control select:focus-visible { outline:3px solid var(--lime); outline-offset:2px; }
@@ -568,6 +568,12 @@ h1 { font-family:var(--font-display); font-size:33px; line-height:1.1; font-weig
 .export-menu-field select:focus-visible { outline:3px solid var(--lime); outline-offset:2px; }
 .export-menu-action { width:100%; min-height:40px; margin-top:auto; white-space:normal; }
 .export-menu-trigger { min-height:40px; }
+.pdf-layout-preview { display:grid; gap:6px; justify-items:center; padding:9px; border:1px solid var(--line); border-radius:9px; background:#f4f3ee; }
+.pdf-layout-page { display:block; width:auto; max-width:100%; max-height:180px; height:auto; border:1px solid #d7d5cc; background:white; box-shadow:0 2px 5px #24352d1c; }
+.pdf-layout-page-paper { fill:#fffefa; }
+.pdf-layout-safe-area { fill:none; stroke:#718477; stroke-width:2; stroke-dasharray:8 6; vector-effect:non-scaling-stroke; }
+.pdf-layout-artwork { fill:#dce9df; stroke:#4d705b; stroke-width:2; vector-effect:non-scaling-stroke; }
+.pdf-layout-caption { margin:0; color:#68756d; font-size:11px; line-height:1.35; text-align:center; }
 
 @media (max-width: 420px) {
   .export-menu-content { padding:12px; }
