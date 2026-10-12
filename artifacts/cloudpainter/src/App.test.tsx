@@ -119,6 +119,35 @@ async function png(page: Page, name: string, width: number, height: number, colo
   return { name, mimeType: 'image/png', buffer: Buffer.from(data, 'base64') };
 }
 
+async function holdPhotoRead(page: Page, name: string, dataUrl: string) {
+  await page.evaluate(({ name, dataUrl }) => {
+    const controls = window as Window & {
+      releaseHeldPhotoRead?: () => void;
+      heldPhotoReadAbortCount?: number;
+    };
+    controls.heldPhotoReadAbortCount = 0;
+    const prototype = FileReader.prototype;
+    const readAsDataURL = prototype.readAsDataURL;
+    prototype.readAsDataURL = function (file) {
+      if (file.name !== name) {
+        readAsDataURL.call(this, file);
+        return;
+      }
+      const reader = this;
+      const lateLoad = reader.onload;
+      Object.defineProperty(reader, 'readyState', { configurable: true, value: FileReader.LOADING });
+      reader.abort = () => {
+        controls.heldPhotoReadAbortCount = (controls.heldPhotoReadAbortCount ?? 0) + 1;
+      };
+      controls.releaseHeldPhotoRead = () => {
+        Object.defineProperty(reader, 'result', { configurable: true, value: dataUrl });
+        lateLoad?.call(reader, new ProgressEvent('load'));
+        controls.releaseHeldPhotoRead = undefined;
+      };
+    };
+  }, { name, dataUrl });
+}
+
 async function markedPhoto(page: Page, name: string) {
   const data = await page.evaluate(markers => {
     const canvas = document.createElement('canvas');
@@ -806,6 +835,149 @@ test('a delayed earlier file read cannot replace newer work or hide pending feed
   await expect.poll(() => savedProject(page)).toEqual(persistedFastProject);
   expect(await savedProjectHistory(page)).toEqual(persistedFastHistory);
   expect((await savedProject(page)).layers[0].strokes).toHaveLength(1);
+});
+
+test('cancelling a photo read aborts it and ignores a late read completion', async ({ page }) => {
+  const photo = await png(page, 'cancel-this-import.png', 240, 160);
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  const projectBefore = await savedProject(page);
+  const historyBefore = await savedProjectHistory(page);
+  await holdPhotoRead(page, photo.name, `data:image/png;base64,${photo.buffer.toString('base64')}`);
+
+  await page.getByTestId('input-photo').setInputFiles(photo);
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+  await expect(page.getByTestId('button-cancel-photo-import')).toBeVisible();
+  await page.getByTestId('button-cancel-photo-import').click();
+
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect(page.getByTestId('status-toast')).toHaveText('Photo import cancelled. Your sketch is unchanged.');
+  expect(await page.evaluate(() => (window as Window & { heldPhotoReadAbortCount?: number }).heldPhotoReadAbortCount)).toBe(1);
+  expect(await savedProject(page)).toEqual(projectBefore);
+  expect(await savedProjectHistory(page)).toEqual(historyBefore);
+
+  await page.evaluate(() => (window as Window & { releaseHeldPhotoRead?: () => void }).releaseHeldPhotoRead?.());
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect(page.getByTestId('img-reference')).toHaveCount(0);
+  await expect.poll(() => savedProject(page)).toEqual(projectBefore);
+  expect(await savedProjectHistory(page)).toEqual(historyBefore);
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveCount(0);
+  expect(await savedProject(page)).toEqual(projectBefore);
+});
+
+for (const action of ['remove', 'blank'] as const) {
+  test(`${action === 'remove' ? 'removing the photo' : 'starting blank'} invalidates a pending import`, async ({ page }) => {
+    const currentPhoto = await png(page, `current-${action}.png`, 320, 200);
+    const pendingPhoto = await png(page, `pending-${action}.png`, 240, 160);
+    await page.getByTestId('input-photo').setInputFiles(currentPhoto);
+    await expect.poll(async () => (await savedProject(page))?.title).toBe(`current-${action}`);
+    await addSyntheticStroke(page);
+    await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+    const projectBefore = await savedProject(page);
+    const historyBefore = await savedProjectHistory(page);
+    await holdPhotoRead(page, pendingPhoto.name, `data:image/png;base64,${pendingPhoto.buffer.toString('base64')}`);
+
+    await page.getByTestId('input-photo').setInputFiles(pendingPhoto);
+    await expect(page.getByTestId('status-photo-import')).toBeVisible();
+    if (action === 'remove') {
+      await page.getByTestId('button-remove-photo').click();
+      await expect.poll(() => savedProject(page)).toEqual({ ...projectBefore, image: null });
+    } else {
+      await page.getByTestId('button-blank').click();
+      await expect.poll(async () => {
+        const project = await savedProject(page);
+        return project && {
+          image: project.image, width: project.width, height: project.height,
+          title: project.title, strokes: project.layers[0].strokes.length,
+        };
+      }).toEqual({ image: null, width: 1200, height: 800, title: 'Untitled idea', strokes: 0 });
+    }
+    const chosenProject = await savedProject(page);
+    await page.evaluate(() => (window as Window & { releaseHeldPhotoRead?: () => void }).releaseHeldPhotoRead?.());
+    await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+    await expect.poll(() => savedProject(page)).toEqual(chosenProject);
+    expect(await savedProjectHistory(page)).toEqual(historyBefore);
+    if (action === 'remove') {
+      expect(chosenProject).toEqual({ ...projectBefore, image: null });
+      expect(chosenProject.layers[0].strokes).toHaveLength(1);
+    }
+
+    await page.reload();
+    await expect(page.getByTestId('img-reference')).toHaveCount(0);
+    await expect.poll(() => savedProject(page)).toEqual(chosenProject);
+    expect(await savedProjectHistory(page)).toEqual(historyBefore);
+  });
+}
+
+test('only the newer photo installs when an earlier import is waiting on a storage estimate', async ({ page }) => {
+  const currentPhoto = await png(page, 'storage-current.png', 320, 200);
+  const olderPhoto = await png(page, 'storage-older.png', 240, 160);
+  const newerPhoto = await png(page, 'storage-newer.png', 420, 280);
+  await page.getByTestId('input-photo').setInputFiles(currentPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('storage-current');
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  const outgoingProject = await savedProjectRaw(page);
+  const historyBeforeReplacement = await savedProjectHistory(page);
+
+  await page.evaluate(() => {
+    let calls = 0;
+    const controls = window as Window & {
+      releaseStorageEstimate1?: () => void;
+      releaseStorageEstimate2?: () => void;
+      storageEstimateCalls?: number;
+    };
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: {
+        estimate: () => {
+          calls += 1;
+          controls.storageEstimateCalls = calls;
+          if (calls > 2) return Promise.resolve({ usage: 0, quota: 1_000_000_000 });
+          return new Promise(resolve => {
+            const releaseKey = calls === 1 ? 'releaseStorageEstimate1' : 'releaseStorageEstimate2';
+            controls[releaseKey] = () => {
+              resolve({ usage: 0, quota: 1_000_000_000 });
+              controls[releaseKey] = undefined;
+            };
+          });
+        },
+      },
+    });
+  });
+
+  await page.getByTestId('input-photo').setInputFiles(olderPhoto);
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releaseStorageEstimate1?: () => void }).releaseStorageEstimate1,
+  )).toBe('function');
+  await page.getByTestId('input-photo').setInputFiles(newerPhoto);
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releaseStorageEstimate2?: () => void }).releaseStorageEstimate2,
+  )).toBe('function');
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+
+  await page.evaluate(() => (window as Window & { releaseStorageEstimate2?: () => void }).releaseStorageEstimate2?.());
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('storage-newer');
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+  await expect.poll(() => savedProjectHistory(page)).toEqual([outgoingProject, ...historyBeforeReplacement]);
+  const newerProject = await savedProject(page);
+
+  await page.evaluate(() => (window as Window & { releaseStorageEstimate1?: () => void }).releaseStorageEstimate1?.());
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect.poll(() => savedProject(page)).toEqual(newerProject);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${newerPhoto.buffer.toString('base64')}`,
+  );
+  expect(await savedProjectHistory(page)).toEqual([outgoingProject, ...historyBeforeReplacement]);
+  await expect(page.getByTestId('status-toast')).toHaveText(
+    'Photo added. Your previous sketch is saved in Saved sketches.',
+  );
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${newerPhoto.buffer.toString('base64')}`,
+  );
+  await expect.poll(() => savedProject(page)).toEqual(newerProject);
+  expect(await savedProjectHistory(page)).toEqual([outgoingProject, ...historyBeforeReplacement]);
 });
 
 test('photo read and decode failures preserve the sketch until a valid retry decodes', async ({ page }) => {

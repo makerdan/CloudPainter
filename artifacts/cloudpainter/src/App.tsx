@@ -67,6 +67,13 @@ type PaintLayer = ProjectBackupLayer;
 type Project = EditableProject;
 type SavedProject = Project & { savedId: string };
 
+type ActivePhotoImport = {
+  id: number;
+  reader: FileReader;
+  image: HTMLImageElement | null;
+  stage: 'reading' | 'decoding' | 'storage';
+  finish: () => void;
+};
 const RECOVERED_PROJECTS = new WeakSet<Project>();
 const STORE_KEY = 'cloudpainter-project-v1';
 const PREVIOUS_PROJECT_KEY = 'cloudpainter-previous-project-v1';
@@ -622,6 +629,8 @@ function Home() {
   const outlineOpenId = useRef(0);
   const photoImportsInProgress = useRef(0);
   const photoImportId = useRef(0);
+  const activePhotoImport = useRef<ActivePhotoImport | null>(null);
+  const photoImportFinishers = useRef(new Map<number, () => void>());
   const drawingRef = useRef(false);
   const panningRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const touchPointersRef = useRef(new Map<number, Point>());
@@ -912,6 +921,42 @@ function Home() {
   };
 
   const openPhoto = () => fileInput.current?.click();
+  const invalidatePhotoImports = (keepStorageWaiters = false) => {
+    photoImportId.current += 1;
+    const activeImport = activePhotoImport.current;
+    activePhotoImport.current = null;
+    if (activeImport) {
+      activeImport.reader.onload = null;
+      activeImport.reader.onerror = null;
+      activeImport.reader.onabort = null;
+      if (activeImport.reader.readyState === FileReader.LOADING) {
+        try {
+          activeImport.reader.abort();
+        } catch {
+          // A read may finish between the ready-state check and abort().
+        }
+      }
+      if (activeImport.image) {
+        activeImport.image.onload = null;
+        activeImport.image.onerror = null;
+        try {
+          activeImport.image.src = '';
+        } catch {
+          // The import is invalidated even if the browser cannot clear the image source.
+        }
+      }
+      if (!keepStorageWaiters || activeImport.stage !== 'storage') activeImport.finish();
+    }
+    if (!keepStorageWaiters) {
+      for (const finish of [...photoImportFinishers.current.values()]) finish();
+    }
+    setPhotoLoading(photoImportsInProgress.current > 0);
+  };
+  const cancelPhotoImport = () => {
+    if (!photoLoading) return;
+    invalidatePhotoImports();
+    announce('Photo import cancelled. Your sketch is unchanged.');
+  };
   const useGeneratedReference = (source: string, prompt: string): Promise<void> => new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = async () => {
@@ -985,7 +1030,8 @@ function Home() {
   const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const importId = ++photoImportId.current;
+    invalidatePhotoImports(true);
+    const importId = photoImportId.current;
     if (!file.type.startsWith('image/')) {
       announce('Choose an image file to begin.');
       event.target.value = '';
@@ -998,9 +1044,16 @@ function Home() {
       if (importFinished) return;
       importFinished = true;
       photoImportsInProgress.current = Math.max(0, photoImportsInProgress.current - 1);
+      photoImportFinishers.current.delete(importId);
+      if (activePhotoImport.current?.id === importId) activePhotoImport.current = null;
       setPhotoLoading(photoImportsInProgress.current > 0);
     };
     const reader = new FileReader();
+    const pendingImport: ActivePhotoImport = {
+      id: importId, reader, image: null, stage: 'reading', finish: finishImport,
+    };
+    activePhotoImport.current = pendingImport;
+    photoImportFinishers.current.set(importId, finishImport);
     reader.onload = () => {
       if (importId !== photoImportId.current) {
         finishImport();
@@ -1008,11 +1061,14 @@ function Home() {
       }
       const source = String(reader.result);
       const image = new Image();
+      pendingImport.image = image;
+      pendingImport.stage = 'decoding';
       image.onload = async () => {
         if (importId !== photoImportId.current) {
           finishImport();
           return;
         }
+        pendingImport.stage = 'storage';
         const { width, height } = getScaledImageDimensions(image.naturalWidth, image.naturalHeight);
         const layer = createLayer('Sketch layer');
         const estimate = await refreshStorageEstimate();
@@ -1074,6 +1130,7 @@ function Home() {
   };
 
   const startBlank = () => {
+    invalidatePhotoImports();
     setDrawingClipboard(null);
     const layer = createLayer('Layer 1');
     setPanMode(false);
@@ -1716,7 +1773,7 @@ function Home() {
                 )}
               </TooltipButton>
               {project.image && (
-                <TooltipButton description="Remove the reference photo and keep your drawing layers." type="button" className="icon-button source-remove" aria-label="Remove photo" onClick={() => { resetPhotoView(); updateProject(current => ({ ...current, image: null, referencePhotoVisible: true, referencePhotoOpacity: 100 })); }} data-testid="button-remove-photo"><X size={14} /></TooltipButton>
+                <TooltipButton description="Remove the reference photo and keep your drawing layers." type="button" className="icon-button source-remove" aria-label="Remove photo" onClick={() => { invalidatePhotoImports(); resetPhotoView(); updateProject(current => ({ ...current, image: null, referencePhotoVisible: true, referencePhotoOpacity: 100 })); }} data-testid="button-remove-photo"><X size={14} /></TooltipButton>
               )}
             </div>
             <div className="source-actions">
@@ -1724,9 +1781,14 @@ function Home() {
               <input ref={fileInput} hidden type="file" accept="image/*" onChange={handleFile} data-testid="input-photo" />
             </div>
             {photoLoading && (
-              <p className="photo-import-status" role="status" aria-live="polite" data-testid="status-photo-import">
-                Loading reference photo…
-              </p>
+              <div className="photo-import-status-row">
+                <p className="photo-import-status" role="status" aria-live="polite" data-testid="status-photo-import">
+                  Loading reference photo…
+                </p>
+                <TooltipButton description="Stop this photo import and keep your current sketch unchanged." type="button" className="button button-small" onClick={cancelPhotoImport} data-testid="button-cancel-photo-import">
+                  Cancel
+                </TooltipButton>
+              </div>
             )}
             {project.image && (
               <div className="reference-photo-display" role="group" aria-label="Reference photo display controls">

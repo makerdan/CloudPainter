@@ -5,7 +5,7 @@
 - [Linked secret visibility](linked-secret-visibility.md) — account-linked secrets may reach the runtime even when secret-status metadata reports them absent.
 - [Vite dependency cache](vite-dependency-cache.md) — after React upgrades, stale prebundled dependencies can cause a false version-mismatch overlay.
 - [Poe account access](poe-spending-policy.md) — verified signed-in users get normal quota; preserve revocations, admin roles/history, and shared budgets.
-- [Browser state baselines](browser-state-baselines.md) — settle initial autosave before snapshot comparisons; use keyboard modality for focus-ring assertions.
+- [Browser state baselines](browser-state-baselines.md) — settle autosave, compare like-for-like persistence snapshots, and use keyboard modality for focus-ring assertions.
 - [Completion reconciliation](completion-reconciliation.md) — a rejected completion may still commit integrated changes; inspect current source when feedback differs from the earlier diff.
 - [Logo exploration boundaries](logo-exploration.md) — image editing, photo conditioning and generation inside the sketch workspace need an explicit scope change.
 - [Poe-only logo generation](poe-only-logos.md) — the user chose Poe as the sole runtime image connection; no managed OpenAI fallback for logo creation.

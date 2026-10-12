@@ -62,3 +62,13 @@ without changing which tab ultimately wrote the shared snapshot.
 **How to apply:** Observe the actual persisted revision/snapshot to establish
 write order, record elapsed time, and do not treat the debounce interval as a
 guaranteed cross-tab deadline.
+
+Compare persisted values at the same serialization layer; do not compare a
+UI-normalized project with a raw recovery-history snapshot.
+
+**Why:** A history assertion treated default-valued photo fields as absent in
+the open project while the stored recovery snapshot retained them, producing a
+false persistence failure.
+
+**How to apply:** When checking a current project against saved history, either
+use raw persisted values for both or normalize both sides consistently.
