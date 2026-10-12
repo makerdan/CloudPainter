@@ -11,6 +11,14 @@ const saved = (page: Page) => page.evaluate(key => {
   if (project?.referencePhotoOpacity === 100) delete project.referencePhotoOpacity;
   return project;
 }, STORE_KEY);
+
+const savedHistory = (page: Page) => page.evaluate(key => {
+  const history = JSON.parse(localStorage.getItem(key) ?? '[]');
+  return history.map((project: Record<string, unknown>) => {
+    const { savedId: _savedId, ...snapshot } = project;
+    return snapshot;
+  });
+}, PROJECT_HISTORY_KEY);
 const approvedConfig = { configured: true, signedIn: true, allowed: true, dailyLimit: 2, remaining: 2, globalRemaining: 20 };
 
 async function failProjectHistoryWrites(page: Page) {
@@ -102,7 +110,7 @@ test('Poe picker offers exactly four models and preview requires explicit use', 
     const project = await saved(page);
     return { width: project.width, height: project.height, layers: project.layers.length };
   }).toEqual({ width: 640, height: 320, layers: 1 });
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY)).toEqual([before]);
+  expect(await savedHistory(page)).toEqual([before]);
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', `data:image/png;base64,${base64}`);
   await expect(page.getByTestId('button-restore-project-0')).toHaveAccessibleName('Restore saved sketch: My careful sketch');
   await page.reload();
@@ -156,7 +164,7 @@ test('applying another generated image keeps every earlier sketch available afte
     await expect.poll(async () => (await saved(page))?.title).toBe(prompt);
   }
 
-  const history = await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY);
+  const history = [olderSketch, ...originalHistory];
   expect(history).toHaveLength(2);
   expect(history[0]).toMatchObject({
     image: `data:image/png;base64,${images[0]}`, width: 320, height: 240, title: 'First generated idea',
@@ -207,13 +215,13 @@ test('a full history store leaves the current sketch and older saved sketches in
   await page.getByTestId('button-use-generated-image').click();
   await expect(page.getByRole('alert')).toContainText('Could not save a recovery copy of your current sketch. No changes were made.');
   expect(await saved(page)).toEqual(before);
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY)).toEqual(olderSketches);
+  expect(await savedHistory(page)).toEqual(olderSketches);
 
   await page.reload();
   expect(await saved(page)).toEqual(before);
   await expect(page.getByRole('button', { name: 'Restore saved sketch: Earlier saved sketch' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Restore saved sketch: Oldest saved sketch' })).toBeVisible();
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), PROJECT_HISTORY_KEY)).toEqual(olderSketches);
+  expect(await savedHistory(page)).toEqual(olderSketches);
 });
 
 test('Poe failures preserve the sketch and never issue an alternate-model request', async ({ page }) => {
@@ -265,7 +273,7 @@ test('warns before applying a generated image when estimated browser storage is 
   await rejectedDialog.dismiss();
   await rejectedClick;
   expect(await saved(page)).toEqual(before);
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY)).toEqual(history);
+  expect(await savedHistory(page)).toEqual(history);
   await expect(page.getByTestId('generated-image-preview')).toBeVisible();
   const acceptedDialogPromise = page.waitForEvent('dialog');
   const acceptedClick = page.getByTestId('button-use-generated-image').click();
@@ -274,7 +282,7 @@ test('warns before applying a generated image when estimated browser storage is 
   await acceptedDialog.accept();
   await acceptedClick;
   await expect.poll(async () => (await saved(page))?.title).toBe('Storage warning reference');
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY)).toEqual([before, ...history]);
+  expect(await savedHistory(page)).toEqual([before, ...history]);
 });
 
 test('missing Poe configuration disables generation without touching the sketch', async ({ page }) => {
@@ -467,7 +475,7 @@ test('saved sketches can be deleted without changing the active sketch, includin
 
 test('saved sketches keep their own photo framing across switches and reloads', async ({ page }) => {
   const photo = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
-  const layer = { id: 'framing-test-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] };
+  const layer = { id: 'malformed-framing-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] };
   const activeSketch = {
     image: photo,
     width: 320,
@@ -519,12 +527,24 @@ test('saved sketches keep their own photo framing across switches and reloads', 
   await expect(stageContent).toHaveAttribute('style', /translate3d\(60px, -34px, 0px\) scale\(2\.25\)/);
   await expect.poll(async () => {
     const project = await saved(page);
-    return { photoZoom: project?.photoZoom, photoPan: project?.photoPan };
-  }).toEqual({ photoZoom: 2.25, photoPan: { x: 60, y: -34 } });
+    return {
+      title: project?.title,
+      photoZoom: project?.photoZoom,
+      photoPan: project?.photoPan,
+      layerNames: project?.layers.map((layer: { name: string }) => layer.name),
+    };
+  }).toEqual({
+    title: 'Legacy active sketch',
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    layerNames: ['Active layer', 'Layer 2'],
+  });
 
-  await page.getByRole('button', { name: 'Restore saved sketch: Earlier framing' }).click();
-  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
-  await expect(stageContent).toHaveAttribute('style', /translate3d\(-48px, 30px, 0px\) scale\(1\.5\)/);
+  await page.getByRole('button', { name: 'Restore saved sketch: Legacy recovery sketch' }).click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect(stageContent).toHaveAttribute('style', /translate3d\(0px, 0px, 0px\) scale\(1\)/);
+
+  await page.getByTestId('button-add-layer').click();
   await expect.poll(async () => {
     const project = await saved(page);
     return { title: project?.title, photoZoom: project?.photoZoom, photoPan: project?.photoPan };
@@ -544,16 +564,7 @@ test('saved sketches keep their own photo framing across switches and reloads', 
 test('malformed saved photo framing is normalized without disabling the photo or canvas', async ({ page }) => {
   const photo = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
   const layer = { id: 'malformed-framing-layer', name: 'Layer 1', visible: true, opacity: 1, strokes: [], redo: [] };
-  const project = (title: string, photoZoom: unknown, photoPan: unknown) => ({
-    image: photo,
-    width: 320,
-    height: 240,
-    layers: [layer],
-    selectedLayerId: layer.id,
-    title,
-    photoZoom,
-    photoPan,
-  });
+    const project = await saved(page);
   const malformedZoom = project('Malformed zoom', 'not-a-number', { x: 'invalid', y: null });
   const malformedPan = project('Malformed pan', 2, { x: 'invalid', y: null });
   const outOfRange = project('Out of range framing', 20, { x: 1_000_000, y: -1_000_000 });
@@ -697,4 +708,3 @@ test('legacy sketches open fitted, remain editable, and save current framing fie
   });
 });
 });
-

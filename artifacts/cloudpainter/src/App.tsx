@@ -75,6 +75,7 @@ type Project = {
   referencePhotoVisible: boolean;
   referencePhotoOpacity: number;
 };
+type SavedProject = Project & { savedId: string };
 
 const RECOVERED_PROJECTS = new WeakSet<Project>();
 const STORE_KEY = 'cloudpainter-project-v1';
@@ -84,6 +85,13 @@ const PROJECT_HISTORY_KEY = 'cloudpainter-project-history-v1';
 
 const STORAGE_WARNING_THRESHOLD = 0.8;
 const id = () => `layer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+const createSavedProjectId = (usedIds = new Set<string>()) => {
+  let savedId = '';
+  do {
+    savedId = `saved-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  } while (usedIds.has(savedId));
+  return savedId;
+};
 const createLayer = (name: string): PaintLayer => ({
   id: id(), name, visible: true, opacity: 1, strokes: [], redo: [],
 });
@@ -219,24 +227,57 @@ function readPreviousProject(): Project | null {
   return null;
 }
 
-function readProjectHistory(): Project[] {
+function readProjectHistory(): SavedProject[] {
+  return readProjectHistoryState().projects;
+}
+
+function readProjectHistoryState(): {
+  projects: SavedProject[];
+  snapshot: string | null;
+  migratedSnapshot: string | null;
+} {
+  let snapshot: string | null = null;
   try {
-    const saved = localStorage.getItem(PROJECT_HISTORY_KEY);
-    if (saved) {
-      const history = JSON.parse(saved) as unknown;
+    snapshot = localStorage.getItem(PROJECT_HISTORY_KEY);
+    if (snapshot) {
+      const history = JSON.parse(snapshot) as unknown;
       if (Array.isArray(history)) {
-        return history
-          .filter((project): project is Project =>
-            Boolean(project && Array.isArray(project.layers) && project.layers.length),
+        const usedIds = new Set<string>();
+        let needsMigration = false;
+        const persistedHistory = history.map(project => {
+          if (!project || typeof project !== 'object' || !Array.isArray((project as Project).layers)
+            || !(project as Project).layers.length) return project;
+          const savedProject = project as SavedProject;
+          const savedId = typeof savedProject.savedId === 'string' && savedProject.savedId
+            && !usedIds.has(savedProject.savedId)
+            ? savedProject.savedId
+            : createSavedProjectId(usedIds);
+          if (savedId !== savedProject.savedId) needsMigration = true;
+          usedIds.add(savedId);
+          return { ...project, savedId };
+        });
+        const projects = persistedHistory
+          .filter((project): project is SavedProject =>
+            Boolean(project && typeof project === 'object' && Array.isArray((project as Project).layers)
+              && (project as Project).layers.length),
           )
-          .map(normalizeProjectView);
+          .map(project => ({ ...normalizeProjectView(project), savedId: project.savedId }));
+        return {
+          projects,
+          snapshot,
+          migratedSnapshot: needsMigration ? JSON.stringify(persistedHistory) : null,
+        };
       }
     }
   } catch {
     // Fall back to the earlier single-project recovery slot.
   }
   const previousProject = readPreviousProject();
-  return previousProject ? [previousProject] : [];
+  return {
+    projects: previousProject ? [{ ...previousProject, savedId: createSavedProjectId() }] : [],
+    snapshot,
+    migratedSnapshot: null,
+  };
 }
 
 type ExportSize = '1' | '2' | 'letter' | 'a4';
@@ -527,7 +568,8 @@ function Home() {
   const persistedProjectSnapshot = useRef<string | null>(initialProject.snapshot);
   const projectConflict = useRef(false);
   const [storageConflict, setStorageConflict] = useState(false);
-  const [projectHistory, setProjectHistory] = useState<Project[]>(readProjectHistory);
+  const [initialHistory] = useState(readProjectHistoryState);
+  const [projectHistory, setProjectHistory] = useState<SavedProject[]>(initialHistory.projects);
   const latestProject = useRef(project);
   latestProject.current = project;
   const [tool, setTool] = useState<DrawingTool>('brush');
@@ -709,6 +751,16 @@ function Home() {
     window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(''), 2600);
   }, []);
+
+  useEffect(() => {
+    if (!initialHistory.migratedSnapshot) return;
+    try {
+      if (localStorage.getItem(PROJECT_HISTORY_KEY) !== initialHistory.snapshot) return;
+      localStorage.setItem(PROJECT_HISTORY_KEY, initialHistory.migratedSnapshot);
+    } catch {
+      // Keep the loaded sketches available; a later successful history write can persist their IDs.
+    }
+  }, [initialHistory]);
 
   useEffect(() => {
     if (initialProject.recovered) announce(RECOVERY_MESSAGE);
@@ -902,11 +954,11 @@ function Home() {
     image.onerror = () => reject(new Error('Generated image could not be opened.'));
     image.src = source;
   });
-  const restoreProject = async (savedProject: Project) => {
+  const restoreProject = async (savedProject: SavedProject) => {
     const estimate = await refreshStorageEstimate();
     const currentProject = latestProject.current;
     const nextHistory = withSavedProject(projectHistory, currentProject);
-    const nextProject = normalizeProjectView(savedProject);
+    const nextProject = normalizeProjectView(projectWithoutSavedId(savedProject));
     if (!confirmHistoryWriteIfStorageIsLow(estimate, nextProject, nextHistory)) return;
     try {
       localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
@@ -923,8 +975,12 @@ function Home() {
       ? 'Some saved sketch data was invalid and has been repaired or skipped. The remaining artwork was restored.'
       : `Restored “${savedProject.title}”.`);
   };
-  const deleteSavedProject = (index: number) => {
-    const nextHistory = projectHistory.filter((_, currentIndex) => currentIndex !== index);
+  const deleteSavedProject = (savedId: string) => {
+    if (!projectHistory.some(savedProject => savedProject.savedId === savedId)) {
+      announce('Could not delete this saved sketch. Nothing changed.');
+      return;
+    }
+    const nextHistory = projectHistory.filter(savedProject => savedProject.savedId !== savedId);
     try {
       localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
     } catch {
@@ -1590,7 +1646,7 @@ function Home() {
                 <p className="section-label">Saved sketches · {projectHistory.length}</p>
                 <div className="saved-sketch-list">
                   {projectHistory.map((savedProject, index) => (
-                    <div className="saved-sketch-row" key={`${savedProject.title}-${index}`}>
+                    <div className="saved-sketch-row" key={savedProject.savedId}>
                       <TooltipButton
                         description={`Restore “${savedProject.title}”. Your current sketch is saved first.`}
                         className="button saved-sketch-button"
@@ -1604,9 +1660,10 @@ function Home() {
                         description={`Delete “${savedProject.title}” from saved sketches.`}
                         type="button"
                         className="button icon-button saved-sketch-delete"
-                        onClick={() => deleteSavedProject(index)}
+                        onClick={() => deleteSavedProject(savedProject.savedId)}
                         aria-label={`Delete saved sketch: ${savedProject.title}`}
                         data-testid={`button-delete-project-${index}`}
+                        data-saved-project-id={savedProject.savedId}
                       >
                         <Trash2 size={14} />
                       </TooltipButton>
@@ -1954,9 +2011,21 @@ function App() {
 
 export default App;
 
-function withSavedProject(history: Project[], project: Project): Project[] {
-  const serializedProject = JSON.stringify(project);
-  return [project, ...history.filter(saved => JSON.stringify(saved) !== serializedProject)];
+function projectWithoutSavedId(project: Project | SavedProject): Project {
+  const original = project as SavedProject;
+  const { savedId: _savedId, ...snapshot } = original;
+  if (RECOVERED_PROJECTS.has(original)) RECOVERED_PROJECTS.add(snapshot);
+  return snapshot;
+}
+
+function withSavedProject(history: SavedProject[], project: Project): SavedProject[] {
+  const projectSnapshot = projectWithoutSavedId(project);
+  const serializedProject = JSON.stringify(projectSnapshot);
+  const savedId = createSavedProjectId(new Set(history.map(saved => saved.savedId)));
+  return [
+    { ...projectSnapshot, savedId },
+    ...history.filter(saved => JSON.stringify(projectWithoutSavedId(saved)) !== serializedProject),
+  ];
 }
 
 type PdfOrientation = 'portrait' | 'landscape';

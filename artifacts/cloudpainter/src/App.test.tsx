@@ -28,6 +28,16 @@ async function savedProjectRaw(page: Page) {
 }
 
 async function savedProjectHistory(page: Page) {
+  return page.evaluate(key => {
+    const history = JSON.parse(localStorage.getItem(key) ?? '[]');
+    return history.map((project: Record<string, unknown>) => {
+      const { savedId: _savedId, ...snapshot } = project;
+      return snapshot;
+    });
+  }, PROJECT_HISTORY_KEY);
+}
+
+async function savedProjectHistoryRaw(page: Page) {
   return page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY);
 }
 
@@ -174,6 +184,111 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByTestId('button-photo-card')).toBeVisible();
   await trackPicker(page);
 });
+
+const sameNamedSavedSketches = [
+  {
+    image: null,
+    width: 640,
+    height: 480,
+    title: 'Shared title',
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+    selectedLayerId: 'same-title-layer-a',
+    layers: [{ id: 'same-title-layer-a', name: 'Drawing A', visible: true, opacity: 1, strokes: [], redo: [] }],
+  },
+  {
+    image: null,
+    width: 320,
+    height: 240,
+    title: 'Shared title',
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+    selectedLayerId: 'same-title-layer-b',
+    layers: [{ id: 'same-title-layer-b', name: 'Drawing B', visible: true, opacity: 1, strokes: [], redo: [] }],
+  },
+];
+
+async function seedSavedSketches(page: Page, sketches: object[]) {
+  await expect.poll(() => savedProject(page)).not.toBeNull();
+  await page.evaluate(({ key, sketches }) => localStorage.setItem(key, JSON.stringify(sketches)), {
+    key: PROJECT_HISTORY_KEY,
+    sketches,
+  });
+  await page.reload();
+  await expect(page.locator('.saved-sketch-delete')).toHaveCount(sketches.length);
+  await expect.poll(async () => {
+    const history = await savedProjectHistoryRaw(page);
+    return history.length === sketches.length && history.every((project: { savedId?: unknown }) =>
+      typeof project.savedId === 'string' && project.savedId.length > 0,
+    );
+  }).toBe(true);
+}
+
+test('a rejected saved-sketch deletion leaves history and active artwork unchanged', async ({ page }) => {
+  await seedSavedSketches(page, [sameNamedSavedSketches[0]]);
+  const activeBefore = await savedProjectRaw(page);
+  const historyBefore = await savedProjectHistoryRaw(page);
+  const deleteButton = page.locator(`[data-saved-project-id="${historyBefore[0].savedId}"]`);
+
+  await page.evaluate(historyKey => {
+    const originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (this === window.localStorage && key === historyKey) {
+        throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    };
+  }, PROJECT_HISTORY_KEY);
+  await deleteButton.click();
+
+  await expect(page.getByTestId('status-toast')).toContainText('Could not delete this saved sketch. Nothing changed.');
+  await expect(deleteButton).toBeVisible();
+  expect(await savedProjectRaw(page)).toEqual(activeBefore);
+  expect(await savedProjectHistoryRaw(page)).toEqual(historyBefore);
+
+  await page.reload();
+  await expect(page.locator(`[data-saved-project-id="${historyBefore[0].savedId}"]`)).toBeVisible();
+  expect(await savedProjectRaw(page)).toEqual(activeBefore);
+  expect(await savedProjectHistoryRaw(page)).toEqual(historyBefore);
+});
+
+for (const selectedIndex of [0, 1] as const) {
+  test(`deleting same-named saved sketch ${selectedIndex + 1} removes only its stable ID`, async ({ page }) => {
+    await seedSavedSketches(page, sameNamedSavedSketches);
+    const activeBefore = await savedProjectRaw(page);
+    const historyBefore = await savedProjectHistoryRaw(page);
+    const selected = historyBefore[selectedIndex];
+    const survivor = historyBefore[1 - selectedIndex];
+
+    await page.locator(`[data-saved-project-id="${selected.savedId}"]`).click();
+
+    await expect.poll(() => savedProjectHistoryRaw(page)).toEqual([survivor]);
+    await expect(page.locator(`[data-saved-project-id="${survivor.savedId}"]`)).toBeVisible();
+    await expect(page.locator('.saved-sketch-delete')).toHaveCount(1);
+    expect(await savedProjectRaw(page)).toEqual(activeBefore);
+
+    await page.reload();
+    await expect(page.locator(`[data-saved-project-id="${survivor.savedId}"]`)).toBeVisible();
+    await expect.poll(() => savedProjectHistoryRaw(page)).toEqual([survivor]);
+    await page.getByTestId('button-restore-project-0').click();
+    await expect.poll(async () => {
+      const restored = await savedProjectRaw(page);
+      return {
+        title: restored.title,
+        width: restored.width,
+        layerId: restored.layers[0].id,
+      };
+    }).toEqual({
+      title: survivor.title,
+      width: survivor.width,
+      layerId: survivor.layers[0].id,
+    });
+  });
+}
 
 const syntheticMultiTabProject = {
   image: null,
