@@ -4,6 +4,27 @@ Read before discovery/proposal, implementation, verification, enablement, or use
 of automatic progression. This contract supplies no webhook, scheduler, platform
 token, event API, daemon, or approval.
 
+Within an approved hook implementation scope, normal programming is the default.
+Choose unspecified equivalent implementation methods without separate approvals,
+per-choice records, narration of each step, or a routine method-change ledger.
+The acceptance matrix specifies required observable outcomes, not a mandatory
+internal architecture or checklist of coding choices.
+
+Escalate material changes to scope, authority, execution permissions, resource
+limits, safety/privacy/compatibility/data integrity/ownership/recovery/completion,
+acceptance criteria or required coverage, and expressly fixed requirements or
+protected plans. Retain the applicable amendment route and required approval,
+execution, incident, provenance, and acceptance evidence. Routine autonomy does
+not authorize the hook, polling, task execution, or automatic enablement.
+
+The entry point's exception permits only a disposable submission copy of an
+already-authored plan when the actual host requires a `.local/` submission path.
+The complete authoritative tracked repository copy must exist outside `.local/`
+and be fully read back first. The temporary copy supplies neither a durable
+controller record nor a deployed hook, and cannot satisfy execution, acceptance,
+delivery, or enablement gates. Initial drafting, hook code, configuration,
+reports, and runtime evidence or artifacts are not temporary submission copies.
+
 ## 1. What can actually be installed first
 
 A skill can instruct Agent to install a supported host integration before starting
@@ -76,7 +97,10 @@ Authenticate origin and bind the exact project/series and preparation permission
 Recheck pause/revocation, current payload revisions, delivered evidence, and
 expected current piece immediately before creation.
 
-Use one real shared controller reservation/CAS for a progression attempt.
+Use real shared coordination that serializes and binds a progression attempt.
+An ownership-aware reservation/CAS is one example, not a required internal
+architecture; an equivalent verified mechanism must provide the applicable
+exclusion, version, and conflict guarantees.
 Duplicate/delayed/out-of-order events, simultaneous completion events and manual
 invocations must converge on the same current pair. Exactly-once native creation
 can be claimed only where host write idempotency and authoritative reconciliation
@@ -143,3 +167,7 @@ Report the actual provider/interface mapping, scope, source/registration/deploy
 versions, real proof, enabled state, remaining blockers, responsible integration
 role, and manual fallback. Do not promise background advancement without those
 facts. Hook installation and series installation remain separate claims.
+
+Report the substantive result and material exceptions, not a programming diary.
+This does not remove the real registration, trigger, execution, incident,
+provenance, consumption, pause, or acceptance evidence required above.

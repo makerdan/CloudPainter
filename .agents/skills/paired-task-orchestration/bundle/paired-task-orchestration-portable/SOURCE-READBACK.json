@@ -1,0 +1,48 @@
+{
+  "name": "paired-task-orchestration",
+  "scope": "portable definition/resource authorship",
+  "originalProjectSnapshot": "43410e1c9ca715b7304f95b08df1590d22c2f256",
+  "mainLines": 368,
+  "relativeLinksResolved": 8,
+  "files": [
+    {
+      "path": ".agents/skills/paired-task-orchestration/SKILL.md",
+      "sha256": "2ae70f2212bde4e715934bc9e65785928c240ef1df7777fc1ad3359b3b14e924",
+      "bytes": 23635,
+      "originalSha256": "4969e8a40b2db21c1e2309e55158b682b81f4269fdae62b6d23e1cb86bb8cd0f"
+    },
+    {
+      "path": ".agents/skills/paired-task-orchestration/references/acceptance-and-confirmation.md",
+      "sha256": "f03b712cdca58e3d2b621e51f6adf4ef2a56f29adc87199006ce32dc6d5593b2",
+      "bytes": 12516,
+      "originalSha256": "802e160b21502b08eafeffd98bd97c713cf587ca8f058a57cc8e96324bf5c415"
+    },
+    {
+      "path": ".agents/skills/paired-task-orchestration/references/host-hook-contract.md",
+      "sha256": "bfd9cce8553cb1a6a67dbee60b265e2ad4e01a3227050ff261b8d4b39ade3185",
+      "bytes": 10464,
+      "originalSha256": "bfd9cce8553cb1a6a67dbee60b265e2ad4e01a3227050ff261b8d4b39ade3185"
+    },
+    {
+      "path": ".agents/skills/paired-task-orchestration/references/series-state-and-handoff.md",
+      "sha256": "3bbbba47494695ebf66d91c5f934ff65e0cca39771d607e3b5b8c63e8244c7d9",
+      "bytes": 15395,
+      "originalSha256": "90a7e8357bdb3dec3a47015336fdc3ae128422f426563c55f559a927d812e4c6"
+    },
+    {
+      "path": ".agents/skills/paired-task-orchestration/references/skill-application-pairing.md",
+      "sha256": "915adb6cce9e8f6e670b90c0643df16d58497972c4a5e7a2fffe9dacc7f4be75",
+      "bytes": 11008,
+      "originalSha256": null
+    }
+  ],
+  "optionalHookResource": "unchanged from inspected canonical input",
+  "checks": "mechanical authoring self-readback only",
+  "independentConfirmation": "pending",
+  "actualHostAcceptance": "not run",
+  "nativeTasksCreated": false,
+  "projectModified": false,
+  "workspacePublished": false,
+  "seriesInitialized": false,
+  "hooksEnabled": false
+}

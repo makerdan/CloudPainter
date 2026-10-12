@@ -1,0 +1,11 @@
+Fully apply [canonical-skill-id or explicit list of skill IDs] to this app using the canonical paired-task-orchestration skill.
+
+Read the complete canonical target contracts and applicable references, discover this app's actual capabilities, and extract every applicable requirement before creating tasks. Implement the framework/contract in the app, not merely copy SKILL.md.
+
+Create one implementation task and one real dependent independent verification-and-repair task, using the host's supported interfaces and full persisted-plan/dependency readback. I authorize in-scope implementation repairs by the verifier against the original approved requirements; unrelated fixes and changes to the target contract are not authorized. Keep task creation and starting separate under the normal approval process.
+
+The verifier must inspect actual app wiring, run required authorized checks, list gaps before editing, fix missing/wrong implementation within scope, renew affected proof and obtain fresh independent post-repair acceptance. Do not weaken criteria to match what was built.
+
+Use staged pairs only where actual scope/dependencies or the target's source/bootstrap/runtime boundaries require them. Preserve any required separate definition/resource confirmation. Do not impose unrelated skills, guessed commands or a fixed task count. Do not install scheduling/hooks, initiate remote CI, merge, deploy or change runtime authority without its genuine separately required permission.
+
+Report implementation delivery, independent acceptance and actual runtime readiness separately, with evidence for each applicable requirement. If a required capability/approval is missing, complete safe independent work and report the exact blocker and next action.
