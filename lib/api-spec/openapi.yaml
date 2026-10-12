@@ -278,7 +278,7 @@ paths:
           description: Current account settings
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/CloudPainterSettings" }
+              schema: { $ref: "#/components/schemas/AccountSettingsSnapshot" }
         "401":
           description: Sign in required or session changed
         "503":
@@ -290,19 +290,29 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/CloudPainterSettings" }
+            schema: { $ref: "#/components/schemas/AccountSettingsSnapshot" }
       responses:
         "200":
           description: Saved account settings
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/CloudPainterSettings" }
+              schema: { $ref: "#/components/schemas/AccountSettingsSnapshot" }
         "400":
           description: Invalid settings
         "401":
           description: Sign in required or session changed
         "403":
           description: Cross-site mutation denied
+        "409":
+          description: Settings changed on another device; the latest revision is returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, current]
+                properties:
+                  error: { type: string }
+                  current: { $ref: "#/components/schemas/AccountSettingsSnapshot" }
         "503":
           description: Settings storage temporarily unavailable
   /healthz:
@@ -650,6 +660,13 @@ components:
         drawingTool: { type: string, enum: [brush, pencil, pen] }
         brushStyle: { type: string, enum: [round, chisel, soft, dry] }
         brushSize: { type: integer, minimum: 1, maximum: 48 }
+    AccountSettingsSnapshot:
+      type: object
+      additionalProperties: false
+      required: [revision, settings]
+      properties:
+        revision: { type: integer, minimum: 0, maximum: 2147483647 }
+        settings: { $ref: "#/components/schemas/CloudPainterSettings" }
     HealthStatus:
       type: object
       properties:

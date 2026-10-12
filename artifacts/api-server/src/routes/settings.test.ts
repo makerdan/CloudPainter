@@ -30,7 +30,7 @@ test("settings are strictly validated, authenticated, isolated, and durable", { 
     await client.query("BEGIN");
     await client.query(`CREATE SCHEMA "${schema}"`);
     await client.query(`SET LOCAL search_path TO "${schema}"`);
-    await client.query("CREATE TABLE account_settings (user_id text PRIMARY KEY, settings jsonb NOT NULL)");
+    await client.query("CREATE TABLE account_settings (user_id text PRIMARY KEY, revision integer NOT NULL DEFAULT 0, settings jsonb NOT NULL)");
     const database = drizzle(client, { schema: dbSchema });
     const app = express();
     app.use(express.json());
@@ -57,35 +57,54 @@ test("settings are strictly validated, authenticated, isolated, and durable", { 
     const preferred = { textSize: 130, drawingTool: "pen", brushStyle: "dry", brushSize: 37 };
 
     assert.equal((await request()).status, 401);
-    assert.deepEqual(await (await request("user_a", "sess_a")).json(), defaults);
+    assert.deepEqual(await (await request("user_a", "sess_a")).json(), { revision: 0, settings: defaults });
     assert.equal((await request("user_a", "sess_a", undefined, { "X-Settings-Session": "sess_b" })).status, 401);
     assert.equal((await request("user_a", "sess_a", undefined, {
       Authorization: `Bearer ${token("user_a", "sess_a", true)}`,
     })).status, 401);
 
-    const saved = await request("user_a", "sess_a", preferred);
+    const saved = await request("user_a", "sess_a", { revision: 0, settings: preferred });
     assert.equal(saved.status, 200, await saved.clone().text());
-    assert.deepEqual(await saved.json(), preferred);
-    assert.deepEqual(await (await request("user_b", "sess_b")).json(), defaults);
+    assert.deepEqual(await saved.json(), { revision: 1, settings: preferred });
+    assert.deepEqual(await (await request("user_b", "sess_b")).json(), { revision: 0, settings: defaults });
 
     for (const invalid of [
-      { ...preferred, textSize: 85 },
-      { ...preferred, textSize: 150 },
-      { ...preferred, drawingTool: "eraser" },
-      { ...preferred, brushStyle: "marker" },
-      { ...preferred, brushSize: 0 },
-      { ...preferred, brushSize: 49 },
-      { ...preferred, photo: "private" },
-      { ...preferred, project: { image: "private", strokes: [] } },
-      { ...preferred, userId: "user_b" },
+      { revision: 1, settings: { ...preferred, textSize: 85 } },
+      { revision: 1, settings: { ...preferred, textSize: 150 } },
+      { revision: 1, settings: { ...preferred, drawingTool: "eraser" } },
+      { revision: 1, settings: { ...preferred, brushStyle: "marker" } },
+      { revision: 1, settings: { ...preferred, brushSize: 0 } },
+      { revision: 1, settings: { ...preferred, brushSize: 49 } },
+      { revision: 1, settings: { ...preferred, photo: "private" } },
+      { revision: 1, settings: { ...preferred, project: { image: "private", strokes: [] } } },
+      { revision: 1, settings: { ...preferred, userId: "user_b" } },
+      { revision: 1, settings: preferred, userId: "user_b" },
       { settings: preferred },
     ]) assert.equal((await request("user_a", "sess_a", invalid)).status, 400);
-    assert.equal((await request("user_a", "sess_a", preferred, { "Sec-Fetch-Site": "cross-site" })).status, 403);
+    assert.equal((await request("user_a", "sess_a", { revision: 1, settings: preferred }, { "Sec-Fetch-Site": "cross-site" })).status, 403);
+
+    // Two signed-in devices race from the same revision. Exactly one write
+    // wins, and the stale request receives the value that was stored.
+    const deviceASettings = { ...preferred, textSize: 120 };
+    const deviceBSettings = { ...preferred, brushSize: 19 };
+    const [deviceA, deviceB] = await Promise.all([
+      request("user_a", "sess_a", { revision: 1, settings: deviceASettings }),
+      request("user_a", "sess_b", { revision: 1, settings: deviceBSettings }),
+    ]);
+    const responses = await Promise.all([deviceA.json(), deviceB.json()]);
+    assert.deepEqual([deviceA.status, deviceB.status].sort(), [200, 409]);
+    const winner = deviceA.status === 200 ? responses[0] : responses[1];
+    const conflict = deviceA.status === 409 ? responses[0] : responses[1];
+    assert.deepEqual(winner, {
+      revision: 2,
+      settings: deviceA.status === 200 ? deviceASettings : deviceBSettings,
+    });
+    assert.deepEqual(conflict.current, winner);
 
     const restored = await createSettingsStore(drizzle(client, { schema: dbSchema })).read("user_a");
-    assert.deepEqual(restored, preferred);
-    assert.deepEqual(await (await request("user_a", "sess_a")).json(), preferred);
-    assert.deepEqual(await createSettingsStore(database).read("user_b"), null);
+    assert.deepEqual(restored, winner);
+    assert.deepEqual(await (await request("user_a", "sess_a")).json(), winner);
+    assert.deepEqual(await createSettingsStore(database).read("user_b"), { revision: 0, settings: defaults });
   } finally {
     if (server) await new Promise<void>(resolve => server!.close(() => resolve()));
     await client.query("ROLLBACK");

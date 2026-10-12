@@ -313,10 +313,13 @@ export const getSettingsResponseBrushSizeMax = 48;
 
 
 export const GetSettingsResponse = zod.object({
-  "textSize": zod.number().int().min(getSettingsResponseTextSizeMin).max(getSettingsResponseTextSizeMax).multipleOf(getSettingsResponseTextSizeMultipleOf),
-  "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
-  "brushStyle": zod.enum(['round', 'chisel', 'soft', 'dry']),
-  "brushSize": zod.number().int().min(1).max(getSettingsResponseBrushSizeMax)
+  "revision": zod.number().int().min(0).max(2147483647),
+  "settings": zod.object({
+    "textSize": zod.number().int().min(getSettingsResponseTextSizeMin).max(getSettingsResponseTextSizeMax).multipleOf(getSettingsResponseTextSizeMultipleOf),
+    "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
+    "brushStyle": zod.enum(['round', 'chisel', 'soft', 'dry']),
+    "brushSize": zod.number().int().min(1).max(getSettingsResponseBrushSizeMax)
+  })
 })
 
 
@@ -332,10 +335,13 @@ export const saveSettingsBodyBrushSizeMax = 48;
 
 
 export const SaveSettingsBody = zod.object({
-  "textSize": zod.number().int().min(saveSettingsBodyTextSizeMin).max(saveSettingsBodyTextSizeMax).multipleOf(saveSettingsBodyTextSizeMultipleOf),
-  "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
-  "brushStyle": zod.enum(['round', 'chisel', 'soft', 'dry']),
-  "brushSize": zod.number().int().min(1).max(saveSettingsBodyBrushSizeMax)
+  "revision": zod.number().int().min(0).max(2147483647),
+  "settings": zod.object({
+    "textSize": zod.number().int().min(saveSettingsBodyTextSizeMin).max(saveSettingsBodyTextSizeMax).multipleOf(saveSettingsBodyTextSizeMultipleOf),
+    "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
+    "brushStyle": zod.enum(['round', 'chisel', 'soft', 'dry']),
+    "brushSize": zod.number().int().min(1).max(saveSettingsBodyBrushSizeMax)
+  })
 })
 
 export const saveSettingsResponseTextSizeMin = 80;
@@ -346,10 +352,13 @@ export const saveSettingsResponseBrushSizeMax = 48;
 
 
 export const SaveSettingsResponse = zod.object({
-  "textSize": zod.number().int().min(saveSettingsResponseTextSizeMin).max(saveSettingsResponseTextSizeMax).multipleOf(saveSettingsResponseTextSizeMultipleOf),
-  "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
-  "brushStyle": zod.enum(['round', 'chisel', 'soft', 'dry']),
-  "brushSize": zod.number().int().min(1).max(saveSettingsResponseBrushSizeMax)
+  "revision": zod.number().int().min(0).max(2147483647),
+  "settings": zod.object({
+    "textSize": zod.number().int().min(saveSettingsResponseTextSizeMin).max(saveSettingsResponseTextSizeMax).multipleOf(saveSettingsResponseTextSizeMultipleOf),
+    "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
+    "brushStyle": zod.enum(['round', 'chisel', 'soft', 'dry']),
+    "brushSize": zod.number().int().min(1).max(saveSettingsResponseBrushSizeMax)
+  })
 })
 
 

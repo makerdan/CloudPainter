@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useUser } from '@clerk/react';
 import { Link, useLocation } from 'wouter';
 import {
@@ -33,18 +33,27 @@ const STYLES = [
 export function SettingsPage() {
   const { isLoaded, isSignedIn, user } = useUser();
   const [, setLocation] = useLocation();
-  const { settings, ready, busy, error, expired, signedIn, save, retry } = useAccountSettings();
+  const { settings, ready, busy, error, saveError, conflict, expired, signedIn, save, retry } = useAccountSettings();
   const [draft, setDraft] = useState<CloudPainterSettings>(settings);
   const [saveMessage, setSaveMessage] = useState('');
   const [saveFailed, setSaveFailed] = useState(false);
+  const [saveNeedsSignIn, setSaveNeedsSignIn] = useState(false);
+  const appliedAccountId = useRef<string | null>(null);
+  const draftDirty = useRef(false);
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) setLocation('/sign-in', { replace: true });
   }, [isLoaded, isSignedIn, setLocation]);
 
   useEffect(() => {
-    if (ready && signedIn) setDraft(settings);
-  }, [ready, signedIn, settings]);
+    const accountId = user?.id ?? null;
+    if (ready && signedIn && accountId &&
+        (appliedAccountId.current !== accountId || !draftDirty.current)) {
+      appliedAccountId.current = accountId;
+      draftDirty.current = false;
+      setDraft(settings);
+    }
+  }, [ready, signedIn, settings, user?.id]);
 
   if (isLoaded && !isSignedIn) {
     return (
@@ -59,25 +68,38 @@ export function SettingsPage() {
   }
 
   const update = (changes: Partial<CloudPainterSettings>) => {
+    draftDirty.current = true;
     setDraft(current => ({ ...current, ...changes }));
     setSaveMessage('');
     setSaveFailed(false);
+    setSaveNeedsSignIn(false);
   };
   const textIndex = TEXT_SIZES.indexOf(draft.textSize as (typeof TEXT_SIZES)[number]);
   const textSizeIndex = Math.max(0, textIndex);
   const onSave = async () => {
     setSaveMessage('');
     setSaveFailed(false);
+    setSaveNeedsSignIn(false);
     try {
-      const saved = await save(draft);
-      if (saved) setSaveMessage('Preferences saved to your account.');
-      else {
+      const result = await save(draft);
+      if (result === 'saved') {
+        draftDirty.current = false;
+        setSaveMessage('Preferences saved to your account.');
+      }
+      else if (result === 'conflict') {
         setSaveFailed(true);
-        setSaveMessage('Your preferences could not be saved. Check your connection and try again.');
+        setSaveMessage('Another device saved newer preferences. Your edits are still here. Save again to keep them, or load the latest settings.');
+      } else if (result === 'expired') {
+        setSaveFailed(true);
+        setSaveNeedsSignIn(true);
+        setSaveMessage('Your session expired. Your edits are still here; sign in again to save them.');
+      } else {
+        setSaveFailed(true);
+        setSaveMessage('Your edits are still here, but preferences could not be saved. Check your connection and try again.');
       }
     } catch {
       setSaveFailed(true);
-      setSaveMessage('Your preferences could not be saved. Check your connection and try again.');
+      setSaveMessage('Your edits are still here, but preferences could not be saved. Check your connection and try again.');
     }
   };
   const accountLabel = user?.fullName
@@ -130,7 +152,19 @@ export function SettingsPage() {
                   <p>{error}</p>
                   {expired && <Link href="/sign-in" data-testid="link-settings-renew-session">Sign in again</Link>}
                 </div>
-                <button type="button" className="settings-retry" onClick={() => void retry()} disabled={busy} data-testid="button-settings-retry">
+                <button
+                  type="button"
+                  className="settings-retry"
+                  onClick={async () => {
+                    const latest = await retry();
+                    if (latest) {
+                      draftDirty.current = false;
+                      setDraft(latest.settings);
+                    }
+                  }}
+                  disabled={busy}
+                  data-testid="button-settings-retry"
+                >
                   {busy ? 'Retrying…' : 'Retry'}
                 </button>
               </div>
@@ -268,10 +302,31 @@ export function SettingsPage() {
                 <footer className="settings-save-row">
                   <div className="settings-save-feedback" aria-live="polite">
                     {saveMessage && <span className={saveFailed ? 'is-error' : 'is-success'} role={saveFailed ? 'alert' : 'status'} data-testid="status-settings-save">{saveMessage}</span>}
+                    {saveFailed && (expired || saveNeedsSignIn) && <Link href="/sign-in" data-testid="link-settings-renew-save-session">Sign in again to save these edits</Link>}
                     {!saveMessage && !error && <span data-testid="status-settings-idle">Changes are not saved until you choose Save.</span>}
+                    {(saveFailed || saveError) && (
+                      <button
+                        type="button"
+                        className="settings-retry"
+                        onClick={async () => {
+                          setSaveMessage('');
+                          setSaveFailed(false);
+                          setSaveNeedsSignIn(false);
+                          const latest = await retry();
+                          if (latest) {
+                            draftDirty.current = false;
+                            setDraft(latest.settings);
+                          }
+                        }}
+                        disabled={busy}
+                        data-testid="button-settings-load-latest"
+                      >
+                        {busy ? 'Loading…' : 'Load latest saved settings'}
+                      </button>
+                    )}
                   </div>
                   <button type="button" className="settings-save-button" onClick={() => void onSave()} disabled={busy || !ready} data-testid="button-settings-save">
-                    {busy ? <><span className="settings-save-indicator" aria-hidden="true" /> Saving…</> : <><Save size={16} aria-hidden="true" /> Save preferences</>}
+                    {busy ? <><span className="settings-save-indicator" aria-hidden="true" /> Saving…</> : <><Save size={16} aria-hidden="true" /> {conflict ? 'Retry save preferences' : 'Save preferences'}</>}
                   </button>
                 </footer>
               </div>

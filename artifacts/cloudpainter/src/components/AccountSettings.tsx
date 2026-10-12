@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { getSettings, saveSettings } from "@workspace/api-client-react";
 import type { CloudPainterSettings } from "@workspace/api-client-react";
-import { SettingsPersistence, DEFAULT_SETTINGS } from "@/lib/settingsPersistence";
+import { SettingsPersistence, DEFAULT_SETTINGS, type SettingsSaveResult } from "@/lib/settingsPersistence";
 import { TextScaleController } from "./TextScaleController";
 import { usePaletteAccount } from "./Account";
 
@@ -10,10 +10,12 @@ type AccountSettingsValue = {
   ready: boolean;
   busy: boolean;
   error: string;
+  saveError: string;
+  conflict: boolean;
   expired: boolean;
   signedIn: boolean;
-  save: (settings: CloudPainterSettings) => Promise<boolean>;
-  retry: () => Promise<void>;
+  save: (settings: CloudPainterSettings) => Promise<SettingsSaveResult>;
+  retry: () => Promise<{ revision: number; settings: CloudPainterSettings } | null>;
 };
 
 const guestValue: AccountSettingsValue = {
@@ -21,10 +23,12 @@ const guestValue: AccountSettingsValue = {
   ready: true,
   busy: false,
   error: "",
+  saveError: "",
+  conflict: false,
   expired: false,
   signedIn: false,
-  save: async () => false,
-  retry: async () => {},
+  save: async () => "failed",
+  retry: async () => null,
 };
 const SettingsContext = createContext<AccountSettingsValue>({
   ...guestValue,
@@ -60,7 +64,7 @@ function SignedInSettings({ sessionId, children }: { sessionId: string; children
       headers: { "X-Settings-Session": sessionId },
       credentials: "same-origin",
     }),
-    save: (settings, signal) => saveSettings(settings, {
+    save: (settings, revision, signal) => saveSettings({ revision, settings }, {
       signal,
       headers: { "X-Settings-Session": sessionId },
       credentials: "same-origin",
@@ -76,6 +80,8 @@ function SignedInSettings({ sessionId, children }: { sessionId: string; children
     ready: state.ready,
     busy: state.busy,
     error: state.error,
+    saveError: state.saveError,
+    conflict: state.conflict,
     expired: state.expired,
     signedIn: true,
     save: settings => store.save(settings),

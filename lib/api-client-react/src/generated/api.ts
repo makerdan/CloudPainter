@@ -25,6 +25,7 @@ import type {
   AdminAccountStatusResult,
   AdminAuditEventPage,
   AdminOverview,
+  AccountSettingsSnapshot,
   CloudPainterSettings,
   GetImageGenerationConfig200,
   HealthStatus,
@@ -819,9 +820,9 @@ export const getGetSettingsUrl = () => {
   return `/api/settings`
 }
 
-export const getSettings = async ( options?: Parameters<typeof customFetch>[1]): Promise<CloudPainterSettings> => {
+export const getSettings = async ( options?: Parameters<typeof customFetch>[1]): Promise<AccountSettingsSnapshot> => {
 
-  return customFetch<CloudPainterSettings>(getGetSettingsUrl(),
+  return customFetch<AccountSettingsSnapshot>(getGetSettingsUrl(),
   {
     ...options,
     method: 'GET'
@@ -890,7 +891,7 @@ export const getSaveSettingsUrl = () => {
   return `/api/settings`
 }
 
-export const saveSettings = async (cloudPainterSettings: CloudPainterSettings, options?: Parameters<typeof customFetch>[1]): Promise<CloudPainterSettings> => {
+export const saveSettings = async (accountSettingsSnapshot: AccountSettingsSnapshot, options?: Parameters<typeof customFetch>[1]): Promise<AccountSettingsSnapshot> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -906,12 +907,12 @@ export const saveSettings = async (cloudPainterSettings: CloudPainterSettings, o
     }
     return headers;
   };
-return customFetch<CloudPainterSettings>(getSaveSettingsUrl(),
+return customFetch<AccountSettingsSnapshot>(getSaveSettingsUrl(),
   {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(cloudPainterSettings)
+    body: JSON.stringify(accountSettingsSnapshot)
   }
 );}
 
@@ -949,9 +950,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type SaveSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof saveSettings>>>
-    export type SaveSettingsMutationBody = BodyType<CloudPainterSettings>
+    export type SaveSettingsMutationBody = BodyType<AccountSettingsSnapshot>
     export type SaveSettingsMutationError = ErrorType<void>
-    export type SaveSettingsMutationVariables = {data: BodyType<CloudPainterSettings>}
+    export type SaveSettingsMutationVariables = {data: BodyType<AccountSettingsSnapshot>}
 
     export const useSaveSettings = <TError = ErrorType<void>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveSettings>>, TError,SaveSettingsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}

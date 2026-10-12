@@ -306,6 +306,15 @@ export interface CloudPainterSettings {
   brushSize: number;
 }
 
+export interface AccountSettingsSnapshot {
+  /**
+   * @minimum 0
+   * @maximum 2147483647
+   */
+  revision: number;
+  settings: CloudPainterSettings;
+}
+
 export interface HealthStatus {
   status: string;
 }

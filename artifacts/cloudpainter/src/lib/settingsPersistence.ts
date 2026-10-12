@@ -8,17 +8,26 @@ export const DEFAULT_SETTINGS: CloudPainterSettings = {
 };
 
 export type SettingsTransport = {
-  load(signal: AbortSignal): Promise<CloudPainterSettings>;
-  save(settings: CloudPainterSettings, signal: AbortSignal): Promise<CloudPainterSettings>;
+  load(signal: AbortSignal): Promise<{ revision: number; settings: CloudPainterSettings }>;
+  save(
+    settings: CloudPainterSettings,
+    revision: number,
+    signal: AbortSignal,
+  ): Promise<{ revision: number; settings: CloudPainterSettings }>;
 };
 
 export type SettingsState = {
   settings: CloudPainterSettings;
+  revision: number;
   ready: boolean;
   busy: boolean;
   error: string;
+  saveError: string;
+  conflict: boolean;
   expired: boolean;
 };
+
+export type SettingsSaveResult = "saved" | "conflict" | "failed" | "expired";
 
 export function editorDefaultsFromSettings(
   settings: CloudPainterSettings,
@@ -32,7 +41,16 @@ export function editorDefaultsFromSettings(
 }
 
 export class SettingsPersistence {
-  state: SettingsState = { settings: DEFAULT_SETTINGS, ready: false, busy: false, error: "", expired: false };
+  state: SettingsState = {
+    settings: DEFAULT_SETTINGS,
+    revision: 0,
+    ready: false,
+    busy: false,
+    error: "",
+    saveError: "",
+    conflict: false,
+    expired: false,
+  };
   private generation = 0;
   private controller: AbortController | null = null;
   private listeners = new Set<() => void>();
@@ -56,51 +74,111 @@ export class SettingsPersistence {
   dispose() {
     ++this.generation;
     this.controller?.abort();
-    this.state = { settings: DEFAULT_SETTINGS, ready: false, busy: false, error: "", expired: false };
+    this.state = {
+      settings: DEFAULT_SETTINGS,
+      revision: 0,
+      ready: false,
+      busy: false,
+      error: "",
+      saveError: "",
+      conflict: false,
+      expired: false,
+    };
   }
 
   async load() {
-    await this.request("load");
+    await this.request();
   }
 
-  async save(settings: CloudPainterSettings) {
-    if (this.state.busy || !this.state.ready) return false;
-    return this.request("save", settings);
+  async save(settings: CloudPainterSettings): Promise<SettingsSaveResult> {
+    if (this.state.busy || !this.state.ready) return "failed";
+    const generation = ++this.generation;
+    const controller = new AbortController();
+    this.controller = controller;
+    const timer = setTimeout(() => controller.abort(), 15000);
+    const revision = this.state.revision;
+    this.update({ busy: true, saveError: "", conflict: false, expired: false });
+    try {
+      const snapshot = await this.transport.save(settings, revision, controller.signal);
+      if (generation !== this.generation) return "failed";
+      this.update({
+        settings: snapshot.settings,
+        revision: snapshot.revision,
+        ready: true,
+        busy: false,
+        saveError: "",
+        conflict: false,
+        expired: false,
+      });
+      return "saved";
+    } catch (error) {
+      if (generation !== this.generation) return "failed";
+      const status = (error as { status?: number })?.status;
+      if (status === 409) {
+        const current = (error as { data?: { current?: { revision?: unknown; settings?: unknown } } })?.data?.current;
+        const currentRevision = current?.revision;
+        if (Number.isInteger(currentRevision) && (currentRevision as number) >= 0) {
+          this.update({
+            revision: currentRevision as number,
+            busy: false,
+            saveError: "Your settings changed on another device. Your edits are still here; save again to keep them, or load the latest settings.",
+            conflict: true,
+            expired: false,
+          });
+          return "conflict";
+        }
+      }
+      this.update({
+        busy: false,
+        saveError: status === 401
+          ? "Your session expired. Your edits are still here; sign in again before saving."
+          : "Settings could not be saved. Your edits are still here; check your connection and try again.",
+        conflict: false,
+        expired: status === 401,
+      });
+      return status === 401 ? "expired" : "failed";
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async retry() {
-    await this.request("load");
+    return this.request();
   }
 
-  private async request(operation: "load" | "save", settings?: CloudPainterSettings): Promise<boolean> {
-    if (this.state.busy) return false;
+  private async request(): Promise<{ revision: number; settings: CloudPainterSettings } | null> {
+    if (this.state.busy) return null;
     const generation = ++this.generation;
     const controller = new AbortController();
     this.controller = controller;
     const timer = setTimeout(() => controller.abort(), 15000);
     this.update({ busy: true, error: "", expired: false });
     try {
-      const saved = operation === "save"
-        ? await this.transport.save(settings!, controller.signal)
-        : await this.transport.load(controller.signal);
-      if (generation !== this.generation) return false;
-      this.update({ settings: saved, ready: true, busy: false, error: "" });
-      return true;
+      const snapshot = await this.transport.load(controller.signal);
+      if (generation !== this.generation) return null;
+      this.update({
+        settings: snapshot.settings,
+        revision: snapshot.revision,
+        ready: true,
+        busy: false,
+        error: "",
+        saveError: "",
+        conflict: false,
+        expired: false,
+      });
+      return snapshot;
     } catch (error) {
-      if (generation !== this.generation) return false;
+      if (generation !== this.generation) return null;
       const status = (error as { status?: number })?.status;
       this.update({
-        ...(status === 401 ? { settings: DEFAULT_SETTINGS } : {}),
         ready: true,
         busy: false,
         expired: status === 401,
         error: status === 401
           ? "Your session expired or changed. Sign in again; your drawing is safe."
-          : operation === "save"
-            ? "Settings could not be saved. Your drawing is safe; retry to load the saved settings."
-            : "Settings could not load. Retry, or continue with the defaults. Your drawing is safe.",
+          : "Settings could not load. Retry, or continue with the defaults. Your drawing is safe.",
       });
-      return false;
+      return null;
     } finally {
       clearTimeout(timer);
     }
