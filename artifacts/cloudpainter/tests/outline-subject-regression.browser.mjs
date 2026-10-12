@@ -8,14 +8,24 @@ import { chromium } from 'playwright-core';
 const appDirectory = new URL('../', import.meta.url);
 const fixtures = [
   {
-    name: 'dog',
+    name: 'dog portrait',
     expectedLabel: 'dog',
     url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/Dog_portrait_Budapest.jpg/960px-Dog_portrait_Budapest.jpg',
   },
   {
-    name: 'cat',
+    name: 'two cats indoors',
     expectedLabel: 'cat',
     url: 'https://upload.wikimedia.org/wikipedia/commons/8/86/Flickr_-_Per_Ola_Wiberg_~_mostly_away_-_Fritz_%5E_Laban_watching_TV.jpg',
+  },
+  {
+    name: 'dog outdoors',
+    expectedLabel: 'dog',
+    url: 'https://upload.wikimedia.org/wikipedia/commons/c/c4/Abandoned_Dog.jpg',
+  },
+  {
+    name: 'cat in low light',
+    expectedLabel: 'cat',
+    url: 'https://thumb.wikimedia.org/wikipedia/commons/thumb/9/90/A_cat_in_a_low_light_corridor.jpg/960px-A_cat_in_a_low_light_corridor.jpg',
   },
 ];
 const FIXTURE_TIMEOUT_MS = 15_000;
@@ -139,7 +149,7 @@ after(async () => {
   }
 });
 
-test('public dog and cat fixtures retain local subject labels without photo-wide contours', { timeout: 220_000 }, async () => {
+test('varied public dog and cat fixtures retain usable local subject outlines', { timeout: 420_000 }, async () => {
   assert.doesNotMatch(HARNESS, /runHostedOutline|outlineHosted|\/api\/outline|poe\.com|poecdn/);
   const fixtureImages = await Promise.all(fixtures.map(async fixture => {
     try {
@@ -198,7 +208,7 @@ test('public dog and cat fixtures retain local subject labels without photo-wide
         assert.ok(!(bounds.spanX >= 0.9 && bounds.spanY >= 0.9),
           `Selected ${fixture.expectedLabel} contour became photo-wide (${bounds.spanX.toFixed(3)} × ${bounds.spanY.toFixed(3)}): ${contour.label}`);
       }
-      console.log(`[outline-model][${fixture.name}] Passed: ${subjectContours.length} ${fixture.expectedLabel} contour(s), none span 90% of both photo dimensions.`);
+      console.log(`[outline-model][${fixture.name}] Passed: ${subjectContours.length} usable ${fixture.expectedLabel} contour(s); photo-wide masks were not offered.`);
     }
     assert.deepEqual(hostedRequests, [], 'The on-device regression check must not call hosted inference.');
   } finally {

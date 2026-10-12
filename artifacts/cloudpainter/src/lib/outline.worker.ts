@@ -1,5 +1,5 @@
 import { env, pipeline, RawImage } from '@huggingface/transformers';
-import { maskContours, MAX_CANDIDATES, type OutlineCandidate } from './outlineGeometry';
+import { isPhotoWideOutline, maskContours, MAX_CANDIDATES, type OutlineCandidate } from './outlineGeometry';
 import { traceEdges } from './outlineEdges';
 
 // Only static model assets are fetched. Photo bytes are passed into this worker, never a URL.
@@ -16,7 +16,7 @@ self.onmessage = async (event: MessageEvent<Input>) => {
       || input.width * input.height > 512 * 512 || input.pixels.length !== input.width * input.height * 4) throw new Error('Image exceeds inference limits.');
     if (input.mode === 'edge') {
       phase = 'edge tracing';
-      self.postMessage({ candidates: traceEdges(input) });
+      self.postMessage({ candidates: traceEdges(input), filteredPhotoWideCount: 0 });
       return;
     }
     self.postMessage({ status: 'Downloading/loading local segmentation model… No photo pixels are uploaded.' });
@@ -37,18 +37,23 @@ self.onmessage = async (event: MessageEvent<Input>) => {
         threshold: 1 - input.sensitivity, mask_threshold: 0.5,
       });
       const candidates: OutlineCandidate[] = [];
+      let filteredPhotoWideCount = 0;
       for (const item of output) {
         // Resample masks to bounded input dimensions before contour extraction.
         const mask = await item.mask.resize(input.width, input.height);
         const bits = new Uint8Array(input.width * input.height);
         for (let i = 0; i < bits.length; i++) bits[i] = mask.data[i * mask.channels] > 127 ? 1 : 0;
         for (const points of maskContours(bits, input.width, input.height)) {
+          if (isPhotoWideOutline(points)) {
+            filteredPhotoWideCount++;
+            continue;
+          }
           candidates.push({ label: `${String(item.label)} · boundary ${candidates.length + 1}`, points });
           if (candidates.length === MAX_CANDIDATES) break;
         }
         if (candidates.length === MAX_CANDIDATES) break;
       }
-      self.postMessage({ candidates });
+      self.postMessage({ candidates, filteredPhotoWideCount });
     } finally { await segmenter.dispose(); }
   } catch (error) {
     const detail = error instanceof Error && error.message ? ` ${error.message}` : '';

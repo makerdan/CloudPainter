@@ -95,3 +95,14 @@ it('provider unavailable, empty candidates and model failure are visible and saf
   await waitFor(() => expect(screen.getByTestId('status-outline').textContent).toContain('Model download unavailable'));
   expect(mocks.hosted).not.toHaveBeenCalled();
 });
+it('explains when the local model filters photo-wide background results', async () => {
+  mocks.local.mockImplementationOnce(async (_image: string, _region: unknown, _sensitivity: number, _signal: AbortSignal, onStatus: (message: string) => void) => {
+    onStatus('Ignored 1 photo-wide result that looked like the background rather than a useful subject outline.');
+    return candidates;
+  });
+  const f = setup(); click('button-outline-run');
+  await waitFor(() => expect(screen.getByTestId('status-outline').textContent).toContain('Ignored 1 photo-wide result'));
+  expect(screen.getByTestId('button-outline-accept').hasAttribute('disabled')).toBe(false);
+  click('button-outline-accept');
+  expect(f.accept).toHaveBeenCalledWith(points);
+});

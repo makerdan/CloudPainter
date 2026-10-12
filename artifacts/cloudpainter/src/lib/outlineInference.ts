@@ -45,8 +45,13 @@ async function run(mode: 'local' | 'edge', source: string, region: OutlineRegion
       if (message.status) { onStatus?.(String(message.status)); return; }
       if (message.error) { finish(new Error(String(message.error))); return; }
       if (!Array.isArray(message.candidates) || message.candidates.length > MAX_CANDIDATES
+        || !Number.isInteger(message.filteredPhotoWideCount) || message.filteredPhotoWideCount < 0
         || !message.candidates.every((candidate: OutlineCandidate) => typeof candidate.label === 'string' && Array.isArray(candidate.points) && validOutline(candidate.points))) {
         finish(new Error('The model returned an invalid outline.')); return;
+      }
+      if (message.filteredPhotoWideCount > 0) {
+        const count = message.filteredPhotoWideCount;
+        onStatus?.(`Ignored ${count} photo-wide result${count === 1 ? '' : 's'} that looked like the background rather than a useful subject outline.`);
       }
       finish(undefined, message.candidates.map((candidate: OutlineCandidate) => ({
         label: candidate.label.slice(0, 80),

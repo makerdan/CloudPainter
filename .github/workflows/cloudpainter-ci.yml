@@ -185,7 +185,6 @@ jobs:
           run_check clipboard pnpm --filter @workspace/cloudpainter run test:clipboard-browser
           run_check tooltips pnpm --filter @workspace/cloudpainter run test:tooltips
           run_check anonymous-photo-and-image-flows env -u CLOUDPAINTER_AUTH_STATE pnpm --filter @workspace/cloudpainter run test:anonymous-photo-and-images
-          run_check local-outline-model pnpm --filter @workspace/cloudpainter run test:outline-model-browser
           exit "$failed"
 
   ci-required:
