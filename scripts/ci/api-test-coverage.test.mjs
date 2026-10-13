@@ -539,7 +539,22 @@ function databaseScript(source) {
   return script;
 }
 
-function runDatabaseStage(source, failingSuite = '', timedOutSuite = '') {
+function runDatabaseStage(source, failingSuites = '', timedOutSuite = '') {
+  const failures = typeof failingSuites === 'string'
+    ? (failingSuites ? [[failingSuites, 23]] : [])
+    : failingSuites;
+  const failureCodes = new Map();
+  for (const [suite, code] of failures) {
+    assert.ok(suites.includes(suite), `Failure injection must target a selected database suite: ${suite}`);
+    assert.ok(Number.isInteger(code) && code >= 1 && code <= 255,
+      'Failure injection must use a valid nonzero exit code');
+    assert.ok(!failureCodes.has(suite), 'A suite may be assigned only one injected exit code');
+    failureCodes.set(suite, code);
+  }
+  assert.ok(!timedOutSuite || suites.includes(timedOutSuite),
+    `Timeout injection must target a selected database suite: ${timedOutSuite}`);
+  assert.ok(!timedOutSuite || !failureCodes.has(timedOutSuite),
+    'A suite cannot be assigned both a timeout and a failure exit code');
   // Validate the step-scoped connection boundary before creating/running stubs.
   // The URL is inspected as text only; it is never resolved or used to connect.
   // Simulate only this fixture's GitHub substitution with inert text, never a
@@ -571,8 +586,12 @@ if [ "$4" = "$TIMED_OUT_SUITE" ]; then
   printf '%s\\n' "$child" >> "$OWNED_PIDS_FILE"
   wait "$child"
 fi
-if [ "$4" = "$FAILING_SUITE" ]; then exit 23; fi
-exit 0
+case "$4" in
+  test:image-access) exit "$FAILURE_TEST_IMAGE_ACCESS" ;;
+  test:palettes) exit "$FAILURE_TEST_PALETTES" ;;
+  test:settings) exit "$FAILURE_TEST_SETTINGS" ;;
+  *) exit 98 ;;
+esac
 `, { mode: 0o700 });
     writeFileSync(join(directory, 'env'), `#!/bin/sh
 case "$1" in
@@ -599,7 +618,10 @@ exec "$@"
         REAL_SLEEP: sleep,
         SLEEP_PATH: sleep,
         DATABASE_URL: disposableDatabaseUrl,
-        FAILING_SUITE: failingSuite,
+        ...Object.fromEntries(suites.map(suite => [
+          `FAILURE_${suite.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`,
+          String(failureCodes.get(suite) ?? 0),
+        ])),
         TIMED_OUT_SUITE: timedOutSuite,
       },
       encoding: 'utf8',
@@ -617,11 +639,13 @@ exec "$@"
     const connections = readFileSync(join(directory, 'connections'), 'utf8').trim().split('\n');
     assert.deepEqual(connections, suites.map(suite => `${suite}\t${disposableDatabaseUrl}`),
       'Effective API suite DATABASE_URL must target only the disposable PostgreSQL service URL');
-    assert.equal(result.status, failingSuite || timedOutSuite ? 1 : 0,
+    const expectedReports = suites.flatMap(suite => {
+      if (suite === timedOutSuite) return [`FAILED (${suite}): exit 124`];
+      if (failureCodes.has(suite)) return [`FAILED (${suite}): exit ${failureCodes.get(suite)}`];
+      return [];
+    });
+    assert.equal(result.status, expectedReports.length ? 1 : 0,
       'The database stage must fail if any selected suite fails');
-    if (failingSuite) {
-      assert.match(result.stdout, new RegExp(`FAILED \\(${failingSuite}\\): exit 23`));
-    }
     if (timedOutSuite) {
       assert.match(result.stdout, new RegExp(`FAILED \\(${timedOutSuite}\\): exit 124`));
       const processIds = readFileSync(join(directory, 'owned-pids'), 'utf8').trim().split('\n').map(Number);
@@ -629,6 +653,11 @@ exec "$@"
       assert.ok(processIds.every(pid => !processIsRunning(pid)),
         `Timed-out database suite processes must be stopped: ${processIds.join(', ')}`);
     }
+    assert.deepEqual(
+      result.stdout.split('\n').filter(line => line.startsWith('FAILED (')),
+      expectedReports,
+      'The database stage must report each original suite exit code exactly once',
+    );
     return result;
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -1165,6 +1194,13 @@ test('a timed-out database suite fails and stops its owned descendants before si
     const result = runDatabaseStage(shortDeadline, '', suite);
     assert.equal(result.status, 1, 'A timed-out database suite must remain a failed validation result');
   });
+
+test('multiple database suite failures retain their distinct exit codes and all suites run once', { timeout: 10000 }, () => {
+  runDatabaseStage(workflow, [
+    ['test:image-access', 17],
+    ['test:settings', 43],
+  ]);
+});
 
 test('omitting settings is rejected even when a shell comment still names it', { timeout: 10000 }, () => {
   const omitted = workflow.replace(
