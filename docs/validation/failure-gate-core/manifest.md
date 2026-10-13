@@ -68,6 +68,18 @@ Use existing Task #456 for the narrow first integration. Before adding a provide
 
 This proposal does not authorize imports, store initialization, tests, bootstrap, v4 removal, or activation. Task #456's own plan requires source-only work until separate bounded execution approval and a safe carrier exist.
 
+## Task #457 supervised-execution recheck
+
+**Recheck date:** 2026-10-13
+
+**Result:** **BLOCKED — no authorized Core execution route or bounded bootstrap grant.**
+
+The current checkout still has no `scripts/failure-gate-core/` runtime or `scripts/tests/failure-gate-core.acceptance.test.mjs`. The source-derived caller inventory and `.github/workflows/cloudpainter-ci.yml` describe independent validation commands and workflows, but no registered Core tier binds one complete, verified command/configuration/test/hook graph to an authorization source. The CloudPainter instrument harness remains scoped to its own checks; its limits, child tracking, and output files do not establish Core carrier safety, permission, or original budget consumption.
+
+No actual independently safe whole-entry carrier, Core shared-resource exclusion, approved finite Core budget, current run authority, or authentic task-scoped bounded-bootstrap grant was present in the inspected project state. No existing generated artifact establishes such approval or host readiness. Missing authority/store integration from Task #456 also remains a prerequisite; native task state and this assignment do not authorize execution.
+
+Accordingly, no activation/run route, runner, or fixture substitute was added. No imports, tests, CLI commands, stores, workflows, CI, or project runtime were invoked. The checked-in independent callers remain unchanged. Implement and exercise the route only after the actual authority/store integration, complete approved graph, safe external carrier, exact finite limits and original-consumption source, and separate genuine bounded-bootstrap approval are available for review. Fixtures may test later behavior but cannot establish host readiness.
+
 ## Evidence provenance and limits
 
 Source paths and line ranges for the command graph are listed in [`inputs/caller-sources.txt`](inputs/caller-sources.txt). Findings come from the checked-in sources, canonical `.agents` files, task plans, and read-only native Project Tasks record queries on 2026-10-13. The earlier Port Authority installer handoff is treated as historical evidence only where noted; current wiring was also searched directly.
