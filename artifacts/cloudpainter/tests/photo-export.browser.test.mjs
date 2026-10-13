@@ -1883,6 +1883,85 @@ test('phone photo-view controls are separated and operable, while desktop sizing
     }
   }
 
+  const landscape = await browser.newPage({
+    viewport: { width: 667, height: 375 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  try {
+    await landscape.goto(appUrl);
+    await importPhoto(landscape, { width: 480, height: 320 }, 'phone-landscape-controls.png');
+    const controls = await landscape.locator('.view-controls').boundingBox();
+    const stage = await landscape.getByTestId('canvas-stage').boundingBox();
+    assert.ok(controls && stage, 'landscape photo controls and stage should be visible');
+    assert.ok(controls.x >= 0 && controls.x + controls.width <= 667);
+    assert.ok(controls.y >= 0 && controls.y + controls.height <= 375);
+    assert.ok(controls.y + controls.height <= stage.y, 'landscape controls must not cover the reference photo');
+
+    const targets = [
+      landscape.getByTestId('button-zoom-out'),
+      landscape.getByTestId('input-photo-zoom'),
+      landscape.getByTestId('button-zoom-in'),
+      landscape.getByTestId('button-pan-mode'),
+      landscape.getByTestId('button-reset-photo-view'),
+    ];
+    const rectangles = [];
+    for (const target of targets) {
+      const bounds = await target.boundingBox();
+      assert.ok(bounds, 'each landscape photo control should be visible');
+      assert.ok(bounds.width >= 44 && bounds.height >= 44, 'each landscape photo control needs a 44px touch target');
+      rectangles.push(bounds);
+    }
+    for (let left = 0; left < rectangles.length; left += 1) {
+      for (let right = left + 1; right < rectangles.length; right += 1) {
+        const a = rectangles[left];
+        const b = rectangles[right];
+        assert.ok(
+          a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y,
+          'landscape photo controls must not overlap neighboring targets',
+        );
+      }
+    }
+
+    const zoom = landscape.getByTestId('input-photo-zoom');
+    await zoom.focus();
+    await landscape.keyboard.press('ArrowRight');
+    assert.equal(await zoom.inputValue(), '125', 'landscape zoom should remain keyboard-operable');
+    await touchControl(landscape, landscape.getByTestId('button-zoom-in'));
+    await waitForZoom(landscape, 150);
+    await touchControl(landscape, landscape.getByTestId('button-pan-mode'));
+    assert.equal(await landscape.getByTestId('button-pan-mode').getAttribute('aria-pressed'), 'true');
+    const stageBounds = await landscape.getByTestId('canvas-stage').boundingBox();
+    assert.ok(stageBounds);
+    await dispatchTouchPointers(landscape, [
+      { type: 'pointerdown', pointerId: 1, x: stageBounds.x + stageBounds.width / 2, y: stageBounds.y + stageBounds.height / 2 },
+      { type: 'pointermove', pointerId: 1, x: stageBounds.x + stageBounds.width / 2 + 24, y: stageBounds.y + stageBounds.height / 2 + 12 },
+      { type: 'pointerup', pointerId: 1, x: stageBounds.x + stageBounds.width / 2 + 24, y: stageBounds.y + stageBounds.height / 2 + 12 },
+    ]);
+    await landscape.waitForFunction(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null');
+      return project?.photoPan && (project.photoPan.x !== 0 || project.photoPan.y !== 0);
+    }, null, { timeout: 2_000 });
+    assert.notDeepEqual((await savedDrawing(landscape)).photoPan, { x: 0, y: 0 }, 'landscape reposition should move the photo');
+    await touchControl(landscape, landscape.getByTestId('button-reset-photo-view'));
+    await waitForZoom(landscape, 100);
+    await landscape.waitForFunction(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') ?? 'null');
+      return project?.photoPan?.x === 0 && project.photoPan.y === 0;
+    }, null, { timeout: 2_000 });
+    assert.deepEqual((await savedDrawing(landscape)).photoPan, { x: 0, y: 0 });
+
+    await landscape.setViewportSize({ width: 720, height: 400 });
+    const widerControls = await landscape.locator('.view-controls').boundingBox();
+    const widerStage = await landscape.getByTestId('canvas-stage').boundingBox();
+    assert.ok(widerControls && widerStage, 'photo controls and stage should remain visible at a wider landscape size');
+    assert.ok(widerControls.x >= 0 && widerControls.x + widerControls.width <= 720);
+    assert.ok(widerControls.y >= 0 && widerControls.y + widerControls.height <= 400);
+    assert.ok(widerControls.y + widerControls.height <= widerStage.y, 'controls must remain above the photo at a wider landscape size');
+  } finally {
+    await landscape.close();
+  }
+
   const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   try {
     await desktop.goto(appUrl);
