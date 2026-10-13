@@ -33,6 +33,10 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
     ["user_admin123", true],
     ["disabled-admin", false],
   ]);
+  const generationAccess = new Map<string, { role: "normal" | "admin"; enabled: boolean }>([
+    ["user_target123456", { role: "normal", enabled: false }],
+  ]);
+  const generationWrites: { actor: string; target: string; role: "normal" | "admin"; enabled: boolean }[] = [];
   let listCalls: { limit: number; offset: number; query?: string }[] = [];
   let auditListCalls: {
     limit: number;
@@ -124,6 +128,16 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
       if (failAuditFinalize) throw new Error("database details must not leak");
       audit[Number(id) - 1].outcome = outcome;
     },
+    async listGenerationAccess(userIds) {
+      return userIds.flatMap(userId => {
+        const access = generationAccess.get(userId);
+        return access ? [{ userId, ...access }] : [];
+      });
+    },
+    async setGenerationAccess(userId, role, enabled) {
+      generationWrites.push({ actor: "admin-user", target: userId, role, enabled });
+      generationAccess.set(userId, { role, enabled });
+    },
   }, provider));
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>(resolve => server.once("listening", resolve));
@@ -138,7 +152,12 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
         ...options.headers,
       },
     });
-    const initialProviderCalls = () => ({ lists: listCalls.length, mutations: providerMutations.length, audits: audit.length });
+    const initialProviderCalls = () => ({
+      lists: listCalls.length,
+      mutations: providerMutations.length,
+      audits: audit.length,
+      generationWrites: generationWrites.length,
+    });
     const deniedChange = { method: "PUT", body: JSON.stringify({ status: "suspended" }) };
 
     const untouched = initialProviderCalls();
@@ -170,11 +189,22 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
     ] as const) {
       assert.equal((await request("/accounts/user_target123456/status", user, "session-a", deniedChange)).status, expectedStatus);
     }
+    const deniedAccessChange = { method: "PUT", body: JSON.stringify({ role: "admin", enabled: true }) };
+    for (const [user, expectedStatus] of [
+      [undefined, 401],
+      ["ordinary-user", 404],
+      ["quota-admin-only", 404],
+      ["disabled-admin", 404],
+    ] as const) {
+      assert.equal((await request("/generation-access/user_target123456", user, "session-a", deniedAccessChange)).status, expectedStatus);
+    }
     assert.equal((await request("/accounts/user_target123456/status", "admin-user", "session-a", {
       ...deniedChange,
       headers: { Authorization: `Bearer ${token("admin-user", "session-a", true)}` },
     })).status, 401, "expired sessions cannot mutate accounts");
     assert.deepEqual(initialProviderCalls(), untouched, "denials must not contact Clerk or write audit rows");
+    assert.deepEqual(generationAccess.get("user_target123456"), { role: "normal", enabled: false },
+      "normal, generation-only, and disabled admins cannot change membership");
 
     const summary = await request("/overview", "admin-user");
     assert.equal(summary.status, 200);
@@ -204,12 +234,54 @@ test("admin API fails closed and isolates Clerk account operations", { timeout: 
       email: "river@example.test",
       createdAt: new Date(sensitiveUser.createdAt).toISOString(),
       status: "active",
+      generationAccess: { role: "normal", enabled: false },
     }]);
     assert.equal(JSON.stringify(pageBody).includes("private@example.test"), false);
     assert.equal(JSON.stringify(pageBody).includes("+15551234567"), false);
     assert.equal(JSON.stringify(pageBody).includes("must not appear"), false);
     assert.equal((await request("/accounts?limit=51", "admin-user")).status, 400);
     assert.equal((await request("/accounts?offset=10001", "admin-user")).status, 400);
+
+    const accessPath = "/generation-access/user_target123456";
+    assert.equal((await request(accessPath, "admin-user", "session-a", {
+      ...deniedAccessChange,
+      headers: { "Sec-Fetch-Site": "cross-site" },
+    })).status, 403);
+    assert.equal((await request(accessPath, "admin-user", "session-a", {
+      method: "PUT", body: JSON.stringify({ role: "admin", enabled: true, actor: "forged" }),
+    })).status, 400);
+    assert.equal((await request("/generation-access/user_admin123", "user_admin123", "session-a", {
+      method: "PUT", body: JSON.stringify({ role: "admin", enabled: true }),
+    })).status, 409, "an app admin cannot grant themselves generation-admin role");
+    assert.equal(generationWrites.length, 0);
+    const generationAdminOnly = await request(accessPath, "admin-user", "session-a", {
+      method: "PUT", body: JSON.stringify({ role: "admin", enabled: false }),
+    });
+    assert.equal(generationAdminOnly.status, 200);
+    assert.deepEqual(await generationAdminOnly.json(), {
+      id: "user_target123456",
+      role: "admin",
+      enabled: false,
+    });
+    const approved = await request(accessPath, "admin-user", "session-a", {
+      method: "PUT", body: JSON.stringify({ role: "admin", enabled: true }),
+    });
+    assert.equal(approved.status, 200);
+    assert.deepEqual(await approved.json(), {
+      id: "user_target123456",
+      role: "admin",
+      enabled: true,
+    });
+    const revoked = await request(accessPath, "admin-user", "session-a", {
+      method: "PUT", body: JSON.stringify({ role: "admin", enabled: false }),
+    });
+    assert.equal(revoked.status, 200);
+    assert.deepEqual(generationAccess.get("user_target123456"), { role: "admin", enabled: false });
+    assert.deepEqual(generationWrites.map(({ target, role, enabled }) => ({ target, role, enabled })), [
+      { target: "user_target123456", role: "admin", enabled: false },
+      { target: "user_target123456", role: "admin", enabled: true },
+      { target: "user_target123456", role: "admin", enabled: false },
+    ]);
 
     const target = "/accounts/user_target123456/status";
     assert.equal((await request(target, "admin-user", "session-a", {

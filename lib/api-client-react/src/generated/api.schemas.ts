@@ -18,6 +18,7 @@ export const AdminAccountStatusProperty = {
   suspended: 'suspended',
 } as const;
 
+export type AdminGenerationAccessRole = typeof AdminGenerationAccessRole[keyof typeof AdminGenerationAccessRole];
 export interface AdminAccount {
   id: string;
   /** @nullable */
@@ -26,8 +27,10 @@ export interface AdminAccount {
   email: string | null;
   createdAt: string;
   status: AdminAccountStatusProperty;
+  generationAccess: AdminGenerationAccess;
 }
 
+export type AdminGenerationAccessResultRole = typeof AdminGenerationAccessResultRole[keyof typeof AdminGenerationAccessResultRole];
 export interface AdminAccountPage {
   /** @maxItems 50 */
   accounts: AdminAccount[];
@@ -468,3 +471,24 @@ export type GetImageGenerationConfig200 = {
   remaining: number;
   globalRemaining: number;
 };
+
+export const AdminGenerationAccessResultRole = {
+  normal: 'normal',
+  admin: 'admin',
+} as const;
+
+export const AdminGenerationAccessRole = {
+  normal: 'normal',
+  admin: 'admin',
+} as const;
+
+export interface AdminGenerationAccessResult {
+  id: string;
+  role: AdminGenerationAccessResultRole;
+  enabled: boolean;
+}
+
+export interface AdminGenerationAccess {
+  role: AdminGenerationAccessRole;
+  enabled: boolean;
+}

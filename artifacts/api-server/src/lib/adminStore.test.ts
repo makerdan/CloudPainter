@@ -28,6 +28,17 @@ test("PostgreSQL admin permissions deny missing or disabled rows and retain mini
       );
       CREATE INDEX cloudpainter_admin_audit_created_id_idx
         ON cloudpainter_admin_audit (created_at, id);
+      CREATE TABLE image_generation_accounts (
+        user_id text PRIMARY KEY,
+        role text NOT NULL CHECK (role IN ('normal', 'admin')),
+        enabled boolean NOT NULL DEFAULT true
+      );
+      CREATE TABLE image_generation_attempts (
+        id uuid PRIMARY KEY,
+        user_id text NOT NULL,
+        started_at timestamptz NOT NULL DEFAULT now(),
+        active_until timestamptz
+      );
     `);
     await client.query("INSERT INTO cloudpainter_admin_accounts (user_id, enabled) VALUES ('disabled-admin', false), ('active-admin', true)");
     const store = createAdminStore(drizzle(client, { schema: dbSchema }));
@@ -35,6 +46,25 @@ test("PostgreSQL admin permissions deny missing or disabled rows and retain mini
     assert.equal(await store.isEnabledAdmin("missing-admin"), false);
     assert.equal(await store.isEnabledAdmin("disabled-admin"), false);
     assert.equal(await store.isEnabledAdmin("active-admin"), true);
+
+    await client.query(
+      "INSERT INTO image_generation_accounts (user_id, role, enabled) VALUES ('revoked-user', 'normal', false)",
+    );
+    await client.query(
+      "INSERT INTO image_generation_attempts (id, user_id) VALUES ($1, 'revoked-user')",
+      [randomUUID()],
+    );
+    assert.deepEqual(await store.listGenerationAccess(["revoked-user", "missing-user"]), [
+      { userId: "revoked-user", role: "normal", enabled: false },
+    ]);
+    await store.setGenerationAccess("revoked-user", "admin", false);
+    assert.deepEqual(await store.listGenerationAccess(["revoked-user"]), [
+      { userId: "revoked-user", role: "admin", enabled: false },
+    ]);
+    await store.setGenerationAccess("revoked-user", "normal", false);
+    assert.deepEqual(await client.query(
+      "SELECT user_id FROM image_generation_attempts WHERE user_id = 'revoked-user'",
+    ).then(result => result.rows), [{ user_id: "revoked-user" }]);
 
     const auditId = await store.startAction("active-admin", "target-account", "suspend");
     const [pending] = (await client.query(

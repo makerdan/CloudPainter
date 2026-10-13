@@ -1,5 +1,5 @@
-import { and, count, desc, eq, sql } from "drizzle-orm";
-import { db, cloudPainterAdminAccounts, cloudPainterAdminAudit } from "@workspace/db";
+import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { db, cloudPainterAdminAccounts, cloudPainterAdminAudit, imageGenerationAccounts } from "@workspace/db";
 import type { AdminAction, AdminAuditOutcome, AdminStore } from "../routes/admin";
 
 export function createAdminStore(database: Pick<typeof db, "select" | "insert" | "update">): AdminStore {
@@ -65,6 +65,22 @@ export function createAdminStore(database: Pick<typeof db, "select" | "insert" |
       await database.update(cloudPainterAdminAudit)
         .set({ outcome })
         .where(eq(cloudPainterAdminAudit.id, auditId));
+    },
+    async listGenerationAccess(userIds) {
+      if (userIds.length === 0) return [];
+      return database.select({
+        userId: imageGenerationAccounts.userId,
+        role: imageGenerationAccounts.role,
+        enabled: imageGenerationAccounts.enabled,
+      }).from(imageGenerationAccounts).where(inArray(imageGenerationAccounts.userId, userIds));
+    },
+    async setGenerationAccess(userId, role, enabled) {
+      await database.insert(imageGenerationAccounts)
+        .values({ userId, role, enabled })
+        .onConflictDoUpdate({
+          target: imageGenerationAccounts.userId,
+          set: { role, enabled },
+        });
     },
   };
 }

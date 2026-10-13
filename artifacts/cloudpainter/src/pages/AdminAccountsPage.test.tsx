@@ -11,8 +11,8 @@ const mocks = vi.hoisted(() => ({
       limit: 25,
       offset: 0,
       accounts: [
-        { id: "user_target123456", name: "River Stone", email: "river@example.test", createdAt: "2024-01-02T00:00:00.000Z", status: "active" },
-        { id: "user_admin123", name: "Admin User", email: "admin@example.test", createdAt: "2024-01-01T00:00:00.000Z", status: "active" },
+        { id: "user_target123456", name: "River Stone", email: "river@example.test", createdAt: "2024-01-02T00:00:00.000Z", status: "active", generationAccess: { role: "normal", enabled: false } },
+        { id: "user_admin123", name: "Admin User", email: "admin@example.test", createdAt: "2024-01-01T00:00:00.000Z", status: "active", generationAccess: { role: "normal", enabled: true } },
       ],
     },
     error: null,
@@ -38,11 +38,13 @@ const mocks = vi.hoisted(() => ({
     refetch: vi.fn(),
   },
   mutate: vi.fn(),
+  generationMutate: vi.fn(),
   queryClient: { removeQueries: vi.fn(), invalidateQueries: vi.fn() },
   listHook: vi.fn(),
   overviewHook: vi.fn(),
   auditHook: vi.fn(),
   mutationHook: vi.fn(),
+  generationMutationHook: vi.fn(),
 }));
 
 vi.mock("@clerk/react", () => ({ useAuth: () => mocks.auth }));
@@ -70,6 +72,10 @@ vi.mock("@workspace/api-client-react", () => ({
     mocks.mutationHook(...args);
     return { mutate: mocks.mutate, isPending: false, isError: false };
   },
+  useSetAdminGenerationAccess: (...args: unknown[]) => {
+    mocks.generationMutationHook(...args);
+    return { mutate: mocks.generationMutate, isPending: false, isError: false };
+  },
 }));
 
 describe("CloudPainter admin account console", () => {
@@ -82,8 +88,8 @@ describe("CloudPainter admin account console", () => {
         limit: 25,
         offset: 0,
         accounts: [
-          { id: "user_target123456", name: "River Stone", email: "river@example.test", createdAt: "2024-01-02T00:00:00.000Z", status: "active" },
-          { id: "user_admin123", name: "Admin User", email: "admin@example.test", createdAt: "2024-01-01T00:00:00.000Z", status: "active" },
+          { id: "user_target123456", name: "River Stone", email: "river@example.test", createdAt: "2024-01-02T00:00:00.000Z", status: "active", generationAccess: { role: "normal", enabled: false } },
+          { id: "user_admin123", name: "Admin User", email: "admin@example.test", createdAt: "2024-01-01T00:00:00.000Z", status: "active", generationAccess: { role: "normal", enabled: true } },
         ],
       },
       error: null,
@@ -109,12 +115,14 @@ describe("CloudPainter admin account console", () => {
       refetch: vi.fn(),
     };
     mocks.mutate.mockReset();
+    mocks.generationMutate.mockReset();
     mocks.queryClient.removeQueries.mockReset();
     mocks.queryClient.invalidateQueries.mockReset();
     mocks.listHook.mockReset();
     mocks.overviewHook.mockReset();
     mocks.auditHook.mockReset();
     mocks.mutationHook.mockReset();
+    mocks.generationMutationHook.mockReset();
   });
   afterEach(() => cleanup());
 
@@ -123,14 +131,16 @@ describe("CloudPainter admin account console", () => {
     const overviewOptions = mocks.overviewHook.mock.calls[0]?.[0] as { request?: RequestInit };
     const listOptions = mocks.listHook.mock.calls[0]?.[1] as { request?: RequestInit };
     const mutationOptions = mocks.mutationHook.mock.calls[0]?.[0] as { request?: RequestInit };
+    const generationMutationOptions = mocks.generationMutationHook.mock.calls[0]?.[0] as { request?: RequestInit };
     const auditOptions = mocks.auditHook.mock.calls[0]?.[1] as { request?: RequestInit };
-    for (const options of [overviewOptions, listOptions, auditOptions, mutationOptions]) {
+    for (const options of [overviewOptions, listOptions, auditOptions, mutationOptions, generationMutationOptions]) {
       expect(options.request?.headers).toEqual({ "X-Admin-Session": "session-admin" });
       expect(options.request?.credentials).toBe("same-origin");
     }
     expect(screen.getByTestId("text-total-accounts").textContent).toContain("26");
     expect(screen.getByTestId("text-account-email-user_target123456").textContent).toBe("river@example.test");
     expect(screen.getByTestId("status-account-user_target123456").textContent).toContain("Active");
+    expect(screen.getByTestId("status-generation-access-user_target123456").textContent).toContain("Revoked");
     expect(screen.getByText("Current admin")).toBeTruthy();
     expect(screen.queryByTestId("button-suspend-user_admin123")).toBeNull();
     expect(screen.getByText("Account status history")).toBeTruthy();
@@ -184,6 +194,30 @@ describe("CloudPainter admin account console", () => {
     fireEvent.click(screen.getByTestId("button-confirm-status-change"));
     expect(mocks.mutate).toHaveBeenCalledWith(
       { userId: "user_target123456", data: { status: "suspended" } },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    );
+  });
+
+  it("confirms access approval and role changes without clearing a revoked state", () => {
+    render(<AdminAccountsPage />);
+    fireEvent.click(screen.getByTestId("button-approve-generation-access-user_target123456"));
+    expect(screen.getByRole("dialog").textContent).toContain("Approve generation access?");
+    fireEvent.click(screen.getByTestId("button-cancel-generation-confirmation"));
+    expect(mocks.generationMutate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("button-approve-generation-access-user_target123456"));
+    fireEvent.click(screen.getByTestId("button-confirm-generation-change"));
+    expect(mocks.generationMutate).toHaveBeenCalledWith(
+      { userId: "user_target123456", data: { role: "normal", enabled: true } },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    );
+
+    fireEvent.change(screen.getByTestId("select-generation-role-user_target123456"), { target: { value: "admin" } });
+    fireEvent.click(screen.getByTestId("button-save-generation-role-user_target123456"));
+    expect(screen.getByRole("dialog").textContent).toContain("Change generation allowance?");
+    fireEvent.click(screen.getByTestId("button-confirm-generation-change"));
+    expect(mocks.generationMutate).toHaveBeenLastCalledWith(
+      { userId: "user_target123456", data: { role: "admin", enabled: false } },
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
     );
   });

@@ -4,7 +4,10 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import pg from "pg";
 import sharp from "sharp";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { pool } from "@workspace/db";
+import * as dbSchema from "@workspace/db/schema";
+import { createAdminStore } from "../src/lib/adminStore";
 import { createImageBudget, dailyLimit, checkBudget, ImageAccessError } from "../src/lib/image-budget";
 import { createImagesRouter } from "../src/routes/images";
 import { createLogoImagesRouter } from "../src/routes/logo-images";
@@ -16,6 +19,7 @@ import { PoeImageError } from "@workspace/integrations-openai-ai-server/poe";
 const schema = `image_test_${randomUUID().replaceAll("-", "")}`;
 const database = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${schema}` });
 const budget = createImageBudget(database);
+const administration = createAdminStore(drizzle(database, { schema: dbSchema }));
 before(async () => {
   await pool.query(`CREATE SCHEMA ${schema}`);
   await database.query(`
@@ -144,6 +148,55 @@ test("revocation between status and reserve is enforced", async () => {
   // The initial setup's conflict policy preserves explicit revocation.
   await database.query("INSERT INTO image_generation_accounts (user_id, role) VALUES ('admin', 'admin') ON CONFLICT (user_id) DO NOTHING");
   await assert.rejects(budget.reserve("admin"), { code: "authorization_denied" });
+});
+
+test("generation role changes preserve enabled access, revocation, and every account's attempt history", async () => {
+  await database.query(`
+    INSERT INTO image_generation_accounts (user_id, role, enabled) VALUES
+      ('role-changed-enabled', 'normal', true),
+      ('role-changed-revoked', 'normal', false),
+      ('role-change-unrelated', 'admin', true)
+  `);
+  await seed("role-changed-enabled", 2);
+  await seed("role-changed-revoked", 3);
+  await seed("role-change-unrelated", 1);
+
+  const attemptIds = async (userId: string) => (await database.query(
+    "SELECT id FROM image_generation_attempts WHERE user_id = $1 ORDER BY id",
+    [userId],
+  )).rows.map(row => row.id);
+  const enabledBeforeIds = await attemptIds("role-changed-enabled");
+  const revokedBeforeIds = await attemptIds("role-changed-revoked");
+  const unrelatedBeforeIds = await attemptIds("role-change-unrelated");
+  assert.equal(enabledBeforeIds.length, 2);
+  assert.equal(revokedBeforeIds.length, 3);
+  assert.equal(unrelatedBeforeIds.length, 1);
+
+  await administration.setGenerationAccess("role-changed-enabled", "admin", true);
+  const promoted = await budget.status("role-changed-enabled");
+  assert.equal(promoted.dailyLimit, 15);
+  assert.equal(promoted.remaining, 13);
+  assert.deepEqual((await database.query(
+    "SELECT role, enabled FROM image_generation_accounts WHERE user_id = 'role-changed-enabled'",
+  )).rows, [{ role: "admin", enabled: true }]);
+  assert.deepEqual(await attemptIds("role-changed-enabled"), enabledBeforeIds);
+
+  await administration.setGenerationAccess("role-changed-revoked", "admin", false);
+  await assert.rejects(budget.status("role-changed-revoked"), { code: "authorization_denied" });
+  await assert.rejects(budget.reserve("role-changed-revoked"), { code: "authorization_denied" });
+  assert.deepEqual((await database.query(
+    "SELECT role, enabled FROM image_generation_accounts WHERE user_id = 'role-changed-revoked'",
+  )).rows, [{ role: "admin", enabled: false }]);
+  assert.deepEqual(await attemptIds("role-changed-revoked"), revokedBeforeIds);
+
+  await administration.setGenerationAccess("role-changed-revoked", "normal", false);
+  await assert.rejects(budget.status("role-changed-revoked"), { code: "authorization_denied" });
+  assert.deepEqual(await attemptIds("role-changed-revoked"), revokedBeforeIds);
+
+  assert.deepEqual((await database.query(
+    "SELECT role, enabled FROM image_generation_accounts WHERE user_id = 'role-change-unrelated'",
+  )).rows, [{ role: "admin", enabled: true }]);
+  assert.deepEqual(await attemptIds("role-change-unrelated"), unrelatedBeforeIds);
 });
 
 async function routeRequest(userId: string | null, options: {

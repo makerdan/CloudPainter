@@ -68,7 +68,11 @@ export const ListAdminAccountsResponse = zod.object({
   "name": zod.string().nullable(),
   "email": zod.string().nullable(),
   "createdAt": zod.coerce.date(),
-  "status": zod.enum(['active', 'suspended'])
+  "status": zod.enum(['active', 'suspended']),
+  "generationAccess": zod.object({
+  "role": zod.enum(['normal', 'admin']),
+  "enabled": zod.boolean()
+})
 })).max(listAdminAccountsResponseAccountsMax),
   "totalCount": zod.number().int().min(listAdminAccountsResponseTotalCountMin),
   "limit": zod.number().int().min(1).max(listAdminAccountsResponseLimitMax),
@@ -148,7 +152,10 @@ export const SetAdminAccountStatusResponse = zod.object({
   "status": zod.enum(['active', 'suspended'])
 })
 
-
+/**
+ * @summary Approve or revoke image-generation access for a CloudPainter account
+ */
+export const setAdminGenerationAccessPathUserIdRegExp = new RegExp('^user_[A-Za-z0-9]{5,}$');
 /**
  * @summary Hosted mask capability and account access, without inference
  */
@@ -211,6 +218,7 @@ export const GenerateOutlineResponse = zod.object({
 })).max(generateOutlineResponseCandidatesMax),
   "model": zod.enum(['GPT-Image-2'])
 })
+
 
 /**
  * @summary Generate one account-budgeted exploratory logo PNG from text only
@@ -427,8 +435,27 @@ export const UpscalePoeImageResponse = zod.object({
   "width": zod.number().int().min(1).max(upscalePoeImageResponseWidthMax),
   "height": zod.number().int().min(1).max(upscalePoeImageResponseHeightMax)
 })
-
-
 export const GenerateLogoImageHeader = zod.object({
   "X-Logo-Session": zod.string().max(generateLogoImageHeaderXLogoSessionMax).describe('Must match the verified current Clerk session to prevent delayed requests crossing accounts.')
+})
+
+export const setAdminGenerationAccessHeaderXAdminSessionMax = 256;
+
+export const SetAdminGenerationAccessBody = zod.object({
+  "role": zod.enum(['normal', 'admin']),
+  "enabled": zod.boolean()
+})
+
+export const SetAdminGenerationAccessResponse = zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['normal', 'admin']),
+  "enabled": zod.boolean()
+})
+
+export const SetAdminGenerationAccessParams = zod.object({
+  "userId": zod.coerce.string().regex(setAdminGenerationAccessPathUserIdRegExp)
+})
+
+export const SetAdminGenerationAccessHeader = zod.object({
+  "X-Admin-Session": zod.string().max(setAdminGenerationAccessHeaderXAdminSessionMax)
 })

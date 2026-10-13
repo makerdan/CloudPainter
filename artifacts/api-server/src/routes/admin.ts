@@ -8,6 +8,9 @@ import {
   SetAdminAccountStatusBody,
   SetAdminAccountStatusParams,
   SetAdminAccountStatusResponse,
+  SetAdminGenerationAccessBody,
+  SetAdminGenerationAccessParams,
+  SetAdminGenerationAccessResponse,
 } from "@workspace/api-zod";
 
 export type AdminAction = "suspend" | "reactivate";
@@ -34,6 +37,8 @@ export interface AdminStore {
   }>;
   startAction(actorUserId: string, targetUserId: string, action: AdminAction): Promise<string>;
   finishAction(auditId: string, outcome: AdminActionOutcome): Promise<void>;
+  listGenerationAccess(userIds: string[]): Promise<{ userId: string; role: string; enabled: boolean }[]>;
+  setGenerationAccess(userId: string, role: "normal" | "admin", enabled: boolean): Promise<void>;
 }
 export interface AdminAccountProvider {
   listUsers(params: { limit: number; offset: number; query?: string }): Promise<{
@@ -136,8 +141,13 @@ export function createAdminRouter(store: AdminStore, provider: AdminAccountProvi
     }
     try {
       const result = await provider.listUsers({ limit, offset, ...(query ? { query } : {}) });
+      const accessRows = await store.listGenerationAccess(result.data.map(user => user.id));
+      const accessByUser = new Map(accessRows.map(row => [row.userId, { role: row.role, enabled: row.enabled }]));
       res.json(ListAdminAccountsResponse.parse({
-        accounts: result.data.map(safeAccount),
+        accounts: result.data.map(user => ({
+          ...safeAccount(user),
+          generationAccess: accessByUser.get(user.id) ?? { role: "normal", enabled: true },
+        })),
         totalCount: result.totalCount,
         limit,
         offset,
@@ -227,6 +237,34 @@ export function createAdminRouter(store: AdminStore, provider: AdminAccountProvi
       // The durable pending audit intent already records this operation; do not report a completed Clerk change as a failure.
     }
     res.json(SetAdminAccountStatusResponse.parse({ id: userId, status: parsed.data.status }));
+  });
+
+  router.put("/admin/generation-access/:userId", async (req, res): Promise<void> => {
+    if (req.get("Sec-Fetch-Site") === "cross-site") {
+      res.status(403).json({ error: "Cross-site generation access changes are not allowed." });
+      return;
+    }
+    const params = SetAdminGenerationAccessParams.safeParse(req.params);
+    const parsed = SetAdminGenerationAccessBody.strict().safeParse(req.body);
+    if (!params.success || !parsed.success) {
+      res.status(400).json({ error: "Choose an account and valid generation access settings." });
+      return;
+    }
+    const { userId } = params.data;
+    if (userId === res.locals.adminActor && parsed.data.role === "admin") {
+      res.status(409).json({ error: "You cannot grant yourself generation-admin access." });
+      return;
+    }
+    try {
+      await store.setGenerationAccess(userId, parsed.data.role, parsed.data.enabled);
+      res.json(SetAdminGenerationAccessResponse.parse({
+        id: userId,
+        role: parsed.data.role,
+        enabled: parsed.data.enabled,
+      }));
+    } catch {
+      res.status(503).json({ error: "Generation access could not be changed. Please retry." });
+    }
   });
   return router;
 }

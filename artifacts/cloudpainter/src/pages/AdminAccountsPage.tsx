@@ -9,6 +9,7 @@ import {
   useListAdminAuditEvents,
   useListAdminAccounts,
   useSetAdminAccountStatus,
+  useSetAdminGenerationAccess,
   type ListAdminAuditEventsParams,
   type ListAdminAccountsParams,
 } from '@workspace/api-client-react';
@@ -60,6 +61,14 @@ export default function AdminAccountsPage() {
   const [auditAction, setAuditAction] = useState<'' | 'suspend' | 'reactivate'>('');
   const [auditOutcome, setAuditOutcome] = useState<'' | 'pending' | 'succeeded' | 'failed'>('');
   const [confirming, setConfirming] = useState<{ id: string; name: string; next: 'active' | 'suspended' } | null>(null);
+  const [generationConfirming, setGenerationConfirming] = useState<{
+    id: string;
+    name: string;
+    role: 'normal' | 'admin';
+    enabled: boolean;
+    change: 'role' | 'approve' | 'revoke';
+  } | null>(null);
+  const [generationRoleDrafts, setGenerationRoleDrafts] = useState<Record<string, 'normal' | 'admin'>>({});
   const [notice, setNotice] = useState('');
   const [denied, setDenied] = useState(false);
 
@@ -73,6 +82,8 @@ export default function AdminAccountsPage() {
       });
       setDenied(false);
       setConfirming(null);
+      setGenerationConfirming(null);
+      setGenerationRoleDrafts({});
       setNotice('');
       setAuditCursors([null]);
     }
@@ -114,6 +125,7 @@ export default function AdminAccountsPage() {
     query: { enabled, queryKey: auditKey, staleTime: 0, retry: false },
   });
   const statusMutation = useSetAdminAccountStatus({ request });
+  const generationMutation = useSetAdminGenerationAccess({ request });
 
   useEffect(() => {
     if (errorStatus(overview.error) === 401 || errorStatus(overview.error) === 404
@@ -175,6 +187,38 @@ export default function AdminAccountsPage() {
     });
   };
 
+  const confirmGenerationChange = () => {
+    if (!generationConfirming || generationMutation.isPending) return;
+    const change = generationConfirming;
+    setNotice('');
+    generationMutation.mutate({
+      userId: change.id,
+      data: { role: change.role, enabled: change.enabled },
+    }, {
+      onSuccess: () => {
+        setNotice(change.change === 'approve'
+          ? 'Generation access approved.'
+          : change.change === 'revoke'
+            ? 'Generation access revoked.'
+            : 'Generation allowance updated.');
+        setGenerationConfirming(null);
+        setGenerationRoleDrafts(current => {
+          const next = { ...current };
+          delete next[change.id];
+          return next;
+        });
+        refreshAdminData();
+      },
+      onError: error => {
+        if (errorStatus(error) === 401 || errorStatus(error) === 404) {
+          setDenied(true);
+          return;
+        }
+        setNotice('Generation access could not be changed. Please retry.');
+      },
+    });
+  };
+
   return <main className="admin-shell">
     <header className="admin-header">
       <div className="admin-topline">
@@ -226,8 +270,8 @@ export default function AdminAccountsPage() {
       </div>}
 
       {!fatalError && page.isLoading && <div className="admin-table" aria-label="Loading accounts" aria-busy="true">
-        <div className="admin-table-labels"><span>ACCOUNT</span><span>CREATED</span><span>STATUS</span><span /></div>
-        {[0, 1, 2, 3, 4].map(item => <div className="admin-table-skeleton" key={item}><i /><i /><i /><i /></div>)}
+        <div className="admin-table-labels"><span>ACCOUNT</span><span>CREATED</span><span>STATUS</span><span>GENERATION ACCESS</span><span /></div>
+        {[0, 1, 2, 3, 4].map(item => <div className="admin-table-skeleton" key={item}><i /><i /><i /><i /><i /></div>)}
       </div>}
 
       {!fatalError && !page.isLoading && page.data?.accounts.length === 0 && <div className="admin-empty" data-testid="status-account-empty">
@@ -239,7 +283,7 @@ export default function AdminAccountsPage() {
       {!fatalError && !page.isLoading && (page.data?.accounts.length ?? 0) > 0 && <>
         <div className="admin-table" role="table" aria-label="CloudPainter accounts">
           <div className="admin-table-labels" role="row">
-            <span role="columnheader">ACCOUNT</span><span role="columnheader">CREATED</span><span role="columnheader">STATUS</span><span role="columnheader" className="admin-action-heading">ACTION</span>
+            <span role="columnheader">ACCOUNT</span><span role="columnheader">CREATED</span><span role="columnheader">STATUS</span><span role="columnheader">GENERATION ACCESS</span><span role="columnheader" className="admin-action-heading">ACTION</span>
           </div>
           {page.data?.accounts.map(account => {
             const display = account.name?.trim() || account.email || 'Unnamed account';
@@ -254,6 +298,48 @@ export default function AdminAccountsPage() {
               </div>
               <div className="admin-created-cell" role="cell"><span className="admin-mobile-label">Created</span>{dateLabel(account.createdAt)}</div>
               <div role="cell"><span className={`admin-status ${account.status}`} data-testid={`status-account-${account.id}`}><i />{account.status === 'active' ? 'Active' : 'Suspended'}</span></div>
+              <div className="admin-generation-cell" role="cell">
+                <span className={`admin-generation-status ${account.generationAccess.enabled ? 'enabled' : 'disabled'}`}
+                  data-testid={`status-generation-access-${account.id}`}>
+                  {account.generationAccess.enabled ? 'Approved' : 'Revoked'} · {account.generationAccess.role === 'admin' ? 'Higher limit' : 'Standard limit'}
+                </span>
+                <div className="admin-generation-controls">
+                  <label className="sr-only" htmlFor={`generation-role-${account.id}`}>Generation allowance for {display}</label>
+                  <select id={`generation-role-${account.id}`} data-testid={`select-generation-role-${account.id}`}
+                    value={generationRoleDrafts[account.id] ?? account.generationAccess.role}
+                    disabled={generationMutation.isPending}
+                    onChange={event => setGenerationRoleDrafts(current => ({
+                      ...current,
+                      [account.id]: event.target.value as 'normal' | 'admin',
+                    }))}>
+                    <option value="normal">Standard limit</option>
+                    <option value="admin" disabled={account.id === userId && account.generationAccess.role !== 'admin'}>
+                      Higher generation limit
+                    </option>
+                  </select>
+                  <button type="button" className="admin-generation-save"
+                    data-testid={`button-save-generation-role-${account.id}`}
+                    disabled={generationMutation.isPending
+                      || (generationRoleDrafts[account.id] ?? account.generationAccess.role) === account.generationAccess.role}
+                    onClick={() => setGenerationConfirming({
+                      id: account.id,
+                      name: display,
+                      role: generationRoleDrafts[account.id] ?? account.generationAccess.role,
+                      enabled: account.generationAccess.enabled,
+                      change: 'role',
+                    })}>Save</button>
+                </div>
+                <button type="button" className={`admin-generation-toggle ${account.generationAccess.enabled ? 'revoke' : 'approve'}`}
+                  data-testid={`button-${account.generationAccess.enabled ? 'revoke' : 'approve'}-generation-access-${account.id}`}
+                  disabled={generationMutation.isPending}
+                  onClick={() => setGenerationConfirming({
+                    id: account.id,
+                    name: display,
+                    role: account.generationAccess.role,
+                    enabled: !account.generationAccess.enabled,
+                    change: account.generationAccess.enabled ? 'revoke' : 'approve',
+                  })}>{account.generationAccess.enabled ? 'Revoke access' : 'Approve access'}</button>
+              </div>
               <div className="admin-action-cell" role="cell">
                 {account.id === userId && account.status === 'active'
                   ? <span className="admin-current-account">Current admin</span>
@@ -379,6 +465,40 @@ export default function AdminAccountsPage() {
           <button type="button" className="admin-cancel-button" data-testid="button-cancel-confirmation" disabled={statusMutation.isPending} onClick={() => setConfirming(null)}>Cancel</button>
           <button type="button" className={`admin-confirm-button ${confirming.next}`} data-testid="button-confirm-status-change" disabled={statusMutation.isPending} onClick={confirmStatusChange}>
             {statusMutation.isPending ? 'Saving…' : confirming.next === 'suspended' ? 'Suspend account' : 'Reactivate account'}
+          </button>
+        </div>
+      </section>
+    </div>}
+    {generationConfirming && <div className="admin-modal-backdrop" role="presentation" onMouseDown={event => {
+      if (event.target === event.currentTarget && !generationMutation.isPending) setGenerationConfirming(null);
+    }}>
+      <section className="admin-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="generation-confirm-title" aria-describedby="generation-confirm-description">
+        <span className={`admin-confirm-mark ${generationConfirming.change === 'revoke' ? 'suspended' : 'active'}`}><ShieldCheck size={20} /></span>
+        <button className="admin-modal-close" type="button" aria-label="Close generation access confirmation"
+          data-testid="button-close-generation-confirmation" disabled={generationMutation.isPending}
+          onClick={() => setGenerationConfirming(null)}><X size={18} /></button>
+        <p className="admin-eyebrow">CONFIRM GENERATION ACCESS CHANGE</p>
+        <h2 id="generation-confirm-title">
+          {generationConfirming.change === 'approve' ? 'Approve generation access?'
+            : generationConfirming.change === 'revoke' ? 'Revoke generation access?' : 'Change generation allowance?'}
+        </h2>
+        <p id="generation-confirm-description">
+          {generationConfirming.change === 'approve'
+            ? `${generationConfirming.name} will be able to generate images.`
+            : generationConfirming.change === 'revoke'
+              ? `${generationConfirming.name} will no longer be able to generate images. Prior usage history will remain.`
+              : `${generationConfirming.name}'s allowance will change to ${generationConfirming.role === 'admin' ? 'the higher generation limit' : 'the standard generation limit'}. This role does not grant account-management access.`}
+        </p>
+        <div className="admin-confirm-id">Account ID <span>{generationConfirming.id}</span></div>
+        {generationMutation.isError && <p className="admin-confirm-error" role="alert">The change did not go through. Please try again.</p>}
+        <div className="admin-confirm-actions">
+          <button type="button" className="admin-cancel-button" data-testid="button-cancel-generation-confirmation"
+            disabled={generationMutation.isPending} onClick={() => setGenerationConfirming(null)}>Cancel</button>
+          <button type="button" className={`admin-confirm-button ${generationConfirming.change === 'revoke' ? 'suspended' : ''}`}
+            data-testid="button-confirm-generation-change" disabled={generationMutation.isPending} onClick={confirmGenerationChange}>
+            {generationMutation.isPending ? 'Saving…'
+              : generationConfirming.change === 'approve' ? 'Approve access'
+                : generationConfirming.change === 'revoke' ? 'Revoke access' : 'Save allowance'}
           </button>
         </div>
       </section>

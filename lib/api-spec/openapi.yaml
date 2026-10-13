@@ -129,6 +129,37 @@ paths:
         "403": { description: Cross-site mutation denied }
         "404": { description: Page not found for accounts without dashboard access }
         "503": { description: Account status could not be changed }
+  /admin/generation-access/{userId}:
+    put:
+      operationId: setAdminGenerationAccess
+      tags: [admin]
+      summary: Approve or revoke image-generation access for a CloudPainter account
+      parameters:
+        - in: header
+          name: X-Admin-Session
+          required: true
+          schema: { type: string, maxLength: 256 }
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string, pattern: "^user_[A-Za-z0-9]{5,}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminGenerationAccess" }
+      responses:
+        "200":
+          description: Generation membership updated without changing attempt history
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminGenerationAccessResult" }
+        "400": { description: Invalid account or generation access request }
+        "401": { description: Sign in required or session changed }
+        "403": { description: Cross-site mutation denied }
+        "404": { description: Page not found for accounts without dashboard access }
+        "409": { description: Self-elevation is not allowed }
+        "503": { description: Generation access could not be changed }
   /outlines/config:
     get:
       operationId: getOutlineConfig
@@ -493,13 +524,29 @@ components:
     AdminAccount:
       type: object
       additionalProperties: false
-      required: [id, name, email, createdAt, status]
+      required: [id, name, email, createdAt, status, generationAccess]
       properties:
         id: { type: string }
         name: { type: ["string", "null"] }
         email: { type: ["string", "null"] }
         createdAt: { type: string, format: date-time }
         status: { type: string, enum: [active, suspended] }
+        generationAccess: { $ref: "#/components/schemas/AdminGenerationAccess" }
+    AdminGenerationAccess:
+      type: object
+      additionalProperties: false
+      required: [role, enabled]
+      properties:
+        role: { type: string, enum: [normal, admin] }
+        enabled: { type: boolean }
+    AdminGenerationAccessResult:
+      type: object
+      additionalProperties: false
+      required: [id, role, enabled]
+      properties:
+        id: { type: string }
+        role: { type: string, enum: [normal, admin] }
+        enabled: { type: boolean }
     AdminAccountPage:
       type: object
       additionalProperties: false

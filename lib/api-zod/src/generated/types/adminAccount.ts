@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AdminAccountStatusProperty } from './adminAccountStatusProperty';
+import type { AdminGenerationAccess } from './adminGenerationAccess';
 
 export interface AdminAccount {
   id: string;
@@ -15,4 +16,5 @@ export interface AdminAccount {
   email: string | null;
   createdAt: Date;
   status: AdminAccountStatusProperty;
+  generationAccess: AdminGenerationAccess;
 }
