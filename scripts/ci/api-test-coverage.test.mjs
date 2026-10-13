@@ -166,8 +166,26 @@ function assertDatabaseShellAdmission(script) {
   const admitted = new Set([
     'set +e',
     'failed=0',
+    'run_timed() {',
+    'local suite_pid timer_pid winner suite_exit_code',
+    'setsid "$@" &',
+    'suite_pid=$!',
+    'sleep 5m &',
+    'timer_pid=$!',
+    'wait -n -p winner "$suite_pid" "$timer_pid"',
+    'suite_exit_code=$?',
+    'if [ "$winner" = "$timer_pid" ]; then',
+    'kill -TERM -- "-$suite_pid" 2>/dev/null || true',
+    'sleep 5s',
+    'kill -KILL -- "-$suite_pid" 2>/dev/null || true',
+    'wait "$suite_pid" 2>/dev/null || true',
+    'return 124',
+    'kill "$timer_pid" 2>/dev/null || true',
+    'wait "$timer_pid" 2>/dev/null || true',
+    'if kill -0 -- "-$suite_pid" 2>/dev/null; then',
+    'return "$suite_exit_code"',
+    '}',
     "printf '\\n=== api-server %s ===\\n' \"$check\"",
-    'pnpm --filter @workspace/api-server run "$check"',
     'status=$?',
     'if [ "$status" -ne 0 ]; then',
     "printf 'FAILED (%s): exit %s\\n' \"$check\" \"$status\"",
@@ -184,6 +202,10 @@ function assertDatabaseShellAdmission(script) {
 
   for (const line of script.split('\n').map(value => value.trim())) {
     if (!line || line.startsWith('#') || admitted.has(line)) continue;
+    if (/^sleep (?:[1-9][0-9]*(?:\.[0-9]+)?|0\.[0-9]+)(?:s|m)(?: &)?$/.test(line)
+      || /^run_timed (?:env DATABASE_URL="[^"\n]*" )?pnpm --filter @workspace\/api-server run "\$check"$/.test(line)) {
+      continue;
+    }
     const loop = line.match(/^for check in ([a-z:-]+(?: [a-z:-]+)*); do$/);
     if (loop) {
       const selected = loop[1].split(' ');
@@ -196,7 +218,7 @@ function assertDatabaseShellAdmission(script) {
     }
     const assignment = line.match(/^(?:export )?DATABASE_URL="([^"\n]*)"$/);
     if (assignment && databaseFixtureTargets.has(assignment[1])) continue;
-    const localPnpm = line.match(/^(?:DATABASE_URL|env DATABASE_URL)="([^"\n]*)" pnpm --filter @workspace\/api-server run "\$check"$/);
+    const localPnpm = line.match(/^DATABASE_URL="([^"\n]*)" run_timed pnpm --filter @workspace\/api-server run "\$check"$/);
     if (localPnpm && databaseFixtureTargets.has(localPnpm[1])) continue;
     const branch = line.match(/^(?:if \[ "\$check" = "(test:image-access|test:palettes|test:settings)" \]; then|export DATABASE_URL="([^"\n]*)")$/);
     if (branch && (!branch[2] || databaseFixtureTargets.has(branch[2]))) continue;
@@ -213,8 +235,19 @@ function portableScript(source) {
   // A workflow edit cannot introduce real hooks/network commands into a guard.
   const statements = new Set([
     'set +e', 'failed=0', 'failed=1', 'failed=$((1 - failed))',
+    'run_timed() {', 'local suite_pid timer_pid winner suite_exit_code',
+    'setsid "$@" &', 'suite_pid=$!', 'sleep 5m &', 'timer_pid=$!',
+    'wait -n -p winner "$suite_pid" "$timer_pid"', 'suite_exit_code=$?',
+    'if [ "$winner" = "$timer_pid" ]; then',
+    'kill -TERM -- "-$suite_pid" 2>/dev/null || true', 'sleep 5s',
+    'kill -KILL -- "-$suite_pid" 2>/dev/null || true',
+    'wait "$suite_pid" 2>/dev/null || true', 'return 124',
+    'kill "$timer_pid" 2>/dev/null || true',
+    'wait "$timer_pid" 2>/dev/null || true',
+    'if kill -0 -- "-$suite_pid" 2>/dev/null; then',
+    'return "$suite_exit_code"',
     'run_check() {', 'label="$1"', 'shift',
-    "printf '\\n=== %s ===\\n' \"$label\"", '"$@"', 'status=$?', 'status=0',
+    "printf '\\n=== %s ===\\n' \"$label\"", 'run_timed "$@"', 'status=$?', 'status=0',
     'if [ "$status" -ne 0 ]; then',
     "printf 'FAILED (%s): exit %s\\n' \"$label\" \"$status\"",
     'else', "printf 'PASSED: %s\\n' \"$label\"", 'fi', '}',
@@ -222,6 +255,8 @@ function portableScript(source) {
   ]);
   for (const line of script.split('\n').map(line => line.trim())) {
     assert.ok(!line || line.startsWith('#') || statements.has(line)
+      || /^sleep (?:[1-9][0-9]*(?:\.[0-9]+)?|0\.[0-9]+)(?:s|m)(?: &)?$/.test(line)
+      || /^run_timed pnpm --filter @workspace\/[a-z0-9-]+ run test:[a-z0-9-]+$/.test(line)
       || /^run_check [a-z0-9-]+ pnpm --filter @workspace\/[a-z0-9-]+ run test:[a-z0-9-]+$/.test(line),
     `Unsupported portable fixture statement: ${line}`);
   }
@@ -242,7 +277,11 @@ function runPortableStage(source, failingChecks = []) {
   assert.equal(failureCodes.size, failingChecks.length, 'A suite may be assigned only one injected exit code');
   const script = portableScript(source);
   const bash = (process.env.PATH ?? '').split(':').map(path => join(path, 'bash')).find(existsSync);
+  const setsid = (process.env.PATH ?? '').split(':').map(path => join(path, 'setsid')).find(existsSync);
+  const sleep = (process.env.PATH ?? '').split(':').map(path => join(path, 'sleep')).find(existsSync);
   assert.ok(bash, 'Expected a local Bash executable');
+  assert.ok(setsid, 'Expected a local setsid executable');
+  assert.ok(sleep, 'Expected a local sleep executable');
   const directory = mkdtempSync(join(tmpdir(), 'portable-ci-coverage-'));
   try {
     const injectedFailures = [...failureCodes.entries()];
@@ -254,6 +293,8 @@ if [ "$#" -ne 4 ] || [ "$1" != "--filter" ] || [ "$3" != "run" ]; then exit 98; 
 ${failureBranches}
 exit 0
 `, { mode: 0o700 });
+    writeFileSync(join(directory, 'setsid'), '#!/bin/sh\nexec "$REAL_SETSID" "$@"\n', { mode: 0o700 });
+    writeFileSync(join(directory, 'sleep'), '#!/bin/sh\nexec "$REAL_SLEEP" "$@"\n', { mode: 0o700 });
     const failureEnvironment = Object.fromEntries(injectedFailures.flatMap(([command, code], index) => [
       [`FAILURE_COMMAND_${index + 1}`, command],
       [`FAILURE_STATUS_${index + 1}`, String(code)],
@@ -264,6 +305,8 @@ exit 0
       env: {
         PATH: directory,
         CALLS_FILE: join(directory, 'calls'),
+        REAL_SETSID: setsid,
+        REAL_SLEEP: sleep,
         ...failureEnvironment,
       },
       encoding: 'utf8',
@@ -301,6 +344,11 @@ function processIsRunning(pid) {
   }
 }
 
+function processGroupId(pid) {
+  const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+  return Number(stat.slice(stat.lastIndexOf(')') + 1).trimStart().split(/\s+/)[2]);
+}
+
 async function waitUntil(predicate, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -321,39 +369,53 @@ function signalOwnedGroup(groupId, signal) {
 }
 
 async function runHangingPortableStage(source) {
-  const script = portableScript(source);
+  const shortDeadline = source.replaceAll('sleep 5m &', 'sleep 0.15s &')
+    .replaceAll('sleep 5s', 'sleep 0.1s');
+  assert.notEqual(shortDeadline, source, 'The production per-suite deadline must be present before shortening the fixture');
+  const script = portableScript(shortDeadline);
   const bash = (process.env.PATH ?? '').split(':').map(path => join(path, 'bash')).find(existsSync);
+  const setsid = (process.env.PATH ?? '').split(':').map(path => join(path, 'setsid')).find(existsSync);
+  const sleep = (process.env.PATH ?? '').split(':').map(path => join(path, 'sleep')).find(existsSync);
   assert.ok(bash, 'Expected a local Bash executable');
+  assert.ok(setsid, 'Expected a local setsid executable');
+  assert.ok(sleep, 'Expected a local sleep executable');
   const directory = mkdtempSync(join(tmpdir(), 'portable-ci-timeout-'));
   const callsFile = join(directory, 'calls');
   const pidsFile = join(directory, 'owned-pids');
+  writeFileSync(join(directory, 'setsid'), '#!/bin/sh\nexec "$REAL_SETSID" "$@"\n', { mode: 0o700 });
+  writeFileSync(join(directory, 'sleep'), '#!/bin/sh\nexec "$REAL_SLEEP" "$@"\n', { mode: 0o700 });
   writeFileSync(join(directory, 'pnpm'), `#!/bin/sh
 printf '%s\\n' "$*" >> "$CALLS_FILE"
-printf '%s\\n' "$$" > "$OWNED_PIDS_FILE"
-sleep 30 &
-child=$!
-printf '%s\\n' "$child" >> "$OWNED_PIDS_FILE"
-trap 'kill -TERM "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true; exit 143' TERM INT
-wait "$child"
+if [ "$*" = "$HANG_COMMAND" ]; then
+  printf '%s\\n' "$$" > "$OWNED_PIDS_FILE"
+  /bin/sh -c 'trap "" TERM; exec "$SLEEP_PATH" 30' &
+  child=$!
+  printf '%s\\n' "$child" >> "$OWNED_PIDS_FILE"
+  wait "$child"
+fi
+exit 0
 `, { mode: 0o700 });
 
   let child;
   let closed;
   let output = '';
   let errorOutput = '';
-  let timedOut = false;
   let cleanupComplete = false;
   const processIds = [];
   try {
     child = spawn(bash, ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script], {
       cwd: directory,
       // A fresh session gives this synthetic fixture an exact, private process
-      // group; timeout cleanup never signals the caller or workspace services.
+      // group; cleanup never signals the caller or workspace services.
       detached: true,
       env: {
         PATH: `${directory}:${process.env.PATH ?? ''}`,
         CALLS_FILE: callsFile,
         OWNED_PIDS_FILE: pidsFile,
+        HANG_COMMAND: portableCommand(portableChecks[0]),
+        REAL_SETSID: setsid,
+        REAL_SLEEP: sleep,
+        SLEEP_PATH: sleep,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -364,29 +426,27 @@ wait "$child"
     child.stderr.on('data', chunk => { errorOutput += chunk; });
     closed = new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal })));
 
-    const stubStarted = await waitUntil(() => existsSync(pidsFile), 2_000);
-    assert.ok(stubStarted, 'The owned shell stub must start before its timeout is exercised');
+    const stubStarted = await waitUntil(() => existsSync(callsFile), 2_000);
+    assert.ok(stubStarted, 'The first owned shell stub must start before its timeout is exercised');
     const ready = await waitUntil(() => {
+      if (!existsSync(pidsFile)) return false;
       const pids = readFileSync(pidsFile, 'utf8').trim().split('\n');
       if (pids.length !== 2 || pids.some(pid => !/^[1-9][0-9]*$/.test(pid))) return false;
       processIds.splice(0, processIds.length, ...pids.map(Number));
       return true;
     }, 2_000);
-    assert.ok(ready, 'The fixture must record its shell and child process identities');
-    assert.equal((await Promise.race([closed, delay(150).then(() => null)])), null,
-      'The deliberate fixture must remain stuck until the supervisor deadline');
-
-    timedOut = true;
-    signalOwnedGroup(child.pid, 'SIGTERM');
-    const graceful = await Promise.race([closed, delay(250).then(() => null)]);
-    if (graceful === null) signalOwnedGroup(child.pid, 'SIGKILL');
+    assert.ok(ready, 'The fixture must record the timed-out suite shell and child identities');
+    const ownedGroup = processGroupId(processIds[0]);
+    assert.equal(ownedGroup, processIds[0], 'The suite leader must own a dedicated process group');
+    assert.equal(processGroupId(processIds[1]), ownedGroup, 'Every suite child must be inside the owned group');
+    assert.notEqual(ownedGroup, processGroupId(process.pid), 'The timeout boundary must exclude the test runner');
     const result = await Promise.race([closed, delay(2_000).then(() => null)]);
-    assert.ok(result, 'The owned shell tree must terminate within the bounded cleanup period');
+    assert.ok(result, 'The timeout must terminate its owned shell tree within the bounded cleanup period');
     const stopped = await waitUntil(() => processIds.every(pid => !processIsRunning(pid)), 1_000);
     assert.ok(stopped, `Owned fixture descendants must stop: ${processIds.join(', ')}`);
     cleanupComplete = true;
     const calls = readFileSync(callsFile, 'utf8').trim().split('\n');
-    return { result, timedOut, output, errorOutput, processIds, calls };
+    return { result, output, errorOutput, processIds, calls };
   } finally {
     if (child?.pid && !cleanupComplete) {
       signalOwnedGroup(child.pid, 'SIGKILL');
@@ -479,7 +539,7 @@ function databaseScript(source) {
   return script;
 }
 
-function runDatabaseStage(source, failingSuite = '') {
+function runDatabaseStage(source, failingSuite = '', timedOutSuite = '') {
   // Validate the step-scoped connection boundary before creating/running stubs.
   // The URL is inspected as text only; it is never resolved or used to connect.
   // Simulate only this fixture's GitHub substitution with inert text, never a
@@ -491,12 +551,25 @@ function runDatabaseStage(source, failingSuite = '') {
   assert.ok(!script.includes('${{'), 'Unsupported GitHub expression in offline database fixture');
   const directory = mkdtempSync(join(tmpdir(), 'api-ci-coverage-'));
   try {
+    const setsid = (process.env.PATH ?? '').split(':').map(path => join(path, 'setsid')).find(existsSync);
+    const sleep = (process.env.PATH ?? '').split(':').map(path => join(path, 'sleep')).find(existsSync);
+    assert.ok(setsid, 'Expected a local setsid executable');
+    assert.ok(sleep, 'Expected a local sleep executable');
+    writeFileSync(join(directory, 'setsid'), '#!/bin/sh\nexec "$REAL_SETSID" "$@"\n', { mode: 0o700 });
+    writeFileSync(join(directory, 'sleep'), '#!/bin/sh\nexec "$REAL_SLEEP" "$@"\n', { mode: 0o700 });
     // No pnpm, database, credentials, provider or real package hook is invoked.
     writeFileSync(join(directory, 'pnpm'), `#!/bin/sh
 printf '%s\\n' "$*" >> "$CALLS_FILE"
 printf '%s\\t%s\\n' "$4" "\${DATABASE_URL-}" >> "$CONNECTIONS_FILE"
 if [ "$1" != "--filter" ] || [ "$2" != "@workspace/api-server" ] || [ "$3" != "run" ] || [ "$#" -ne 4 ]; then
   exit 98
+fi
+if [ "$4" = "$TIMED_OUT_SUITE" ]; then
+  printf '%s\\n' "$$" > "$OWNED_PIDS_FILE"
+  /bin/sh -c 'trap "" TERM; exec "$SLEEP_PATH" 30' &
+  child=$!
+  printf '%s\\n' "$child" >> "$OWNED_PIDS_FILE"
+  wait "$child"
 fi
 if [ "$4" = "$FAILING_SUITE" ]; then exit 23; fi
 exit 0
@@ -508,8 +581,7 @@ case "$1" in
 esac
 export DATABASE_URL
 shift
-if [ "$#" -ne 5 ] || [ "$1" != "pnpm" ] || [ "$2" != "--filter" ] \
-  || [ "$3" != "@workspace/api-server" ] || [ "$4" != "run" ]; then exit 97; fi
+  if [ "$1" != "pnpm" ]; then exit 97; fi
 exec "$@"
 `, { mode: 0o700 });
     const bash = (process.env.PATH ?? '').split(':').map(path => join(path, 'bash')).find(existsSync);
@@ -522,8 +594,13 @@ exec "$@"
         PATH: directory,
         CALLS_FILE: join(directory, 'calls'),
         CONNECTIONS_FILE: join(directory, 'connections'),
+        OWNED_PIDS_FILE: join(directory, 'owned-pids'),
+        REAL_SETSID: setsid,
+        REAL_SLEEP: sleep,
+        SLEEP_PATH: sleep,
         DATABASE_URL: disposableDatabaseUrl,
         FAILING_SUITE: failingSuite,
+        TIMED_OUT_SUITE: timedOutSuite,
       },
       encoding: 'utf8',
       timeout: 5000,
@@ -532,16 +609,25 @@ exec "$@"
     });
     assert.ifError(result.error);
     assert.equal(result.signal, null, 'Database fixture must complete, not be killed');
+    assert.ok(existsSync(join(directory, 'calls')),
+      `Database suite stubs must start; stdout=${result.stdout}; stderr=${result.stderr}`);
     const calls = readFileSync(join(directory, 'calls'), 'utf8').trim().split('\n');
     assert.deepEqual(calls, suites.map(suite => `--filter @workspace/api-server run ${suite}`),
       'Effective API suite selection must include image-access, palettes and settings exactly once');
     const connections = readFileSync(join(directory, 'connections'), 'utf8').trim().split('\n');
     assert.deepEqual(connections, suites.map(suite => `${suite}\t${disposableDatabaseUrl}`),
       'Effective API suite DATABASE_URL must target only the disposable PostgreSQL service URL');
-    assert.equal(result.status, failingSuite ? 1 : 0,
+    assert.equal(result.status, failingSuite || timedOutSuite ? 1 : 0,
       'The database stage must fail if any selected suite fails');
     if (failingSuite) {
       assert.match(result.stdout, new RegExp(`FAILED \\(${failingSuite}\\): exit 23`));
+    }
+    if (timedOutSuite) {
+      assert.match(result.stdout, new RegExp(`FAILED \\(${timedOutSuite}\\): exit 124`));
+      const processIds = readFileSync(join(directory, 'owned-pids'), 'utf8').trim().split('\n').map(Number);
+      assert.equal(processIds.length, 2, 'The timeout fixture must record its suite shell and child process');
+      assert.ok(processIds.every(pid => !processIsRunning(pid)),
+        `Timed-out database suite processes must be stopped: ${processIds.join(', ')}`);
     }
     return result;
   } finally {
@@ -558,6 +644,30 @@ test('the existing validation job selects the portable coverage guard', { timeou
 
 test('the executable database stage selects all three API suites', { timeout: 10000 }, () => {
   runDatabaseStage(workflow);
+});
+
+test('portable and database suites use an isolated five-minute deadline with bounded TERM-to-KILL cleanup', { timeout: 10000 }, () => {
+  const portable = portableScript(workflow);
+  const database = databaseScript(workflow);
+  for (const [label, script, command] of [
+    ['portable', portable, 'run_timed "$@"'],
+    ['database', database, 'run_timed pnpm --filter @workspace/api-server run "$check"'],
+  ]) {
+    const normalized = script.split('\n').map(line => line.trim()).join('\n');
+    assert.equal((normalized.match(/^setsid "\$@" &$/gm) ?? []).length, 1,
+      `${label}: each suite must start in a fresh session`);
+    assert.equal((normalized.match(/^sleep 5m &$/gm) ?? []).length, 1,
+      `${label}: each suite must have a five-minute deadline`);
+    assert.equal((normalized.match(/^sleep 5s$/gm) ?? []).length, 2,
+      `${label}: TERM cleanup must have a finite five-second grace`);
+    assert.ok(normalized.includes('kill -TERM -- "-$suite_pid"'),
+      `${label}: timeout must signal only the suite process group`);
+    assert.ok(normalized.includes('kill -KILL -- "-$suite_pid"'),
+      `${label}: timeout must escalate only within the suite process group`);
+    assert.equal((normalized.match(new RegExp(`^${command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'gm')) ?? []).length, 1,
+      `${label}: all selected suites must use the bounded supervisor`);
+    assert.ok(normalized.includes('return 124'), `${label}: timeout must remain a failed suite result`);
+  }
 });
 
 test('database package manifests retain the authorized test commands and literal files', { timeout: 10000 }, () => {
@@ -658,7 +768,7 @@ test('database command admission rejects an injected executable before shell exe
   const markerPath = join(tmpdir(), `database-command-must-not-run-${process.pid}`);
   rmSync(markerPath, { force: true });
   const body = stepBody(jobBody(workflow, 'validation'), databaseStep);
-  const original = '            pnpm --filter @workspace/api-server run "$check"\n';
+  const original = '            run_timed pnpm --filter @workspace/api-server run "$check"\n';
   assert.equal(body.split(original).length, 2, 'Fixture must target one database suite command');
   const mutated = workflow.replace(body, body.replace(
     original,
@@ -906,10 +1016,12 @@ for (const [label, target] of [
       '          failed=0\n', `          failed=0\n          export DATABASE_URL="${target}"\n`,
     )],
     ['command-local assignment', body => body.replace(
-      '            pnpm --filter', `            DATABASE_URL="${target}" pnpm --filter`,
+      '            run_timed pnpm --filter',
+      `            DATABASE_URL="${target}" run_timed pnpm --filter`,
     )],
     ['command-local env override', body => body.replace(
-      '            pnpm --filter', `            env DATABASE_URL="${target}" pnpm --filter`,
+      '            run_timed pnpm --filter',
+      `            run_timed env DATABASE_URL="${target}" pnpm --filter`,
     )],
   ]) {
     test(`${scope} to a ${label} is rejected at the effective boundary`, { timeout: 10000 }, () => {
@@ -932,7 +1044,7 @@ for (const redirectedSuite of suites) {
   test(`redirecting only ${redirectedSuite} is rejected at the effective boundary`, { timeout: 10000 }, () => {
     const sharedTarget = 'postgresql://fixture-user:fixture-password@shared-db.invalid:5432/shared';
     const body = stepBody(workflow, databaseStep);
-    const command = '            pnpm --filter @workspace/api-server run "$check"\n';
+    const command = '            run_timed pnpm --filter @workspace/api-server run "$check"\n';
     assert.equal(body.split(command).length, 2, 'Fixture must target exactly one database command');
     const mutatedBody = body.replace(command, [
       `            if [ "$check" = "${redirectedSuite}" ]; then`,
@@ -974,7 +1086,7 @@ for (const clearedSuite of suites) {
     test(`clearing DATABASE_URL for only ${clearedSuite} is rejected while siblings retain the disposable target`,
       { timeout: 10000 }, () => {
         const body = stepBody(workflow, databaseStep);
-        const command = '            pnpm --filter @workspace/api-server run "$check"\n';
+        const command = '            run_timed pnpm --filter @workspace/api-server run "$check"\n';
         assert.equal(body.split(command).length, 2, 'Fixture must target one database command');
         const mutation = [
           `            if [ "$check" = "${clearedSuite}" ]; then`,
@@ -1043,6 +1155,16 @@ for (const suite of suites) {
     runDatabaseStage(workflow, suite);
   });
 }
+
+test('a timed-out database suite fails and stops its owned descendants before siblings continue',
+  { timeout: 10000 }, () => {
+    const shortDeadline = workflow.replaceAll('sleep 5m &', 'sleep 0.15s &')
+      .replaceAll('sleep 5s', 'sleep 0.1s');
+    assert.notEqual(shortDeadline, workflow, 'The production per-suite timeout must exist before shortening the fixture deadline');
+    const suite = suites[0];
+    const result = runDatabaseStage(shortDeadline, '', suite);
+    assert.equal(result.status, 1, 'A timed-out database suite must remain a failed validation result');
+  });
 
 test('omitting settings is rejected even when a shell comment still names it', { timeout: 10000 }, () => {
   const omitted = workflow.replace(
@@ -1293,13 +1415,15 @@ test('portable stage preserves distinct original suite exit codes and still fail
   ]);
 });
 
-test('a timed-out portable shell fixture stops its owned descendants and cannot pass', { timeout: 15000 }, async () => {
+test('a timed-out portable suite stops its owned descendants and fails while siblings continue', { timeout: 15000 }, async () => {
   const result = await runHangingPortableStage(workflow);
-  assert.equal(result.timedOut, true, 'The bounded fixture must report that its deadline expired');
-  assert.ok(result.result.signal !== null || result.result.code !== 0,
-    'A timed-out validation shell must not report success');
-  assert.deepEqual(result.calls, [portableCommand(portableChecks[0])],
-    'The fixture must stop during the first deliberately stalled suite');
-  assert.doesNotMatch(result.output, /^(?:PASSED:|FAILED \()/m,
-    'The stuck validation command must not be reported as passed or completed');
+  assert.equal(result.result.signal, null, 'The suite supervisor must let the aggregate validation shell finish');
+  assert.equal(result.result.code, 1, 'A timed-out suite must fail the aggregate validation stage');
+  assert.deepEqual(result.calls, portableChecks.map(portableCommand),
+    'A timeout must preserve exact suite selection and continue with every sibling');
+  assert.match(result.output, /^FAILED \(api-outline\): exit 124$/m,
+    'A timed-out suite must be reported with timeout exit status 124');
+  assert.match(result.output, /^PASSED: api-image-upscale$/m,
+    'A later suite must still run and report its own result');
+  assert.deepEqual(result.processIds.length, 2, 'The timeout fixture must verify its owned shell and child identities');
 });

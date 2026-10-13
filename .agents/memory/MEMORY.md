@@ -24,4 +24,5 @@
 - [PDF export browser fixtures](pdf-export-browser-fixtures.md) — object-URL capture hooks should preserve non-PDF URLs and wait specifically for PDF blobs.
 - [Extreme-ratio print previews](pdf-preview-extreme-ratios.md) — preserve a one-pixel short side when downsampling very wide or tall artwork, even if the thumbnail exceeds its usual cap.
 - [Node test timeout supervision](node-test-timeouts.md) — inject test deadlines through CLI arguments, not NODE_OPTIONS, including tsx-launched children.
+- [CI process-tree timeouts](ci-process-tree-timeouts.md) — keep the deadline supervisor outside each suite’s isolated process group so escalation cannot strand descendants.
 - [Postgres timestamp cursors](postgres-timestamp-cursors.md) — preserve microsecond timestamp precision in keyset cursors; JavaScript `Date` truncates it.

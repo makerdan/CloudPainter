@@ -75,11 +75,35 @@ jobs:
         run: |
           set +e
           failed=0
+          run_timed() {
+            local suite_pid timer_pid winner suite_exit_code
+            setsid "$@" &
+            suite_pid=$!
+            sleep 5m &
+            timer_pid=$!
+            wait -n -p winner "$suite_pid" "$timer_pid"
+            suite_exit_code=$?
+            if [ "$winner" = "$timer_pid" ]; then
+              kill -TERM -- "-$suite_pid" 2>/dev/null || true
+              sleep 5s
+              kill -KILL -- "-$suite_pid" 2>/dev/null || true
+              wait "$suite_pid" 2>/dev/null || true
+              return 124
+            fi
+            kill "$timer_pid" 2>/dev/null || true
+            wait "$timer_pid" 2>/dev/null || true
+            if kill -0 -- "-$suite_pid" 2>/dev/null; then
+              kill -TERM -- "-$suite_pid" 2>/dev/null || true
+              sleep 5s
+              kill -KILL -- "-$suite_pid" 2>/dev/null || true
+            fi
+            return "$suite_exit_code"
+          }
           run_check() {
             label="$1"
             shift
             printf '\n=== %s ===\n' "$label"
-            "$@"
+            run_timed "$@"
             status=$?
             if [ "$status" -ne 0 ]; then
               printf 'FAILED (%s): exit %s\n' "$label" "$status"
@@ -110,9 +134,33 @@ jobs:
         run: |
           set +e
           failed=0
+          run_timed() {
+            local suite_pid timer_pid winner suite_exit_code
+            setsid "$@" &
+            suite_pid=$!
+            sleep 5m &
+            timer_pid=$!
+            wait -n -p winner "$suite_pid" "$timer_pid"
+            suite_exit_code=$?
+            if [ "$winner" = "$timer_pid" ]; then
+              kill -TERM -- "-$suite_pid" 2>/dev/null || true
+              sleep 5s
+              kill -KILL -- "-$suite_pid" 2>/dev/null || true
+              wait "$suite_pid" 2>/dev/null || true
+              return 124
+            fi
+            kill "$timer_pid" 2>/dev/null || true
+            wait "$timer_pid" 2>/dev/null || true
+            if kill -0 -- "-$suite_pid" 2>/dev/null; then
+              kill -TERM -- "-$suite_pid" 2>/dev/null || true
+              sleep 5s
+              kill -KILL -- "-$suite_pid" 2>/dev/null || true
+            fi
+            return "$suite_exit_code"
+          }
           for check in test:image-access test:palettes test:settings; do
             printf '\n=== api-server %s ===\n' "$check"
-            pnpm --filter @workspace/api-server run "$check"
+            run_timed pnpm --filter @workspace/api-server run "$check"
             status=$?
             if [ "$status" -ne 0 ]; then
               printf 'FAILED (%s): exit %s\n' "$check" "$status"
