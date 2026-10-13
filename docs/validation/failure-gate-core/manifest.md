@@ -85,3 +85,16 @@ Accordingly, no activation/run route, runner, or fixture substitute was added. N
 Source paths and line ranges for the command graph are listed in [`inputs/caller-sources.txt`](inputs/caller-sources.txt). Findings come from the checked-in sources, canonical `.agents` files, task plans, and read-only native Project Tasks record queries on 2026-10-13. The earlier Port Authority installer handoff is treated as historical evidence only where noted; current wiring was also searched directly.
 
 This is a source/record capability map, not proof that no external owner policy, GitHub branch rule, deployment configuration, database backup, or Replit platform feature exists. Those external facts were not queried or changed. All such unverified facts remain **UNKNOWN**.
+
+## Task #458 completion and recovery recheck
+
+**Recheck date:** 2026-10-13
+**Result:** **BLOCKED — the prerequisite integration is not present in this checkout, and completion/recovery authorities remain unverified.**
+
+The assigned plan depends on the supervised-execution integration. Native task records show Tasks #456 and #457 as merged, but that lifecycle status is not implementation evidence or authorization. In the current checkout, `scripts/failure-gate-core/` is absent; no coordinator, recovery, transition, store, actual accepted-state writer/reader, or installed competing-writer route is present. The tracked Core validation directory contains only this manifest and the caller inventory. The plan's `requirements.md` path is also absent.
+
+The source search found no authentic owner-directed closure decision route, mode-aware completion reader, isolated Core-format backup/restore adapter, or durable retained-error recovery and old-writer fencing route. The existing app sketch import/export, native task lifecycle, existing validation callers, and disposable CI database do not establish any of these capabilities. No independently approved isolated target, recovery permission, exact scope, budget, or safe carrier is recorded in the checked-in evidence. The merged prerequisite task descriptions themselves require these actual routes and approvals; they do not claim a substitute fixture is sufficient.
+
+Consequently, no implementation or executable proof can safely establish the assigned acceptance criteria. No tests, imports, store initialization, restore, recovery, writer-race, terminal mutation, process-lifecycle experiment, or production/app-database operation was performed. Existing accepted state and authority were not changed; ordinary activation remains disabled. Resume only after actual prerequisite runtime files and host writers/readers are delivered, and separately verifiable approvals name the isolated target, actor, scope, finite limits, and independently safe carrier. Then re-inventory the live writer/reader paths before implementation or any experiment.
+
+This recheck is limited to tracked source, Git history, and read-only native task-record descriptions as observed on 2026-10-13. It does not prove that an external host or owner route cannot exist; those capabilities remain **UNKNOWN** until independently verified.
