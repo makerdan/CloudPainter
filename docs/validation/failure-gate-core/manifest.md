@@ -47,6 +47,17 @@ The native record readback confirms that #399 is currently IN_PROGRESS, #400 and
 
 The native task interfaces are useful for task planning and record readback. Their exact project-wide concurrency, approval-event retention, and authorization semantics are not established by the source material inspected for this task. Do not claim those platform details from task state alone.
 
+## Task #456 authority/store recheck
+
+**Recheck date:** 2026-10-13
+**Result:** **BLOCKED — no verified, authorized integration route.**
+
+The accepted capability map was checked against the current checkout before implementation. `scripts/failure-gate-core/` remains absent; the Core validation directory contains only this manifest and the caller inventory. Repository searches found no authentic decision ingress, adopted exact-scope deterministic policy, registered Core tier registry, or approved isolated transactional store. The references found outside the capability map are conditional guidance or historical material, not verified integrations.
+
+No owner/host-authoritative decision readback, exact-scope policy approval, store authorization, or safe bootstrap grant was available in the inspected project state. External authority and host capabilities therefore remain **UNKNOWN**, while the missing project-local routes remain **UNAVAILABLE**. The task assignment and lifecycle state are not authorization.
+
+Per the task's validation boundary, implementation of adapters, schemas, and acceptance cases stops here. No project code was imported or executed; no tests, store initialization, production access, policy activation, workflow/CI changes, caller changes, or live authority were exercised. Resume only after the owner/host supplies verifiable approval for the exact decision/tier scope and a separately approved isolated durable store, plus the bounded bootstrap grant and safe carrier required before any executable proof.
+
 ## Smallest next integration proposal
 
 Use existing Task #456 for the narrow first integration. Before adding a provider or choosing a store:
