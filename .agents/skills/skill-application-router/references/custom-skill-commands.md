@@ -24,9 +24,17 @@ current target contract always wins.
 
 > Apply the complete `clerk-for-dan` contract only after authoritative evidence verifies that the workspace owner is Dan, the requester is the verified owner rather than a collaborator, and required authorization exists. Otherwise stop without inspecting or changing Clerk configuration or running migration/testing actions. After the ownership gate, load canonical Clerk setup, web/Expo migration, and troubleshooting references without editing them, and call `checkClerkManagementStatus()` before any Clerk operation. Route unknown status to the exact clarification question, external tenants outside this workflow unless explicit managed-Clerk migration is requested, not-configured to canonical provisioning, and managed tenants through `dashboardAccess` without guessed/raw URLs. Follow canonical web/API/Expo setup, routes, cookie web auth versus secure mobile bearer auth, environment handling, authorization bridge, customization, isolated migration approval, and rollback. Keep secrets managed. After approved changes run required auth, route, branding, proxy/environment, and production wiring checks; stop if any ownership/status/authorization boundary becomes unavailable.
 
-## `failure-gate`
+## `failure-gate` — historical alias, not a policy definition
 
-> Apply the complete `failure-gate` contract to every task plan and execution. Before the first plan heading emit exactly `[FAILURE-GATE] Discovery checklist complete. Pre-existing failures documented: <N>. Validation command: \`<command>\`.` Create plans with `scripts/new-plan.mjs`; read memory, active baseline catalog, and recent tasks; run the backend spot baseline when applicable; record only authoritative unexpired active baseline IDs with exactly one ignored-or-owned declaration; choose the lightest registered tier; and require both plan guards. Include the required pre-existing-failures and filled Validation sections. At execution read them before editing, set `TASK_PLAN_FILE`, fail closed on malformed tier locks, run exactly the plan command without escalation, and classify failures by exact active baseline, three isolated retries, then at least two factors among untouched files, pre-task failure, and documented evidence. A passing retry proves only intermittency. Emit the self-classification line, fix only task-owned failures, never bulk-edit archives, and report task versus completion validation and all ownership outcomes.
+The previous invocation text is superseded as a standalone source of policy.
+Resolve the project's explicit adoption state and exact canonical `.agents`
+source before using this alias. Installation alone does not establish adoption.
+If the project adopts Failure Gate Unified, use only its canonical
+`failure-gate-unified/SKILL.md`; do not import the former three-retry/two-factor
+classification rule, discovery announcement, or implied runner from this alias.
+Preserve any explicitly grandfathered in-flight contract without creating new
+legacy tasks. Unknown adoption, provisioning, or tier enforcement blocks execution.
+Prior text remains recoverable from source history; this catalog is not authority.
 
 ## `install-github-actions`
 

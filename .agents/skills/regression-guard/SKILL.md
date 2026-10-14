@@ -350,9 +350,15 @@ between environments. Both guard scripts in a project (the failure-gate guard
 and this regression-guard script) must honour `TASK_PLAN_FILE` consistently,
 so the agent receives a uniform contract regardless of which script runs first.
 
-Wire the script into the project's validation runner as an
-**auto-remediate + strict-check pair**, exactly matching how
-`scripts/check-failure-gate.mjs` is wired: run `--fix-stub` unconditionally
+For transactionally provisioned and hash-bound Unified plans, generate the
+required sections before sealing and run this checker in **strict, single-file
+mode**. Do not apply `--fix-stub` to a sealed plan: any material plan change must
+use the documented plan-and-binding amendment route. Failure Gate Unified owns
+its provisioning and validation semantics; never infer those from this skill.
+
+For an existing editable legacy contract that explicitly permits repair, wire
+the script into that contract's validation runner as an
+**auto-remediate + strict-check pair**: run `--fix-stub`
 first (always exits 0, inserts missing stubs), then run strict mode, which
 now only fires on genuinely unfixable issues — unfilled placeholders and
 malformed declarations that need a human. This ordering means a missing

@@ -26,3 +26,4 @@
 - [Node test timeout supervision](node-test-timeouts.md) — inject test deadlines through CLI arguments, not NODE_OPTIONS, including tsx-launched children.
 - [CI process-tree timeouts](ci-process-tree-timeouts.md) — keep the deadline supervisor outside each suite’s isolated process group so escalation cannot strand descendants.
 - [Postgres timestamp cursors](postgres-timestamp-cursors.md) — preserve microsecond timestamp precision in keyset cursors; JavaScript `Date` truncates it.
+- [Node failure reporters](node-failure-reporters.md) — select structured reporters explicitly; piped Node output is not necessarily TAP.

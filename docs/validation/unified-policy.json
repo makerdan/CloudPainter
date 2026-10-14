@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "mode": "staging",
+  "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
+  "authoritativeWorkspace": "/home/runner/workspace",
+  "allocatorAuthorityVerified": false,
+  "canonicalSource": ".agents/skills/failure-gate-unified/SKILL.md",
+  "canonicalSha256": "f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12",
+  "cutover": null,
+  "capabilities": [],
+  "legacyNativeTasks": [
+    {
+      "ref": "#2",
+      "contract": "native-pre-cutover",
+      "gateId": null,
+      "tier": null,
+      "disposition": "Preserve the original sketch-recovery contract. This is not a legacy Failure Gate authorization or a runner bypass. Re-read native state before cutover."
+    }
+  ],
+  "ownerDirectionAdapter": null
+}

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "tiers": {
+    "test-fast": {
+      "target": "cloudpainter-repository",
+      "timeoutMs": 120000,
+      "stepTimeoutMs": 60000,
+      "cleanupMs": 5000,
+      "requires": [],
+      "steps": [
+        {"name":"gate-unit","cwd":".","adapter":"node-tap","argv":["node","--test","--test-reporter=tap","--test-timeout=45000","scripts/tests/failure-gate.test.mjs"],"retryPrefix":["node","--test","--test-reporter=tap","--test-timeout=45000","--test-name-pattern"],"retrySuffix":["scripts/tests/failure-gate.test.mjs"]},
+        {"name":"regression-guard","cwd":".","adapter":"node-tap","argv":["node","--test","--test-reporter=tap","--test-timeout=45000","scripts/tests/check-regression-guard.test.mjs"],"retryPrefix":["node","--test","--test-reporter=tap","--test-timeout=45000","--test-name-pattern"],"retrySuffix":["scripts/tests/check-regression-guard.test.mjs"]}
+      ]
+    },
+    "test-standard": {
+      "target": "cloudpainter-repository",
+      "timeoutMs": 900000,
+      "stepTimeoutMs": 300000,
+      "cleanupMs": 10000,
+      "requires": [],
+      "extends": "test-fast",
+      "steps": [
+        {"name":"workspace-typecheck","cwd":".","adapter":"exit","argv":["pnpm","run","typecheck"]},
+        {"name":"drawing-tools","cwd":"artifacts/cloudpainter","adapter":"node-tap","argv":["node","--experimental-strip-types","--test","--test-reporter=tap","--test-timeout=10000","src/lib/drawingTools.test.ts"],"retryPrefix":["node","--experimental-strip-types","--test","--test-reporter=tap","--test-timeout=10000","--test-name-pattern"],"retrySuffix":["src/lib/drawingTools.test.ts"]},
+        {"name":"api-outline","cwd":"artifacts/api-server","adapter":"node-tap","argv":["node","--import","tsx","--test","--test-reporter=tap","--test-timeout=10000","src/routes/outline.test.ts"],"retryPrefix":["node","--import","tsx","--test","--test-reporter=tap","--test-timeout=10000","--test-name-pattern"],"retrySuffix":["src/routes/outline.test.ts"]}
+      ]
+    },
+    "test-standard-plus": {
+      "target": "cloudpainter-repository",
+      "timeoutMs": 1800000,
+      "stepTimeoutMs": 300000,
+      "cleanupMs": 10000,
+      "requires": ["verified-disposable-database-route"],
+      "extends": "test-standard",
+      "steps": [
+        {"name":"api-settings","cwd":"artifacts/api-server","adapter":"node-tap","argv":["node","--import","tsx","--test","--test-reporter=tap","--test-timeout=15000","src/routes/settings.test.ts"],"retryPrefix":["node","--import","tsx","--test","--test-reporter=tap","--test-timeout=15000","--test-name-pattern"],"retrySuffix":["src/routes/settings.test.ts"]},
+        {"name":"api-palettes","cwd":"artifacts/api-server","adapter":"node-tap","argv":["node","--import","tsx","--test","--test-reporter=tap","--test-timeout=15000","src/routes/palettes.test.ts"],"retryPrefix":["node","--import","tsx","--test","--test-reporter=tap","--test-timeout=15000","--test-name-pattern"],"retrySuffix":["src/routes/palettes.test.ts"]}
+      ]
+    },
+    "test-heavy": {
+      "target": "cloudpainter-repository",
+      "timeoutMs": 2700000,
+      "stepTimeoutMs": 300000,
+      "cleanupMs": 10000,
+      "requires": ["verified-disposable-browser-route"],
+      "extends": "test-standard-plus",
+      "steps": [
+        {"name":"workspace-build","cwd":".","adapter":"exit","argv":["pnpm","run","build"]},
+        {"name":"browser-instruments","cwd":"artifacts/cloudpainter","adapter":"exit","argv":["pnpm","run","test:instruments-browser"]}
+      ]
+    }
+  },
+  "coverage": "Staged definitions, not complete CI coverage or approved production budgets. Database/browser capability routes are unavailable and fail closed. Full caller mapping and acceptance are cutover blockers."
+}

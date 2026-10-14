@@ -12,7 +12,14 @@
     "test:workspace-typecheck": "node --test --test-timeout=240000 scripts/tests/workspace-typecheck.test.mjs",
     "validate:task-plans": "node scripts/validate-task-plans.mjs",
     "test:regression-guard": "node --test scripts/tests/check-regression-guard.test.mjs",
-    "test:readme-sync": "node --test scripts/tests/daily-readme-sync.test.mjs"
+    "test:readme-sync": "node --test scripts/tests/daily-readme-sync.test.mjs",
+    "test:failure-gate": "node --test --test-timeout=45000 scripts/tests/failure-gate.test.mjs",
+    "test-fast": "node scripts/validation-tier.mjs test-fast",
+    "test-standard": "node scripts/validation-tier.mjs test-standard",
+    "test-standard-plus": "node scripts/validation-tier.mjs test-standard-plus",
+    "test-heavy": "node scripts/validation-tier.mjs test-heavy",
+    "gate:inspect": "node scripts/check-failure-gate.mjs",
+    "gate:baseline-warnings": "node scripts/maintain-failure-baseline.mjs"
   },
   "private": true,
   "dependencies": {
