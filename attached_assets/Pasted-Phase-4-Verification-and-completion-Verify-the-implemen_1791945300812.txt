@@ -1,0 +1,45 @@
+Phase 4: Verification and completion
+Verify the implementation at the cheapest level that proves each required control, then run the app's approved validation tier:
+
+ A new task receives a unique, non-reusable ID through the safe provisioning path.
+ The plan records exactly one registered validation tier and the reason that tier covers the task.
+ The runner resolves the task ID to the recorded tier.
+ A mismatched-tier attempt is rejected before tests execute.
+ The correct tier completes within its timeout and leaves no orphaned processes.
+ A second top-level run against the same target is not started concurrently.
+ Baseline matches require the expected suite/test/signature; ignored and owned repairs are handled differently.
+ An isolated passing retry is not treated as proof of pre-existing provenance.
+ Completion is reported as PASS, FAIL, BLOCKED, or INCOMPLETE according to observed evidence.
+ Existing task IDs, tier bindings, baselines, and historical records remain unchanged unless an approved plan explicitly changed them.
+ No conflicting old policy remains active for new tasks.
+Report PASS only if all required controls for the approved cutover are verified. Use BLOCKED for unavailable enforcement, tools, permissions, or required evidence; use INCOMPLETE when work or trustworthy verification remains unfinished.
+
+Give the project's Agent this exact prompt
+Verify the Failure Gate Unified cutover for this application against the
+approved migration plan and actual implementation. Retrieve the plan, task ID,
+backup record, and prior results yourself; do not ask me to paste them back.
+Read the approved canonical Unified skill under .agents.
+Inspect the resulting files and enforcement path. Verify:
+- new task IDs are provisioned safely and are not reused;
+- each new ID is bound to exactly one registered tier;
+- a mismatched tier is blocked before test execution;
+- the correct tier runs with bounded process behavior and no duplicate
+  top-level run;
+- baselines are preserved and classified as ignored or owned repair;
+- retry success is not treated as pre-existing-failure provenance;
+- completion states match observed results;
+- in-flight legacy IDs and their original bindings are preserved;
+- no older policy remains active for new tasks.
+Use safe, isolated fixtures or non-destructive probes for ID, tier, and
+concurrency rejection tests. Do not launch an unauthorized tier against an
+actual task or run duplicate production validations to demonstrate rejection.
+Inspect enforcement and use approved guard-level tests instead.
+Run only approved, bounded checks under the recorded tier. Do not trigger
+remote CI or modify external resources unless explicitly authorized. If a
+defect is within the approved migration scope, repair it and rerun the affected
+checks; otherwise report the smallest proposed follow-up and needed decision.
+Keep the application's pre-existing unrelated failures distinguished from new
+regressions.
+Cite file paths, commands, and observed results. Record unverified controls as
+Unknown, and report PASS, FAIL, BLOCKED, or INCOMPLETE. Do not declare the
+cutover verified just because a script or policy file exists.

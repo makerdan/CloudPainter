@@ -1,5 +1,10 @@
 # CloudPainter Failure Gate Unified — staged implementation record
 
+Latest control-by-control review:
+[Phase 4 verification](unified-phase4-verification.md), inspected after the
+sketch-recovery merge. It confirms the unchanged fixture evidence, records the
+recovery-inventory delta and retains **BLOCKED** cutover status.
+
 ## Effective state and authority
 
 **STAGING. NOT ADOPTED. NO CUTOVER.**
