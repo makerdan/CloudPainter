@@ -94,7 +94,7 @@ test("settings are strictly validated, authenticated, isolated, and durable", { 
     const responses = await Promise.all([deviceA.json(), deviceB.json()]);
     assert.deepEqual([deviceA.status, deviceB.status].sort(), [200, 409]);
     const winner = deviceA.status === 200 ? responses[0] : responses[1];
-    const conflict = deviceA.status === 409 ? responses[0] : responses[1];
+    const conflict = (deviceA.status === 409 ? responses[0] : responses[1]) as { current: unknown };
     assert.deepEqual(winner, {
       revision: 2,
       settings: deviceA.status === 200 ? deviceASettings : deviceBSettings,

@@ -48,8 +48,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       },
     }}
     localization={{
-      signIn: { start: { title: 'Welcome to CloudPainter', subtitle: 'Sign in to save your personal colors' } },
-      signUp: { start: { title: 'Create your CloudPainter account', subtitle: 'Keep your palette across devices' } },
+      signIn: { start: { title: 'Welcome to CloudPainter', subtitle: 'Sign in to access your account backups and saved colors' } },
+      signUp: { start: { title: 'Create your CloudPainter account', subtitle: 'Keep your sketches and colors with your account' } },
     }}
   ><AccountContext.Provider value={{ leaving, setLeaving }}>{children}</AccountContext.Provider></ClerkProvider>;
 }
@@ -83,7 +83,7 @@ export function AccountControls() {
     <Link className="button button-small" href="/settings" data-testid="link-account-settings">Settings</Link>
     {adminOverview.isSuccess && !leaving && <Link className="button button-small" href="/admin" data-testid="link-admin-console">Admin console</Link>}
     <TooltipButton className="button button-small" disabled={leaving}
-      description="Sign out and hide your account palette. Your browser-local drawing stays on this device."
+       description="Sign out and hide account data. Your current browser sketch stays here; account backups remain with your account."
       onClick={async () => {
         setLeaving(true); setError('');
         try { await signOut({ redirectUrl: basePath || '/' }); }
@@ -95,13 +95,13 @@ export function AccountControls() {
 export function SignInPage() {
   return <div className="account-page"><Link href="/">Back to your drawing</Link>
     <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallback={<AccountLoading />} />
-    <p>Palettes and personal preferences are saved to your account. Projects and photos stay in this browser.</p>
+    <p>Your account keeps saved colors and preferences. Sketches and reference photos stay in this browser unless you explicitly back them up to your account.</p>
   </div>;
 }
 export function SignUpPage() {
   return <div className="account-page"><Link href="/">Back to your drawing</Link>
     <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} fallback={<AccountLoading />} />
-    <p>Palettes and personal preferences are saved to your account. Projects and photos stay in this browser.</p>
+    <p>Your account keeps saved colors and preferences. Sketches and reference photos stay in this browser unless you explicitly back them up to your account.</p>
   </div>;
 }
 function AccountLoading() {

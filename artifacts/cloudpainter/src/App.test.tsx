@@ -3778,7 +3778,7 @@ test('editable project backups round trip between isolated browsers and reject i
     await expect(targetPage.getByTestId('canvas-layer-backup-ink')).toBeVisible();
     await expect(targetPage.getByTestId('canvas-layer-backup-color')).toHaveCSS('opacity', '0');
 
-    await drawNormalizedLine(targetPage, { x: 0.2, y: 0.72 }, { x: 0.76, y: 0.72 });
+    await drawNormalizedLine(targetPage, { x: 0.2, y: 0.52 }, { x: 0.76, y: 0.52 });
     await expect.poll(async () => (await savedProjectRaw(targetPage))?.layers[0]?.strokes.length).toBe(2);
     const artworkBeforeInvalidImport = await savedProjectRaw(targetPage);
     const historyBeforeInvalidImport = await savedProjectHistoryRaw(targetPage);
@@ -3793,6 +3793,7 @@ test('editable project backups round trip between isolated browsers and reject i
     expect(await savedProjectRaw(targetPage)).toEqual(artworkBeforeInvalidImport);
     expect(await savedProjectHistoryRaw(targetPage)).toEqual(historyBeforeInvalidImport);
 
+    await expect(targetPage.getByTestId('input-project-backup')).toBeEnabled();
     await targetPage.getByTestId('button-export-menu').click();
     await targetPage.getByTestId('input-project-backup').setInputFiles({
       name: 'oversized.cloudpainter.json',

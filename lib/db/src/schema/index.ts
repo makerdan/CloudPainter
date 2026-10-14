@@ -21,3 +21,4 @@ export * from "./palettes";
 export * from "./image-generation";
 export * from "./settings";
 export * from "./cloudpainter-admin";
+export * from "./project-backups";

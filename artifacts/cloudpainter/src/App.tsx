@@ -49,13 +49,14 @@ import { BRUSH_STYLES, renderStroke, type BrushStyle, type DrawingTool, type Poi
 import { BACKGROUND_TOOL_GUIDANCE, createInstrumentStroke, normalizePointerPressure, toolAfterColorSelection, TOOL_GUIDANCE, type DrawingInstrument } from '@/lib/drawingTools';
 import { AccountProvider, AccountControls, SignInPage, SignUpPage } from '@/components/Account';
 import { AccountSettingsProvider, useAccountSettings } from '@/components/AccountSettings';
+import { CloudProjectBackups } from '@/components/CloudProjectBackups';
 import SettingsPage from '@/components/SettingsPage';
 import { OutlinePanel } from '@/components/OutlinePanel';
 import { viewportToProject } from '@/lib/outlineGeometry';
 import { clearDrawing, copyDrawing, hasDrawing, normalizeDrawingEntries, pasteIntoLayers, renderDrawing, undoDrawing, redoDrawing, type DrawingClipboard } from '@/lib/layerClipboard';
 import { editorDefaultsFromSettings } from '@/lib/settingsPersistence';
 import {
-  createProjectBackup,
+  createProjectBackup as createEditableProjectBackup,
   MAX_PROJECT_BACKUP_BYTES,
   parseProjectBackup,
   type EditableProject,
@@ -1390,7 +1391,7 @@ function Home() {
 
   const exportProjectBackup = () => {
     try {
-      const contents = createProjectBackup(project);
+      const contents = createEditableProjectBackup(project);
       const downloadUrl = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
       const link = document.createElement('a');
       const title = project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea';
@@ -1404,33 +1405,8 @@ function Home() {
     }
   };
 
-  const importProjectBackup = async (event: ChangeEvent<HTMLInputElement>) => {
-    const input = event.currentTarget;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) return;
-    if (photoLoading || projectBackupLoading) {
-      announce('Wait for the current file to finish before importing a project backup.');
-      return;
-    }
-    if (file.size > MAX_PROJECT_BACKUP_BYTES) {
-      announce('This project backup is larger than 2 MB. Choose a smaller project or photo.');
-      return;
-    }
-
-    const photoRequestAtStart = photoImportId.current;
-    setProjectBackupLoading(true);
+  const applyProjectBackupContents = async (contents: string, photoRequestAtStart: number): Promise<boolean> => {
     try {
-      const bytes = await file.arrayBuffer();
-      if (bytes.byteLength > MAX_PROJECT_BACKUP_BYTES) {
-        throw new Error('This project backup is larger than 2 MB. Choose a smaller project or photo.');
-      }
-      let contents: string;
-      try {
-        contents = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-      } catch {
-        throw new Error('This file is not a readable CloudPainter project backup.');
-      }
       const nextProject = parseProjectBackup(contents);
       if (nextProject.image) {
         const photo = new Image();
@@ -1454,7 +1430,7 @@ function Home() {
       const nextHistory = withSavedProject(readProjectHistory(), currentProject);
       if (!confirmHistoryWriteIfStorageIsLow(estimate, nextProject, nextHistory)) {
         announce('Project import cancelled. Your sketch is unchanged.');
-        return;
+        return false;
       }
 
       const currentSnapshot = localStorage.getItem(STORE_KEY);
@@ -1463,7 +1439,7 @@ function Home() {
         || (currentSnapshot !== persistedProjectSnapshot.current && currentSnapshot !== currentSerialized)) {
         reportProjectConflict();
         announce('Another tab has newer sketch changes. Resolve that conflict before importing a backup.');
-        return;
+        return false;
       }
 
       const nextSnapshot = JSON.stringify(nextProject);
@@ -1496,11 +1472,69 @@ function Home() {
       setExportMenuOpen(false);
       void refreshStorageEstimate();
       announce('Editable project imported. Your previous sketch is saved in Saved sketches.');
+      return true;
     } catch (error) {
       announce(error instanceof Error ? error.message : 'Could not read this project backup. Your sketch is unchanged.');
+      return false;
+    }
+  };
+
+  const importProjectBackupFile = async (file: File): Promise<boolean> => {
+    if (photoLoading || projectBackupLoading) {
+      announce('Wait for the current file to finish before importing a project backup.');
+      return false;
+    }
+    if (file.size > MAX_PROJECT_BACKUP_BYTES) {
+      announce('This project backup is larger than 2 MB. Choose a smaller project or photo.');
+      return false;
+    }
+    const photoRequestAtStart = photoImportId.current;
+    setProjectBackupLoading(true);
+    try {
+      const bytes = await file.arrayBuffer();
+      if (bytes.byteLength > MAX_PROJECT_BACKUP_BYTES) {
+        throw new Error('This project backup is larger than 2 MB. Choose a smaller project or photo.');
+      }
+      let contents: string;
+      try {
+        contents = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      } catch {
+        throw new Error('This file is not a readable CloudPainter project backup.');
+      }
+      return await applyProjectBackupContents(contents, photoRequestAtStart);
+    } catch (error) {
+      announce(error instanceof Error ? error.message : 'Could not read this project backup. Your sketch is unchanged.');
+      return false;
     } finally {
       setProjectBackupLoading(false);
     }
+  };
+
+  const importCloudProjectBackup = async (contents: string): Promise<boolean> => {
+    if (photoLoading || projectBackupLoading) {
+      announce('Wait for the current file to finish before restoring a project backup.');
+      return false;
+    }
+    const photoRequestAtStart = photoImportId.current;
+    setProjectBackupLoading(true);
+    try {
+      if (new TextEncoder().encode(contents).byteLength > MAX_PROJECT_BACKUP_BYTES) {
+        throw new Error('This project backup is larger than 2 MB. Your current sketch is unchanged.');
+      }
+      return await applyProjectBackupContents(contents, photoRequestAtStart);
+    } catch (error) {
+      announce(error instanceof Error ? error.message : 'Could not restore this account backup. Your sketch is unchanged.');
+      return false;
+    } finally {
+      setProjectBackupLoading(false);
+    }
+  };
+
+  const importProjectBackup = (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) void importProjectBackupFile(file);
   };
 
   const exportPng = async () => {
@@ -1743,6 +1777,11 @@ function Home() {
                     />
                   </div>
                 </section>
+                <CloudProjectBackups
+                  project={project}
+                  open={exportMenuOpen}
+                  onRestore={importCloudProjectBackup}
+                />
               </PopoverContent>
             </Popover>
           </div>

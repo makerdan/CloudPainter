@@ -19,6 +19,18 @@ export const AdminAccountStatusProperty = {
 } as const;
 
 export type AdminGenerationAccessRole = typeof AdminGenerationAccessRole[keyof typeof AdminGenerationAccessRole];
+
+
+export const AdminGenerationAccessRole = {
+  normal: 'normal',
+  admin: 'admin',
+} as const;
+
+export interface AdminGenerationAccess {
+  role: AdminGenerationAccessRole;
+  enabled: boolean;
+}
+
 export interface AdminAccount {
   id: string;
   /** @nullable */
@@ -31,6 +43,19 @@ export interface AdminAccount {
 }
 
 export type AdminGenerationAccessResultRole = typeof AdminGenerationAccessResultRole[keyof typeof AdminGenerationAccessResultRole];
+
+
+export const AdminGenerationAccessResultRole = {
+  normal: 'normal',
+  admin: 'admin',
+} as const;
+
+export interface AdminGenerationAccessResult {
+  id: string;
+  role: AdminGenerationAccessResultRole;
+  enabled: boolean;
+}
+
 export interface AdminAccountPage {
   /** @maxItems 50 */
   accounts: AdminAccount[];
@@ -311,11 +336,79 @@ export interface CloudPainterSettings {
 
 export interface AccountSettingsSnapshot {
   /**
-   * @minimum 0
-   * @maximum 2147483647
-   */
+     * @minimum 0
+     * @maximum 2147483647
+     */
   revision: number;
   settings: CloudPainterSettings;
+}
+
+export interface ProjectBackupInput {
+  requestId: string;
+  /**
+     * Versioned CloudPainter project JSON; server enforces the UTF-8 byte limit.
+     * @minLength 1
+     * @maxLength 2097152
+     */
+  backup: string;
+}
+
+export interface ProjectBackupSummary {
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  title: string;
+  /**
+     * @minimum 1
+     * @maximum 2097152
+     */
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface ProjectBackup {
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  title: string;
+  /**
+     * @minimum 1
+     * @maximum 2097152
+     */
+  sizeBytes: number;
+  createdAt: string;
+  /**
+     * @minLength 1
+     * @maxLength 2097152
+     */
+  backup: string;
+}
+
+export type ProjectBackupListAccountLimitBytes = typeof ProjectBackupListAccountLimitBytes[keyof typeof ProjectBackupListAccountLimitBytes];
+
+
+export const ProjectBackupListAccountLimitBytes = {
+  NUMBER_33554432: 33554432,
+} as const;
+
+export interface ProjectBackupList {
+  /** @maxItems 20 */
+  backups: ProjectBackupSummary[];
+  /**
+     * @minimum 0
+     * @maximum 33554432
+     */
+  totalBytes: number;
+  accountLimitBytes: ProjectBackupListAccountLimitBytes;
+}
+
+export interface ProjectBackupError {
+  /** @maxLength 256 */
+  error: string;
 }
 
 export interface HealthStatus {
@@ -463,6 +556,11 @@ export const ListAdminAuditEventsOutcome = {
   failed: 'failed',
 } as const;
 
+export type SaveSettings409 = {
+  error: string;
+  current: AccountSettingsSnapshot;
+};
+
 export type GetImageGenerationConfig200 = {
   configured: boolean;
   signedIn: boolean;
@@ -472,23 +570,3 @@ export type GetImageGenerationConfig200 = {
   globalRemaining: number;
 };
 
-export const AdminGenerationAccessResultRole = {
-  normal: 'normal',
-  admin: 'admin',
-} as const;
-
-export const AdminGenerationAccessRole = {
-  normal: 'normal',
-  admin: 'admin',
-} as const;
-
-export interface AdminGenerationAccessResult {
-  id: string;
-  role: AdminGenerationAccessResultRole;
-  enabled: boolean;
-}
-
-export interface AdminGenerationAccess {
-  role: AdminGenerationAccessRole;
-  enabled: boolean;
-}

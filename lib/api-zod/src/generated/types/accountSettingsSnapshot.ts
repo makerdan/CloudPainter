@@ -9,9 +9,9 @@ import type { CloudPainterSettings } from './cloudPainterSettings';
 
 export interface AccountSettingsSnapshot {
   /**
-   * @minimum 0
-   * @maximum 2147483647
-   */
+     * @minimum 0
+     * @maximum 2147483647
+     */
   revision: number;
   settings: CloudPainterSettings;
 }

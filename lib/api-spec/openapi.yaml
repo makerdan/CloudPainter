@@ -16,6 +16,8 @@ tags:
     description: Exploratory logo concepts
   - name: admin
     description: Protected account oversight
+  - name: projects
+    description: Account-owned editable sketch backups
 paths:
   /admin/overview:
     get:
@@ -346,6 +348,84 @@ paths:
                   current: { $ref: "#/components/schemas/AccountSettingsSnapshot" }
         "503":
           description: Settings storage temporarily unavailable
+  /project-backups:
+    parameters:
+      - in: header
+        name: X-Project-Session
+        required: true
+        schema: { type: string, maxLength: 256 }
+        description: Must match the verified current Clerk session to prevent delayed requests crossing accounts.
+    get:
+      operationId: listProjectBackups
+      tags: [projects]
+      summary: List bounded sketch backups for the signed-in account
+      responses:
+        "200":
+          description: Account-owned backup metadata and current quota use
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectBackupList" }
+        "401": { description: Sign in required or session changed }
+        "503": { description: Project backups are temporarily unavailable }
+    post:
+      operationId: createProjectBackup
+      tags: [projects]
+      summary: Explicitly copy one editable sketch into the signed-in account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectBackupInput" }
+      responses:
+        "201":
+          description: New account backup created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectBackupSummary" }
+        "200":
+          description: Idempotent retry returned the previously created backup
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectBackupSummary" }
+        "400": { description: Invalid backup request or unsupported sketch format }
+        "401": { description: Sign in required or session changed }
+        "403": { description: Cross-site backup mutation denied }
+        "409": { description: Request identifier reused with different content or account quota reached }
+        "413": { description: Sketch exceeds the 2 MiB backup limit }
+        "503": { description: Project backup storage is temporarily unavailable }
+  /project-backups/{backupId}:
+    parameters:
+      - in: header
+        name: X-Project-Session
+        required: true
+        schema: { type: string, maxLength: 256 }
+        description: Must match the verified current Clerk session to prevent delayed requests crossing accounts.
+      - in: path
+        name: backupId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getProjectBackup
+      tags: [projects]
+      summary: Read one account-owned sketch backup
+      responses:
+        "200":
+          description: Full account-owned project backup
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectBackup" }
+        "401": { description: Sign in required or session changed }
+        "404": { description: Backup not found for this account }
+        "503": { description: Project backup storage is temporarily unavailable }
+    delete:
+      operationId: deleteProjectBackup
+      tags: [projects]
+      summary: Delete one account-owned sketch backup
+      responses:
+        "204": { description: Backup deleted }
+        "401": { description: Sign in required or session changed }
+        "404": { description: Backup not found for this account }
+        "503": { description: Project backup storage is temporarily unavailable }
   /healthz:
     get:
       operationId: healthCheck
@@ -714,6 +794,53 @@ components:
       properties:
         revision: { type: integer, minimum: 0, maximum: 2147483647 }
         settings: { $ref: "#/components/schemas/CloudPainterSettings" }
+    ProjectBackupInput:
+      type: object
+      additionalProperties: false
+      required: [requestId, backup]
+      properties:
+        requestId: { type: string, format: uuid }
+        backup:
+          type: string
+          minLength: 1
+          maxLength: 2097152
+          description: Versioned CloudPainter project JSON; server enforces the UTF-8 byte limit.
+    ProjectBackupSummary:
+      type: object
+      additionalProperties: false
+      required: [id, title, sizeBytes, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 120 }
+        sizeBytes: { type: integer, minimum: 1, maximum: 2097152 }
+        createdAt: { type: string, format: date-time }
+    ProjectBackup:
+      type: object
+      additionalProperties: false
+      required: [id, title, sizeBytes, createdAt, backup]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 120 }
+        sizeBytes: { type: integer, minimum: 1, maximum: 2097152 }
+        createdAt: { type: string, format: date-time }
+        backup: { type: string, minLength: 1, maxLength: 2097152 }
+    ProjectBackupList:
+      type: object
+      additionalProperties: false
+      required: [backups, totalBytes, accountLimitBytes]
+      properties:
+        backups:
+          type: array
+          maxItems: 20
+          items: { $ref: "#/components/schemas/ProjectBackupSummary" }
+        totalBytes: { type: integer, minimum: 0, maximum: 33554432 }
+        accountLimitBytes: { type: integer, enum: [33554432] }
+    ProjectBackupError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { type: string, maxLength: 256 }
     HealthStatus:
       type: object
       properties:

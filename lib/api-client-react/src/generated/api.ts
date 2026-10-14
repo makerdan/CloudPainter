@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AccountSettingsSnapshot,
   AdminAccountPage,
   AdminAccountStatus,
   AdminAccountStatusResult,
@@ -27,8 +28,6 @@ import type {
   AdminGenerationAccess,
   AdminGenerationAccessResult,
   AdminOverview,
-  AccountSettingsSnapshot,
-  CloudPainterSettings,
   GetImageGenerationConfig200,
   HealthStatus,
   ImageGenerationError,
@@ -44,7 +43,12 @@ import type {
   PoeImageInput,
   PoeImageOutput,
   PoeUpscaleInput,
-  PoeUpscaleOutput
+  PoeUpscaleOutput,
+  ProjectBackup,
+  ProjectBackupInput,
+  ProjectBackupList,
+  ProjectBackupSummary,
+  SaveSettings409
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -56,6 +60,7 @@ type AwaitedInput<T> = PromiseLike<T> | T;
 
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
 
 
 const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
@@ -76,6 +81,8 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
 export const getGetAdminOverviewUrl = () => {
 
 
+
+
   return `/api/admin/overview`
 }
 
@@ -94,6 +101,9 @@ export const getAdminOverview = async ( options?: Parameters<typeof customFetch>
 );}
 
 
+
+
+
 export const getGetAdminOverviewQueryKey = () => {
     return [
     `/api/admin/overview`
@@ -109,7 +119,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetAdminOverviewQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminOverview>>> = ({ signal }) => getAdminOverview({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData> & { queryKey: QueryKey }
@@ -134,6 +148,11 @@ export function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOv
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
 
 
 export const getListAdminAccountsUrl = (params?: ListAdminAccountsParams,) => {
@@ -166,6 +185,9 @@ export const listAdminAccounts = async (params?: ListAdminAccountsParams, option
 );}
 
 
+
+
+
 export const getListAdminAccountsQueryKey = (params?: ListAdminAccountsParams,) => {
     return [
     `/api/admin/accounts`, ...(params ? [params] : [])
@@ -181,7 +203,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getListAdminAccountsQueryKey(params);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminAccounts>>> = ({ signal }) => listAdminAccounts(params, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminAccounts>>, TError, TData> & { queryKey: QueryKey }
@@ -206,6 +232,11 @@ export function useListAdminAccounts<TData = Awaited<ReturnType<typeof listAdmin
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
 
 
 export const getListAdminAuditEventsUrl = (params?: ListAdminAuditEventsParams,) => {
@@ -238,6 +269,9 @@ export const listAdminAuditEvents = async (params?: ListAdminAuditEventsParams, 
 );}
 
 
+
+
+
 export const getListAdminAuditEventsQueryKey = (params?: ListAdminAuditEventsParams,) => {
     return [
     `/api/admin/audit-events`, ...(params ? [params] : [])
@@ -253,7 +287,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getListAdminAuditEventsQueryKey(params);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminAuditEvents>>> = ({ signal }) => listAdminAuditEvents(params, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminAuditEvents>>, TError, TData> & { queryKey: QueryKey }
@@ -280,7 +318,14 @@ export function useListAdminAuditEvents<TData = Awaited<ReturnType<typeof listAd
 }
 
 
+
+
+
+
+
 export const getSetAdminAccountStatusUrl = (userId: string,) => {
+
+
 
 
   return `/api/admin/accounts/${userId}/status`
@@ -316,6 +361,9 @@ return customFetch<AdminAccountStatusResult>(getSetAdminAccountStatusUrl(userId)
 );}
 
 
+
+
+
 export const getSetAdminAccountStatusMutationKey = () => ['setAdminAccountStatus'] as const;
 
 export const getSetAdminAccountStatusMutationOptions = <TError = ErrorType<void>,
@@ -330,11 +378,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof setAdminAccountStatus>>, SetAdminAccountStatusMutationVariables> = (props) => {
           const {userId,data} = props ?? {};
 
           return  setAdminAccountStatus(userId,data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -361,9 +415,95 @@ export const useSetAdminAccountStatus = <TError = ErrorType<void>,
 export const getSetAdminGenerationAccessUrl = (userId: string,) => {
 
 
+
+
   return `/api/admin/generation-access/${userId}`
 }
+
+/**
+ * @summary Approve or revoke image-generation access for a CloudPainter account
+ */
+export const setAdminGenerationAccess = async (userId: string,
+    adminGenerationAccess: AdminGenerationAccess, options?: Parameters<typeof customFetch>[1]): Promise<AdminGenerationAccessResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AdminGenerationAccessResult>(getSetAdminGenerationAccessUrl(userId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminGenerationAccess)
+  }
+);}
+
+
+
+
+
+export const getSetAdminGenerationAccessMutationKey = () => ['setAdminGenerationAccess'] as const;
+
+export const getSetAdminGenerationAccessMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setAdminGenerationAccess>>, TError,SetAdminGenerationAccessMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setAdminGenerationAccess>>, TError,SetAdminGenerationAccessMutationVariables, TContext> => {
+
+const mutationKey = getSetAdminGenerationAccessMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setAdminGenerationAccess>>, SetAdminGenerationAccessMutationVariables> = (props) => {
+          const {userId,data} = props ?? {};
+
+          return  setAdminGenerationAccess(userId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetAdminGenerationAccessMutationResult = NonNullable<Awaited<ReturnType<typeof setAdminGenerationAccess>>>
+    export type SetAdminGenerationAccessMutationBody = BodyType<AdminGenerationAccess>
+    export type SetAdminGenerationAccessMutationError = ErrorType<void>
+    export type SetAdminGenerationAccessMutationVariables = {userId: string;data: BodyType<AdminGenerationAccess>}
+
+    /**
+ * @summary Approve or revoke image-generation access for a CloudPainter account
+ */
+export const useSetAdminGenerationAccess = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setAdminGenerationAccess>>, TError,SetAdminGenerationAccessMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setAdminGenerationAccess>>,
+        TError,
+        SetAdminGenerationAccessMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSetAdminGenerationAccessMutationOptions(options));
+    }
+
 export const getGetOutlineConfigUrl = () => {
+
+
 
 
   return `/api/outlines/config`
@@ -384,6 +524,9 @@ export const getOutlineConfig = async ( options?: Parameters<typeof customFetch>
 );}
 
 
+
+
+
 export const getGetOutlineConfigQueryKey = () => {
     return [
     `/api/outlines/config`
@@ -399,7 +542,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetOutlineConfigQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getOutlineConfig>>> = ({ signal }) => getOutlineConfig({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOutlineConfig>>, TError, TData> & { queryKey: QueryKey }
@@ -426,7 +573,14 @@ export function useGetOutlineConfig<TData = Awaited<ReturnType<typeof getOutline
 }
 
 
+
+
+
+
+
 export const getGenerateOutlineUrl = () => {
+
+
 
 
   return `/api/outlines`
@@ -461,6 +615,9 @@ return customFetch<OutlineResult>(getGenerateOutlineUrl(),
 );}
 
 
+
+
+
 export const getGenerateOutlineMutationKey = () => ['generateOutline'] as const;
 
 export const getGenerateOutlineMutationOptions = <TError = ErrorType<void>,
@@ -475,11 +632,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateOutline>>, GenerateOutlineMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  generateOutline(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -504,6 +667,8 @@ export const useGenerateOutline = <TError = ErrorType<void>,
     }
 
 export const getGenerateLogoImageUrl = () => {
+
+
 
 
   return `/api/logo-images`
@@ -538,6 +703,9 @@ return customFetch<LogoImageResult>(getGenerateLogoImageUrl(),
 );}
 
 
+
+
+
 export const getGenerateLogoImageMutationKey = () => ['generateLogoImage'] as const;
 
 export const getGenerateLogoImageMutationOptions = <TError = ErrorType<LogoImageErrorResponse | void>,
@@ -552,11 +720,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateLogoImage>>, GenerateLogoImageMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  generateLogoImage(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -583,6 +757,8 @@ export const useGenerateLogoImage = <TError = ErrorType<LogoImageErrorResponse |
 export const getGetPaletteUrl = () => {
 
 
+
+
   return `/api/palette`
 }
 
@@ -596,6 +772,9 @@ export const getPalette = async ( options?: Parameters<typeof customFetch>[1]): 
 
   }
 );}
+
+
+
 
 
 export const getGetPaletteQueryKey = () => {
@@ -613,7 +792,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetPaletteQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getPalette>>> = ({ signal }) => getPalette({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPalette>>, TError, TData> & { queryKey: QueryKey }
@@ -621,6 +804,7 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 
 export type GetPaletteQueryResult = NonNullable<Awaited<ReturnType<typeof getPalette>>>
 export type GetPaletteQueryError = ErrorType<void>
+
 
 
 export function useGetPalette<TData = Awaited<ReturnType<typeof getPalette>>, TError = ErrorType<void>>(
@@ -636,7 +820,14 @@ export function useGetPalette<TData = Awaited<ReturnType<typeof getPalette>>, TE
 }
 
 
+
+
+
+
+
 export const getSavePaletteUrl = () => {
+
+
 
 
   return `/api/palette`
@@ -668,6 +859,9 @@ return customFetch<Palette>(getSavePaletteUrl(),
 );}
 
 
+
+
+
 export const getSavePaletteMutationKey = () => ['savePalette'] as const;
 
 export const getSavePaletteMutationOptions = <TError = ErrorType<void>,
@@ -682,11 +876,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof savePalette>>, SavePaletteMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  savePalette(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -710,6 +910,8 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 export const getGetSettingsUrl = () => {
 
 
+
+
   return `/api/settings`
 }
 
@@ -723,6 +925,9 @@ export const getSettings = async ( options?: Parameters<typeof customFetch>[1]):
 
   }
 );}
+
+
+
 
 
 export const getGetSettingsQueryKey = () => {
@@ -740,7 +945,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetSettingsQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getSettings>>> = ({ signal }) => getSettings({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSettings>>, TError, TData> & { queryKey: QueryKey }
@@ -748,6 +957,7 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 
 export type GetSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getSettings>>>
 export type GetSettingsQueryError = ErrorType<void>
+
 
 
 export function useGetSettings<TData = Awaited<ReturnType<typeof getSettings>>, TError = ErrorType<void>>(
@@ -763,7 +973,14 @@ export function useGetSettings<TData = Awaited<ReturnType<typeof getSettings>>, 
 }
 
 
+
+
+
+
+
 export const getSaveSettingsUrl = () => {
+
+
 
 
   return `/api/settings`
@@ -795,9 +1012,12 @@ return customFetch<AccountSettingsSnapshot>(getSaveSettingsUrl(),
 );}
 
 
+
+
+
 export const getSaveSettingsMutationKey = () => ['saveSettings'] as const;
 
-export const getSaveSettingsMutationOptions = <TError = ErrorType<void>,
+export const getSaveSettingsMutationOptions = <TError = ErrorType<void | SaveSettings409>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveSettings>>, TError,SaveSettingsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof saveSettings>>, TError,SaveSettingsMutationVariables, TContext> => {
 
@@ -809,6 +1029,8 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveSettings>>, SaveSettingsMutationVariables> = (props) => {
           const {data} = props ?? {};
 
@@ -816,14 +1038,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         }
 
 
+
+
+
+
   return  { mutationFn, ...mutationOptions }}
 
     export type SaveSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof saveSettings>>>
     export type SaveSettingsMutationBody = BodyType<AccountSettingsSnapshot>
-    export type SaveSettingsMutationError = ErrorType<void>
+    export type SaveSettingsMutationError = ErrorType<void | SaveSettings409>
     export type SaveSettingsMutationVariables = {data: BodyType<AccountSettingsSnapshot>}
 
-    export const useSaveSettings = <TError = ErrorType<void>,
+    export const useSaveSettings = <TError = ErrorType<void | SaveSettings409>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveSettings>>, TError,SaveSettingsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof saveSettings>>,
@@ -834,7 +1060,325 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getSaveSettingsMutationOptions(options));
     }
 
+export const getListProjectBackupsUrl = () => {
+
+
+
+
+  return `/api/project-backups`
+}
+
+/**
+ * @summary List bounded sketch backups for the signed-in account
+ */
+export const listProjectBackups = async ( options?: Parameters<typeof customFetch>[1]): Promise<ProjectBackupList> => {
+
+  return customFetch<ProjectBackupList>(getListProjectBackupsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProjectBackupsQueryKey = () => {
+    return [
+    `/api/project-backups`
+    ] as const;
+    }
+
+
+export const getListProjectBackupsQueryOptions = <TData = Awaited<ReturnType<typeof listProjectBackups>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectBackups>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProjectBackupsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectBackups>>> = ({ signal }) => listProjectBackups({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProjectBackups>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProjectBackupsQueryResult = NonNullable<Awaited<ReturnType<typeof listProjectBackups>>>
+export type ListProjectBackupsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List bounded sketch backups for the signed-in account
+ */
+
+export function useListProjectBackups<TData = Awaited<ReturnType<typeof listProjectBackups>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectBackups>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProjectBackupsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateProjectBackupUrl = () => {
+
+
+
+
+  return `/api/project-backups`
+}
+
+/**
+ * @summary Explicitly copy one editable sketch into the signed-in account
+ */
+export const createProjectBackup = async (projectBackupInput: ProjectBackupInput, options?: Parameters<typeof customFetch>[1]): Promise<ProjectBackupSummary> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ProjectBackupSummary>(getCreateProjectBackupUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(projectBackupInput)
+  }
+);}
+
+
+
+
+
+export const getCreateProjectBackupMutationKey = () => ['createProjectBackup'] as const;
+
+export const getCreateProjectBackupMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProjectBackup>>, TError,CreateProjectBackupMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createProjectBackup>>, TError,CreateProjectBackupMutationVariables, TContext> => {
+
+const mutationKey = getCreateProjectBackupMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createProjectBackup>>, CreateProjectBackupMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createProjectBackup(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateProjectBackupMutationResult = NonNullable<Awaited<ReturnType<typeof createProjectBackup>>>
+    export type CreateProjectBackupMutationBody = BodyType<ProjectBackupInput>
+    export type CreateProjectBackupMutationError = ErrorType<void>
+    export type CreateProjectBackupMutationVariables = {data: BodyType<ProjectBackupInput>}
+
+    /**
+ * @summary Explicitly copy one editable sketch into the signed-in account
+ */
+export const useCreateProjectBackup = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProjectBackup>>, TError,CreateProjectBackupMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createProjectBackup>>,
+        TError,
+        CreateProjectBackupMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateProjectBackupMutationOptions(options));
+    }
+
+export const getGetProjectBackupUrl = (backupId: string,) => {
+
+
+
+
+  return `/api/project-backups/${backupId}`
+}
+
+/**
+ * @summary Read one account-owned sketch backup
+ */
+export const getProjectBackup = async (backupId: string, options?: Parameters<typeof customFetch>[1]): Promise<ProjectBackup> => {
+
+  return customFetch<ProjectBackup>(getGetProjectBackupUrl(backupId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectBackupQueryKey = (backupId: string,) => {
+    return [
+    `/api/project-backups/${backupId}`
+    ] as const;
+    }
+
+
+export const getGetProjectBackupQueryOptions = <TData = Awaited<ReturnType<typeof getProjectBackup>>, TError = ErrorType<void>>(backupId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectBackup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectBackupQueryKey(backupId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectBackup>>> = ({ signal }) => getProjectBackup(backupId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: backupId !== null && backupId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectBackup>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectBackupQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectBackup>>>
+export type GetProjectBackupQueryError = ErrorType<void>
+
+
+/**
+ * @summary Read one account-owned sketch backup
+ */
+
+export function useGetProjectBackup<TData = Awaited<ReturnType<typeof getProjectBackup>>, TError = ErrorType<void>>(
+ backupId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectBackup>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectBackupQueryOptions(backupId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeleteProjectBackupUrl = (backupId: string,) => {
+
+
+
+
+  return `/api/project-backups/${backupId}`
+}
+
+/**
+ * @summary Delete one account-owned sketch backup
+ */
+export const deleteProjectBackup = async (backupId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteProjectBackupUrl(backupId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteProjectBackupMutationKey = () => ['deleteProjectBackup'] as const;
+
+export const getDeleteProjectBackupMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectBackup>>, TError,DeleteProjectBackupMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteProjectBackup>>, TError,DeleteProjectBackupMutationVariables, TContext> => {
+
+const mutationKey = getDeleteProjectBackupMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProjectBackup>>, DeleteProjectBackupMutationVariables> = (props) => {
+          const {backupId} = props ?? {};
+
+          return  deleteProjectBackup(backupId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteProjectBackupMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProjectBackup>>>
+
+    export type DeleteProjectBackupMutationError = ErrorType<void>
+    export type DeleteProjectBackupMutationVariables = {backupId: string}
+
+    /**
+ * @summary Delete one account-owned sketch backup
+ */
+export const useDeleteProjectBackup = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectBackup>>, TError,DeleteProjectBackupMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteProjectBackup>>,
+        TError,
+        DeleteProjectBackupMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteProjectBackupMutationOptions(options));
+    }
+
 export const getHealthCheckUrl = () => {
+
+
 
 
   return `/api/healthz`
@@ -856,6 +1400,9 @@ export const healthCheck = async ( options?: Parameters<typeof customFetch>[1]):
 );}
 
 
+
+
+
 export const getHealthCheckQueryKey = () => {
     return [
     `/api/healthz`
@@ -871,7 +1418,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getHealthCheckQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof healthCheck>>> = ({ signal }) => healthCheck({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData> & { queryKey: QueryKey }
@@ -898,7 +1449,14 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 }
 
 
+
+
+
+
+
 export const getGetImageGenerationConfigUrl = () => {
+
+
 
 
   return `/api/images/config`
@@ -919,6 +1477,9 @@ export const getImageGenerationConfig = async ( options?: Parameters<typeof cust
 );}
 
 
+
+
+
 export const getGetImageGenerationConfigQueryKey = () => {
     return [
     `/api/images/config`
@@ -934,7 +1495,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetImageGenerationConfigQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getImageGenerationConfig>>> = ({ signal }) => getImageGenerationConfig({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getImageGenerationConfig>>, TError, TData> & { queryKey: QueryKey }
@@ -961,7 +1526,14 @@ export function useGetImageGenerationConfig<TData = Awaited<ReturnType<typeof ge
 }
 
 
+
+
+
+
+
 export const getGeneratePoeImageUrl = () => {
+
+
 
 
   return `/api/images/generate`
@@ -996,6 +1568,9 @@ return customFetch<PoeImageOutput>(getGeneratePoeImageUrl(),
 );}
 
 
+
+
+
 export const getGeneratePoeImageMutationKey = () => ['generatePoeImage'] as const;
 
 export const getGeneratePoeImageMutationOptions = <TError = ErrorType<ImageGenerationError>,
@@ -1010,11 +1585,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof generatePoeImage>>, GeneratePoeImageMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  generatePoeImage(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -1039,6 +1620,8 @@ export const useGeneratePoeImage = <TError = ErrorType<ImageGenerationError>,
     }
 
 export const getUpscalePoeImageUrl = () => {
+
+
 
 
   return `/api/images/upscale`
@@ -1074,6 +1657,9 @@ return customFetch<PoeUpscaleOutput>(getUpscalePoeImageUrl(),
 );}
 
 
+
+
+
 export const getUpscalePoeImageMutationKey = () => ['upscalePoeImage'] as const;
 
 export const getUpscalePoeImageMutationOptions = <TError = ErrorType<ImageGenerationError>,
@@ -1088,11 +1674,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof upscalePoeImage>>, UpscalePoeImageMutationVariables> = (props) => {
           const {data} = props ?? {};
 
           return  upscalePoeImage(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -1116,77 +1708,3 @@ export const useUpscalePoeImage = <TError = ErrorType<ImageGenerationError>,
       return useMutation(getUpscalePoeImageMutationOptions(options));
     }
 
-
-export const getSetAdminGenerationAccessMutationKey = () => ['setAdminGenerationAccess'] as const;
-
-    export type SetAdminGenerationAccessMutationBody = BodyType<AdminGenerationAccess>
-
-    /**
- * @summary Approve or revoke image-generation access for a CloudPainter account
- */
-export const useSetAdminGenerationAccess = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setAdminGenerationAccess>>, TError,SetAdminGenerationAccessMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof setAdminGenerationAccess>>,
-        TError,
-        SetAdminGenerationAccessMutationVariables,
-        TContext
-      > => {
-      return useMutation(getSetAdminGenerationAccessMutationOptions(options));
-    }
-
-export const getSetAdminGenerationAccessMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setAdminGenerationAccess>>, TError,SetAdminGenerationAccessMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof setAdminGenerationAccess>>, TError,SetAdminGenerationAccessMutationVariables, TContext> => {
-
-const mutationKey = getSetAdminGenerationAccessMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setAdminGenerationAccess>>, SetAdminGenerationAccessMutationVariables> = (props) => {
-          const {userId,data} = props ?? {};
-
-          return  setAdminGenerationAccess(userId,data,requestOptions)
-        }
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type SetAdminGenerationAccessMutationVariables = {userId: string;data: BodyType<AdminGenerationAccess>}
-
-/**
- * @summary Approve or revoke image-generation access for a CloudPainter account
- */
-export const setAdminGenerationAccess = async (userId: string,
-    adminGenerationAccess: AdminGenerationAccess, options?: Parameters<typeof customFetch>[1]): Promise<AdminGenerationAccessResult> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return customFetch<AdminGenerationAccessResult>(getSetAdminGenerationAccessUrl(userId),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(adminGenerationAccess)
-  }
-);}
-
-    export type SetAdminGenerationAccessMutationResult = NonNullable<Awaited<ReturnType<typeof setAdminGenerationAccess>>>
-
-    export type SetAdminGenerationAccessMutationError = ErrorType<void>
