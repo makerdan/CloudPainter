@@ -1,5 +1,9 @@
 # CloudPainter — separately scoped Unified readiness plan
 
+[Read-only discovery results](unified-readiness-discovery.md) record the
+subsequently authorized first stage. Implementation, infrastructure and cutover
+remain separately gated.
+
 ## Authorization and boundary
 
 The owner authorized **preparation of this readiness plan** in the active

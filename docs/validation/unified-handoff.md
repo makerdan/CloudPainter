@@ -4,6 +4,10 @@
 plan was authorized. See [readiness plan](unified-readiness-plan.md). This does
 not authorize implementation, resource provisioning or activation.
 
+The owner subsequently approved read-only discovery; its
+[metadata findings](unified-readiness-discovery.md) do not authorize bootstrap
+implementation or change the blocked cutover state.
+
 **Final state: BLOCKED. Unified is staged, not adopted; no cutover occurred.**
 Prepared 2026-10-13 (America/Chicago), repository `/home/runner/workspace`,
 branch `main`; inspected revision
