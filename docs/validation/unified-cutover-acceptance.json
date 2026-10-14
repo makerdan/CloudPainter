@@ -1,0 +1,30 @@
+{
+  "state": "PASS",
+  "independent": true,
+  "reviewer": "unified-local-acceptance (architect; attributable prior review completed on supplied owner-attributed supported-read evidence)",
+  "taskId": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
+  "runId": "664621dd-a244-4522-8e6f-47bd631fcc01",
+  "nativeTaskReconciliation": "Owner-attributed Replit supported all-task read requested 2026-10-14T04:40:25.039Z; 23 untruncated: 5 Merged, 11 Archived, 7 Drafts; none Active/Ready/Merging; #2 Merged. Subsequent platform update archived previously Draft suggestions #22/#23 (raw CANCELLED); no newer full read or new totals claimed. Preserve all existing task contracts; evidence: docs/validation/unified-phase6-reconciliation.md. Neither app Agent nor independent reviewer performed host read.",
+  "files": [
+    {"file":"scripts/failure-gate/cli.mjs","hash":"f8a19aef7c42f7e685dd032a90fa5e2a6fa85d90eb8cd9651aaf17c44a2952e3"},
+    {"file":"scripts/failure-gate/local-authority.mjs","hash":"e7484cbbf86090d30da74929b2b4cbc35ca3d25cf55b975c7d80686fd27a4236"},
+    {"file":"scripts/failure-gate/plans.mjs","hash":"920d1c317e3f24f47efbd864aa8bc582433ce36076f114a31cdbb6a0d6fa24cd"},
+    {"file":"scripts/failure-gate/recovery.mjs","hash":"6915ab1c640edbc9696334f2355d8082c293f22218eb74c8058740cb4446fb98"},
+    {"file":"scripts/failure-gate/runner.mjs","hash":"9dbb4f1b4dd5947f9d2e7342342b9d99c093979c6c5f4b7eb721c7817ffbc5d6"},
+    {"file":"scripts/failure-gate/store.mjs","hash":"743ff7c2f349907a3eb67354e902691e7fdef9948761d34519256792705fe1c8"},
+    {"file":"scripts/failure-gate/supervisor.py","hash":"98770c9d377093f91c63a445453ace0e02022bd127e47d4cdca5e3a4b58c0851"},
+    {"file":".agents/skills/failure-gate-unified/SKILL.md","hash":"f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12"},
+    {"file":"docs/validation/unified-tiers.json","hash":"9c52ad407a61f1acf0a7a958e6b1e154ad9427a45d6958a8b266ea77188d3f97"},
+    {"file":"docs/validation/failure-baseline.json","hash":"352892da28d8320bb6fcaa1d482bba8eecd9510786f3baf464e0b7343a57b871"},
+    {"file":"scripts/check-regression-guard.mjs","hash":"76db5e02fe3b1d42b453087d15ac1e02f4dd98539f42634dafae883ff939a265"},
+    {"file":"scripts/validate-task-plans.mjs","hash":"f68968c97463043a51cc9fb1dcc54b66adee4099b8cc0f1e4f5b6543d5fd1143"},
+    {"file":"scripts/validation-tier.mjs","hash":"dedde824b434b1eb16884fe3148c2c9fa2d36a27790a67d6cfca2e0d7044f603"},
+    {"file":"scripts/new-plan.mjs","hash":"44b5f9f3dcfbfbb44edc907c9c41e2f68a583e3dd7ac41871611395352ffdeb9"},
+    {"file":"scripts/run-validation.mjs","hash":"1bdf8c8d6be8172a316e7f470cbbdc8eb092cb3ff6787ab3b1d28026ac0c2b41"},
+    {"file":"scripts/check-failure-gate.mjs","hash":"38ea1d8ddaeccb7ae720c482cbeff4a05269ee93d922dfb439faf6864a8b84a9"},
+    {"file":"scripts/amend-plan.mjs","hash":"78275c20722644df5ab6e14eab611bcb2ab6dd4340681a5811fdfa97d981a80c"},
+    {"file":"scripts/tests/failure-gate.test.mjs","hash":"55d89a815d7bdc9e925f6e35699aaf626897fc4b0934ee42ade179bec2d23aa7"},
+    {"file":"scripts/tests/check-regression-guard.test.mjs","hash":"e3e2d8bbe398794aaed86035d7c85325eac5b5d87481e0fc100f609de9f5244f"},
+    {"file":"scripts/configure-local-gate.mjs","hash":"0e6f12b7bf676153b3aa77b43eee88c55215d07d7766e936993bfce10bb4c271"}
+  ]
+}

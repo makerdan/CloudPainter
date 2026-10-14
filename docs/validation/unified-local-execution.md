@@ -1,5 +1,12 @@
 # Local Unified execution boundary
 
+**Effective state: ACTIVE**, cutover **2026-10-14T04:48:37.343Z** via
+`configure-local-gate.mjs activate`, after independent acceptance recorded in
+`unified-cutover-acceptance.json` and fresh reconciliation in
+`unified-phase6-reconciliation.md`. Failure Gate Unified governs new tasks from
+this point forward, within the local execution boundary below. The pre-cutover
+bootstrap instructions are retained as history, not a second admission policy.
+
 ## Authorized scope and acceptance
 
 The owner's attached instruction authorizes narrowed local implementation and

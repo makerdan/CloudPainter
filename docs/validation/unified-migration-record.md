@@ -2,7 +2,8 @@
 
 **Subsequent narrowed implementation:** see
 [current local handoff](unified-local-handoff.md) for the actual provisioned ID,
-bound-tier PASS, independent acceptance and remaining native-state blocker.
+bound-tier PASS, independent acceptance, fresh reconciliation and completed local
+cutover at 2026-10-14T04:48:37.343Z.
 Expanded prerequisites below are historical proposals where superseded by the
 owner-authorized local execution boundary, not additions to Unified.
 

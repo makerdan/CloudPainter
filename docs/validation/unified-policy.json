@@ -1,12 +1,19 @@
 {
   "schemaVersion": 1,
-  "mode": "staging",
+  "mode": "active",
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
   "authoritativeWorkspace": "/home/runner/workspace",
   "allocatorAuthorityVerified": false,
   "canonicalSource": ".agents/skills/failure-gate-unified/SKILL.md",
   "canonicalSha256": "f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12",
-  "cutover": null,
+  "cutover": {
+    "at": "2026-10-14T04:48:37.343Z",
+    "migrationId": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
+    "runId": "664621dd-a244-4522-8e6f-47bd631fcc01",
+    "acceptanceFile": "docs/validation/unified-cutover-acceptance.json",
+    "acceptanceHash": "2e623674a8d11ce3859fc36a20434558e4e2771b18919fa35e9817924db05256",
+    "boundary": "New local tasks only; isolated copies denied; CI independent"
+  },
   "capabilities": [],
   "legacyNativeTasks": [
     {

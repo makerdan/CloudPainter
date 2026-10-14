@@ -1,5 +1,28 @@
 # Independent acceptance — narrowed local implementation
 
+## Phase 6 completion
+
+The owner subsequently supplied fresh supported-interface evidence, requested
+2026-10-14T04:40:25.039Z, for all 23 tasks without a state filter or truncation.
+The independent reviewer `unified-local-acceptance` assessed it and returned:
+
+> PASS — I complete my prior independent review and accept conditional local
+> cutover.
+
+The reviewer explicitly attributed the host read to Replit, relayed by the owner,
+not to itself or the application Agent. It accepted the absence of Active, Ready
+or Merging tasks at the read time and assessed the subsequent Draft-suggestion
+archival as non-material to running contracts. See
+[fresh evidence](unified-phase6-reconciliation.md) and the actual
+[acceptance payload](unified-cutover-acceptance.json).
+
+**Full cutover acceptance: PASS.** The earlier remaining limitation below is
+preserved as history and has now been resolved, not waived. Existing passing
+validation is reused because source/plan/log/authority fingerprints still match.
+This acceptance alone does not claim activation; the handoff records its result.
+
+## Original implementation review and historical limitation
+
 Date: 2026-10-14 UTC. Reviewer: `unified-local-acceptance` (architect).
 This records the actual independent review returned to the main Agent, not a
 second invented approval. No remote tests or task-system queries were performed

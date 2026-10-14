@@ -2,8 +2,8 @@
 
 **Historical handoff:** the subsequent owner-authorized narrowed implementation
 and current disposition are in [local handoff](unified-local-handoff.md).
-Implementation verification passed; activation remains blocked by the explicitly
-recorded native-task reconciliation requirement. Earlier expanded prerequisites
+Implementation verification and subsequent fresh reconciliation passed; local
+activation is recorded at 2026-10-14T04:48:37.343Z. Earlier expanded prerequisites
 below are historical, not additions to the canonical Unified contract.
 
 **Subsequent owner authorization:** preparation of a separately scoped readiness
