@@ -6,6 +6,33 @@ metadata only, and Replit's published platform documentation. Secret values were
 not accessed or recorded. No restore, overwrite, deletion, or live-resource
 recovery test was performed.
 
+## Remix record
+
+- **Status:** Owner-confirmed. The owner said this project has become the Remix.
+  Available project metadata does not independently prove the Remix relationship.
+- **Current project identifier:** `4b60cdc8-3fdb-439e-b554-21dd7e77a03e`
+  (runtime `REPL_ID`; no Remix share URL was available to inspect).
+- **Source revision recorded before the owner's confirmation:**
+  `817e478a886a46ff919d9ff1c681e3d78324406f`, branch `main`, clean worktree.
+- **Current revision observed afterward:**
+  `4615c10a57e25d7724c94f7bf8fb7d762b84d513`, branch `main`, clean worktree.
+  The earlier revision is an ancestor of the current revision, but the exact
+  revision copied at Remix creation cannot be independently established.
+- Replit documentation describes Remix file/configuration and checkpoint-history
+  copying, but this project did not expose independent evidence of the creation
+  event or a parent-to-Remix link. Treat the backup as owner-confirmed, not
+  agent-verified.
+- **Documented Remix scope, not verified against this instance:** files,
+  configuration, and checkpoint file history are copied. The database is fresh
+  unless the owner selects the optional source-data copy; that selection is
+  unknown. Deployments, domains, and connector configurations are omitted.
+  Secret names are copied; values copy only when an owner remixes their own app,
+  and that ownership-specific result is unknown here. Replit says uploaded files
+  and App Storage objects are copied, but this app has no persistent upload or
+  App Storage use; browser-local sketches are not project files. Provider-side
+  accounts and data are not established as copied.
+- Remix documentation: [Remix an app](https://docs.replit.com/features/projects-and-artifacts/remix-an-app).
+
 ## Summary
 
 This project has source-control recovery and documented managed-PostgreSQL
@@ -13,6 +40,8 @@ recovery options, but these do not protect CloudPainter projects saved in an
 individual browser. Replit's App Storage is not used. The actual database
 recovery configuration, recent backup status, secret validity/recoverability,
 deployment settings, and external-provider recovery policies remain unknown.
+The owner's confirmation that this project is the Remix does not establish which
+optional data-copy choices were selected or prove that every resource was copied.
 
 ## Coverage inventory
 
