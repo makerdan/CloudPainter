@@ -1,0 +1,34 @@
+Prepare the Failure Gate Unified migration plan for this application using
+the latest verified Phase 0 backup record and Phase 1 inventory in this
+conversation. Retrieve any supporting project records yourself. If context is
+missing, repeat the necessary bounded discovery rather than asking me to
+reassemble reports, receipts, IDs, or file paths.
+
+Read the approved canonical Unified skill under .agents and plan to implement
+that contract without importing rules from older or copied skill definitions.
+Do not edit files, install anything, trigger remote CI, or change external
+resources in this planning phase.
+
+Preserve baselines, historical plans, logs, task metadata, and existing IDs and
+tier bindings. Default to finishing in-flight tasks under their original
+contract; ask me only if an unavoidable owner decision is required to close
+and replan one with a new ID.
+
+Discover and name each target file, mechanism, dependency, and required check.
+Specify Keep/Adapt/Supersede actions, new-task policy precedence, the cutover
+boundary, legacy-task isolation, and the implementation path for transactional
+IDs, exactly one of the four registered tiers per ID, wrong-tier default deny,
+documented amendments, baselines, bounded execution, and completion states.
+
+Include verification, regression protections for existing behavior, backup
+coverage, and a concrete rollback/recovery plan that does not overwrite live
+resources without separate approval. Separate destructive, irreversible,
+externally visible, or remote actions that need specific approval.
+
+Use the existing safe task provisioning/plan guards if available. If they are
+absent or incompatible, identify a bounded prerequisite to establish them;
+do not invent a compliant ID or claim missing enforcement exists.
+
+Return the complete app-specific plan and only the decisions I must make.
+Recommend the safest viable option for each decision. Ask for approval of
+this specific plan before implementation; do not require me to paste it back.
