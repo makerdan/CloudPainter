@@ -1,5 +1,9 @@
 # CloudPainter — Failure Gate migration handoff
 
+**Subsequent owner authorization:** preparation of a separately scoped readiness
+plan was authorized. See [readiness plan](unified-readiness-plan.md). This does
+not authorize implementation, resource provisioning or activation.
+
 **Final state: BLOCKED. Unified is staged, not adopted; no cutover occurred.**
 Prepared 2026-10-13 (America/Chicago), repository `/home/runner/workspace`,
 branch `main`; inspected revision

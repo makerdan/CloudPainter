@@ -1,5 +1,8 @@
 # CloudPainter Failure Gate Unified — staged implementation record
 
+[Readiness plan](unified-readiness-plan.md) addresses the remaining gaps.
+The owner authorized its preparation only; staging and cutover blockers remain.
+
 [Phase 5 handoff](unified-handoff.md) summarizes current authority, preserved
 legacy state, recovery precautions and the remaining **BLOCKED** cutover.
 
