@@ -6,20 +6,27 @@ CloudPainter is a browser-based sketch workspace for noticing shapes in a photog
 
 - The sole migration target is `.agents/skills/failure-gate-unified/SKILL.md`.
   Effective state is recorded in `docs/validation/unified-policy.json`. It is
-  `staging`, not an activation declaration. The checked live provisioner and tier
-  aliases must refuse execution while staging. Do not bypass them or mint a
-  manually compliant ID.
+  `staging`, not an activation declaration. General provisioning and validation
+  must refuse execution while staging; the sole exception is the enrolled,
+  exact-spec migration bootstrap described below. Do not bypass admission or
+  mint a manually compliant ID.
 - Follow `docs/validation/unified-migration-record.md` for the approved local
   scope, actual checks, remaining blockers, and cutover conditions. The historical
   `failure-gate` prompt is not a second policy source. Old v4/Core reports and
   plans remain historical, not instructions for new Unified tasks.
+- The subsequent owner-authorized narrowed implementation and execution boundary
+  are in `docs/validation/unified-local-execution.md`. A restricted, enrolled
+  migration may provision its one fixed plan while general admission remains
+  staged. Activation still requires observed bound-tier PASS and independent
+  acceptance; the owner's conditional cutover approval is already given.
 - Preserve the original native sketch-recovery task contract and native ID.
   There is no prior local gate ID/tier to invent or rebind. The candidate legacy
   allowlist is not permission to bypass tier admission.
 - Existing app commands, CI, hooks, workflows and data remain unchanged in their
   original roles. They are not thereby claimed as Unified-governed. Do not run
   the post-merge database hook or paid/provider/browser operations as gate tests.
-- Only after separate acceptance and cutover authorization may the project say
+- The owner has conditionally authorized cutover after successful checks and
+  documented acceptance. Only after that acceptance may the project say
   “Failure Gate Unified governs new tasks from this point forward.” Re-read
   in-flight state first. No new task may enter a legacy exception.
 

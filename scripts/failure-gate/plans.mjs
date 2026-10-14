@@ -29,6 +29,7 @@ function declarations(root, spec) {
 export function provision(root, spec) {
   const p = policy(root);
   validateSpec(spec);
+  if (p.mode === "staging" && sha(JSON.stringify(spec)) !== p.bootstrap?.specHash) throw new Error("Only the approved migration may be provisioned while staging");
   if (p.legacyNativeTasks.some(t => t.ref === spec.nativeTaskRef)) throw new Error("Legacy native task cannot be retroactively bound");
   const t = tier(root, spec.tier);
   declarations(root, spec);
@@ -36,8 +37,10 @@ export function provision(root, spec) {
   const planPath = ".local/tasks/" + id + ".md";
   // Reservation commits first. Any subsequent failure retains this ID forever.
   transaction(root, r => {
+    if (p.mode === "staging" && Object.values(r.records).some(record => record.bootstrapTask)) throw new Error("Migration identity already consumed; no replacement or reuse");
     if (r.records[id]) throw new Error("ID collision");
     r.records[id] = { id, status: "reserved", tier: spec.tier, tierHash: t.hash, contract: p.canonicalSha256,
+      bootstrapTask: p.mode === "staging",
       planPath, spec, events: [{ kind: "reserved", at: stamp() }], runs: [], preexistingNotes: [] };
   });
   try {
@@ -61,6 +64,7 @@ export function checkPlan(root, id, selectedTier, selectedPath, allowTierDrift =
   const p = policy(root);
   const record = registry(root).records[id];
   if (!record || record.status !== "provisioned") throw new Error("Unknown/non-executable task ID");
+  if (p.mode === "staging" && (!record.bootstrapTask || sha(JSON.stringify(record.spec)) !== p.bootstrap?.specHash)) throw new Error("Only the approved migration may execute while staging");
   if (record.contract !== p.canonicalSha256 || record.tier !== selectedTier || record.spec.tier !== record.tier) throw new Error("Wrong contract/tier: default deny");
   const t = tier(root, selectedTier);
   if (!allowTierDrift && record.tierHash !== t.hash) throw new Error("Tier definition changed; explicit amendment required");
@@ -74,6 +78,7 @@ export function checkPlan(root, id, selectedTier, selectedPath, allowTierDrift =
 }
 export function amend(root, id, nextTier, why, replacementSpec = null) {
   const p = policy(root);
+  if (p.mode === "staging") throw new Error("Migration bootstrap contract is fixed; amendment requires an approved staging-policy change");
   if (!filled(why)) throw new Error("Document amendment rationale");
   const existing = registry(root).records[id];
   if (!existing || existing.status !== "provisioned") throw new Error("Unknown/non-executable ID");

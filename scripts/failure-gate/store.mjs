@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { verifyLocalAuthority } from "./local-authority.mjs";
 
 export const TIERS = ["test-fast", "test-standard", "test-standard-plus", "test-heavy"];
 export const sha = value => crypto.createHash("sha256").update(value).digest("hex");
@@ -62,9 +63,9 @@ export function policy(root, execution = true) {
   if (p.schemaVersion !== 1 || !["staging", "active"].includes(p.mode) || !Array.isArray(p.capabilities) || !Array.isArray(p.legacyNativeTasks)) throw new Error("Unknown policy");
   if (p.canonicalSource !== ".agents/skills/failure-gate-unified/SKILL.md" || !/^[a-f0-9]{64}$/.test(p.canonicalSha256)) throw new Error("Canonical .agents target required");
   if (sha(readText(root, p.canonicalSource)) !== p.canonicalSha256) throw new Error("Canonical source drift");
-  if (execution && p.mode !== "active") throw new Error("BLOCKED: staged policy; cutover is not authorized");
-  if (execution && (!p.allocatorAuthorityVerified || p.authoritativeWorkspace !== root || process.env.REPL_ID !== p.projectId)) {
-    throw new Error("BLOCKED: authoritative allocator route not verified");
+  if (execution) {
+    if (p.mode !== "active" && !p.bootstrap) throw new Error("BLOCKED: staged policy; cutover is not authorized");
+    verifyLocalAuthority(root, p);
   }
   return p;
 }

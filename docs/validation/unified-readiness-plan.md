@@ -1,5 +1,10 @@
 # CloudPainter — separately scoped Unified readiness plan
 
+**Historical expanded proposal:** superseded for the current migration by the
+owner-authorized [local execution boundary](unified-local-execution.md) and
+[local handoff](unified-local-handoff.md). Distributed identity, external evidence
+storage and blanket recovery exercises are not canonical Unified prerequisites.
+
 [Read-only discovery results](unified-readiness-discovery.md) record the
 subsequently authorized first stage. Implementation, infrastructure and cutover
 remain separately gated.

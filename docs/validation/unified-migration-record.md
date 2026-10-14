@@ -1,5 +1,11 @@
 # CloudPainter Failure Gate Unified — staged implementation record
 
+**Subsequent narrowed implementation:** see
+[current local handoff](unified-local-handoff.md) for the actual provisioned ID,
+bound-tier PASS, independent acceptance and remaining native-state blocker.
+Expanded prerequisites below are historical proposals where superseded by the
+owner-authorized local execution boundary, not additions to Unified.
+
 [Readiness plan](unified-readiness-plan.md) addresses the remaining gaps.
 The owner authorized its preparation only; staging and cutover blockers remain.
 

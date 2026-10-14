@@ -1,5 +1,11 @@
 # CloudPainter — Failure Gate migration handoff
 
+**Historical handoff:** the subsequent owner-authorized narrowed implementation
+and current disposition are in [local handoff](unified-local-handoff.md).
+Implementation verification passed; activation remains blocked by the explicitly
+recorded native-task reconciliation requirement. Earlier expanded prerequisites
+below are historical, not additions to the canonical Unified contract.
+
 **Subsequent owner authorization:** preparation of a separately scoped readiness
 plan was authorized. See [readiness plan](unified-readiness-plan.md). This does
 not authorize implementation, resource provisioning or activation.

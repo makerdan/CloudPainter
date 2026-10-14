@@ -17,5 +17,13 @@
       "disposition": "Preserve the original sketch-recovery contract. This is not a legacy Failure Gate authorization or a runner bypass. Re-read native state before cutover."
     }
   ],
-  "ownerDirectionAdapter": null
+  "ownerDirectionAdapter": null,
+  "authority": {
+    "kind": "local-workspace-v1",
+    "receiptHash": "a5100fcdd0062ff3c4623251e3f5357feed9571a3a84091b897df85ccf06ac37"
+  },
+  "bootstrap": {
+    "specHash": "a36609461e1976b3ae401760664a542838b024e20bd19b6dfe687ce72db10b4d",
+    "specFile": "docs/validation/unified-local-migration-spec.json"
+  }
 }

@@ -1,6 +1,59 @@
 {
   "schemaVersion": 1,
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
-  "revision": 0,
-  "records": {}
+  "revision": 4,
+  "records": {
+    "FGU-81af9606-cc13-465c-99a0-820e95ec1e03": {
+      "id": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "f2718cf9f0ec3351b14ebfeecfb3181a930bc1dffed813b0ffafb6415dfd3478",
+      "contract": "f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12",
+      "bootstrapTask": true,
+      "planPath": ".local/tasks/FGU-81af9606-cc13-465c-99a0-820e95ec1e03.md",
+      "spec": {
+        "title": "Narrow local Failure Gate Unified migration",
+        "tier": "test-fast",
+        "why": "Gate-only JavaScript policy and control changes are covered by gate integration fixtures and Regression Guard without application database or browser changes.",
+        "what": "Verify a filesystem-bound authoritative workspace, restrict pre-cutover admission to this migration, preserve permanent IDs and original contracts, and condition activation on observed bound-tier PASS and independent acceptance.",
+        "regression": {
+          "covers": "Copied-workspace admission, wrong-tier execution, context loss, concurrent allocation and activation without acceptance.",
+          "testLocation": "scripts/tests/failure-gate.test.mjs",
+          "checks": "Real subprocess fixtures exercise provisioning and plan guards, copied receipts fail closed, and activation rejects missing or stale evidence."
+        },
+        "baselines": []
+      },
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-14T04:28:32.597Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-14T04:28:32.722Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "664621dd-a244-4522-8e6f-47bd631fcc01",
+          "state": "PASS",
+          "at": "2026-10-14T04:29:07.420Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "664621dd-a244-4522-8e6f-47bd631fcc01",
+          "reportPath": ".local/failure-gate/runs/FGU-81af9606-cc13-465c-99a0-820e95ec1e03/664621dd-a244-4522-8e6f-47bd631fcc01/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-14T04:28:54.880Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "fc79fe01a04a16b7162ae6dfa3112ca340c9ea660c9b17c8e3d87ef71b4bdc9f",
+      "assessment": {
+        "state": "PASS",
+        "runId": "664621dd-a244-4522-8e6f-47bd631fcc01",
+        "at": "2026-10-14T04:29:07.420Z"
+      }
+    }
+  }
 }
