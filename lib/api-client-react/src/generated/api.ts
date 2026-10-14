@@ -1376,6 +1376,83 @@ export const useDeleteProjectBackup = <TError = ErrorType<void>,
       return useMutation(getDeleteProjectBackupMutationOptions(options));
     }
 
+export const getExportProjectBackupsUrl = () => {
+
+
+
+
+  return `/api/project-backups/export`
+}
+
+/**
+ * @summary Download a bounded archive of the signed-in account's uploaded sketch backups
+ */
+export const exportProjectBackups = async ( options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getExportProjectBackupsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportProjectBackupsQueryKey = () => {
+    return [
+    `/api/project-backups/export`
+    ] as const;
+    }
+
+
+export const getExportProjectBackupsQueryOptions = <TData = Awaited<ReturnType<typeof exportProjectBackups>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportProjectBackups>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportProjectBackupsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportProjectBackups>>> = ({ signal }) => exportProjectBackups({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportProjectBackups>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportProjectBackupsQueryResult = NonNullable<Awaited<ReturnType<typeof exportProjectBackups>>>
+export type ExportProjectBackupsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Download a bounded archive of the signed-in account's uploaded sketch backups
+ */
+
+export function useExportProjectBackups<TData = Awaited<ReturnType<typeof exportProjectBackups>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportProjectBackups>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportProjectBackupsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getHealthCheckUrl = () => {
 
 

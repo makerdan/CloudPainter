@@ -1,4 +1,5 @@
 import { json, Router, type ErrorRequestHandler, type RequestHandler } from "express";
+import { pipeline } from "node:stream/promises";
 import { getAuth } from "@clerk/express";
 import {
   CreateProjectBackupBody,
@@ -14,6 +15,10 @@ import {
   MAX_CLOUD_PROJECT_BACKUPS,
   ProjectBackupStore,
 } from "../lib/projectBackupStore";
+import {
+  createProjectBackupArchive,
+  ProjectBackupArchiveLimitError,
+} from "../lib/projectBackupArchive";
 
 export const PROJECT_BACKUP_REQUEST_LIMIT_BYTES = MAX_CLOUD_PROJECT_BACKUP_BYTES + 128 * 1024;
 
@@ -67,6 +72,31 @@ export function createProjectBackupRouter(store: ProjectBackupStore) {
     } catch (error) {
       req.log.error({ err: error }, "Could not list account project backups");
       res.status(503).json({ error: "Project backups could not load. Please retry." });
+    }
+  });
+
+  router.get("/project-backups/export", async (req, res): Promise<void> => {
+    try {
+      const rows = await store.exportAll(res.locals.projectBackupOwner);
+      const archive = createProjectBackupArchive(rows);
+      res.status(200);
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", 'attachment; filename="cloudpainter-account-backups.zip"');
+      res.setHeader("Content-Length", archive.contentLength);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      await pipeline(archive.stream, res);
+    } catch (error) {
+      if (res.headersSent || res.destroyed) {
+        req.log.debug({ err: error }, "Account project backup export was interrupted");
+        if (!res.destroyed) res.destroy(error instanceof Error ? error : undefined);
+        return;
+      }
+      if (error instanceof ProjectBackupArchiveLimitError) {
+        res.status(413).json({ error: "Your account backup archive exceeds the export limit." });
+        return;
+      }
+      req.log.error({ err: error }, "Could not export account project backups");
+      res.status(503).json({ error: "Account backups could not be exported. Please retry." });
     }
   });
 

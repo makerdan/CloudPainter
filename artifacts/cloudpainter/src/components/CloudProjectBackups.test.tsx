@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   get: vi.fn(),
   remove: vi.fn(),
+  export: vi.fn(),
 }));
 
 vi.mock("./Account", () => ({
@@ -26,6 +27,7 @@ vi.mock("wouter", () => ({
 vi.mock("@workspace/api-client-react", () => ({
   listProjectBackups: mocks.list,
   createProjectBackup: mocks.create,
+  exportProjectBackups: mocks.export,
   getProjectBackup: mocks.get,
   deleteProjectBackup: mocks.remove,
 }));
@@ -57,6 +59,7 @@ describe("account project backups", () => {
     mocks.create.mockReset().mockResolvedValue(summary);
     mocks.get.mockReset().mockResolvedValue({ ...summary, backup: "saved backup" });
     mocks.remove.mockReset().mockResolvedValue(undefined);
+    mocks.export.mockReset().mockResolvedValue(new Blob(["zip archive"]));
   });
   afterEach(() => {
     cleanup();
@@ -112,5 +115,33 @@ describe("account project backups", () => {
     await waitFor(() => expect(mocks.remove).toHaveBeenCalledWith(summary.id, expect.objectContaining({
       headers: { "X-Project-Session": "session_a" },
     })));
+  });
+
+  it("downloads the server-backed account archive and reports export failures", async () => {
+    mocks.list.mockResolvedValue({ backups: [summary], totalBytes: summary.sizeBytes, accountLimitBytes: 33554432 });
+    const createObjectURL = vi.fn(() => "blob:account-backups");
+    const revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    vi.stubGlobal("URL", Object.assign(globalThis.URL, { createObjectURL, revokeObjectURL }));
+    const view = render(<CloudProjectBackups project={project} open onRestore={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("button-toggle-account-backups"));
+    await waitFor(() => expect(screen.getByText("River study")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("button-download-account-backups"));
+
+    await waitFor(() => expect(mocks.export).toHaveBeenCalledWith(expect.objectContaining({
+      headers: { "X-Project-Session": "session_a" },
+    })));
+    await waitFor(() => expect(screen.getByTestId("account-backup-message").textContent).toMatch(/archive was downloaded/i));
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(click).toHaveBeenCalled();
+    await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith("blob:account-backups"));
+
+    mocks.export.mockRejectedValueOnce(new Error("download interrupted"));
+    fireEvent.click(screen.getByTestId("button-download-account-backups"));
+    await waitFor(() => expect(screen.getByTestId("account-backup-error").textContent).toMatch(/could not be downloaded/i));
+
+    click.mockRestore();
+    vi.unstubAllGlobals();
+    view.unmount();
   });
 });

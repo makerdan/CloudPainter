@@ -74,9 +74,11 @@ test("project backups are owner-scoped, idempotent, and quota-bounded", { timeou
     const listA = await store.list("user_a");
     assert.equal(listA.backups.length, 2);
     assert.equal(listA.totalBytes, 6);
+    assert.deepEqual((await store.exportAll("user_a")).map(row => row.userId), ["user_a", "user_a"]);
     const listB = await store.list("user_b");
     assert.equal(listB.backups.length, 2);
     assert.equal(listB.totalBytes, 6);
+    assert.deepEqual((await store.exportAll("user_b")).map(row => row.userId), ["user_b", "user_b"]);
   });
 });
 

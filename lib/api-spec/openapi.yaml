@@ -426,6 +426,26 @@ paths:
         "401": { description: Sign in required or session changed }
         "404": { description: Backup not found for this account }
         "503": { description: Project backup storage is temporarily unavailable }
+  /project-backups/export:
+    parameters:
+      - in: header
+        name: X-Project-Session
+        required: true
+        schema: { type: string, maxLength: 256 }
+        description: Must match the verified current Clerk session to prevent delayed requests crossing accounts.
+    get:
+      operationId: exportProjectBackups
+      tags: [projects]
+      summary: Download a bounded archive of the signed-in account's uploaded sketch backups
+      responses:
+        "200":
+          description: ZIP archive containing only account-owned backups and a manifest
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        "401": { description: Sign in required or session changed }
+        "413": { description: Account backup count or size exceeds the export limit }
+        "503": { description: Project backups are temporarily unavailable }
   /healthz:
     get:
       operationId: healthCheck

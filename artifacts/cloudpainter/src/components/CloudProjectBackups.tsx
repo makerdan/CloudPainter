@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import {
   createProjectBackup as createAccountBackup,
   deleteProjectBackup,
+  exportProjectBackups,
   getProjectBackup,
   listProjectBackups,
   type ProjectBackupList,
@@ -156,6 +157,37 @@ function SignedInCloudProjectBackups({
     }
   };
 
+  const downloadBackups = async () => {
+    const controller = new AbortController();
+    activeController.current = controller;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const archive = await exportProjectBackups({ ...request(), signal: controller.signal });
+      const objectUrl = URL.createObjectURL(archive);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = "cloudpainter-account-backups.zip";
+      link.hidden = true;
+      document.body.appendChild(link);
+      try {
+        link.click();
+      } finally {
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+      }
+      setMessage("Your account backup archive was downloaded. It contains only sketches backed up to this account.");
+    } catch (reason) {
+      if (!controller.signal.aborted) {
+        setError(errorMessage(reason, "Account backups could not be downloaded. Please retry."));
+      }
+    } finally {
+      if (activeController.current === controller) activeController.current = null;
+      setBusy(false);
+    }
+  };
+
   const storagePercent = data
     ? Math.min(100, Math.round(data.totalBytes / data.accountLimitBytes * 100))
     : 0;
@@ -200,6 +232,15 @@ function SignedInCloudProjectBackups({
         data-testid="button-start-account-backup"
       >
         Back up this sketch
+      </button>
+      <button
+        type="button"
+        className="button button-small"
+        onClick={() => void downloadBackups()}
+        disabled={busy || !open || !data?.backups.length}
+        data-testid="button-download-account-backups"
+      >
+        Download all backups
       </button>
     </div>
     {confirmBackup && <div className="cloud-project-confirmation" role="group" aria-label="Confirm account backup">

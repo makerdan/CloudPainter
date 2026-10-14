@@ -4,7 +4,11 @@ import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import express from "express";
 import { clerkMiddleware } from "@clerk/express";
 import type { ProjectBackupRow } from "@workspace/db/schema";
-import type { CreateProjectBackupResult, ProjectBackupStore } from "../lib/projectBackupStore";
+import {
+  MAX_CLOUD_PROJECT_BACKUP_BYTES,
+  type CreateProjectBackupResult,
+  type ProjectBackupStore,
+} from "../lib/projectBackupStore";
 import { createProjectBackupRouter } from "./project-backups";
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -31,6 +35,10 @@ function createMemoryStore(): ProjectBackupStore {
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
         .map(({ id, title, sizeBytes, createdAt }) => ({ id, title, sizeBytes, createdAt }));
       return { backups, totalBytes: backups.reduce((sum, row) => sum + row.sizeBytes, 0) };
+    },
+    async exportAll(userId) {
+      return [...rows.values()].filter(row => row.userId === userId)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     },
     async get(userId, id) {
       const row = rows.get(id);
@@ -75,7 +83,14 @@ test("project backup routes require the current account session and isolate all 
     publishableKey: `pk_test_${Buffer.from("project-backups-test.clerk.accounts.dev$").toString("base64")}`,
     secretKey: "sk_test_fixture",
   }));
-  app.use("/api", createProjectBackupRouter(createMemoryStore()));
+  app.use((req, _res, next) => {
+    Object.defineProperty(req, "log", {
+      value: { error: () => {}, debug: () => {} },
+    });
+    next();
+  });
+  const store = createMemoryStore();
+  app.use("/api", createProjectBackupRouter(store));
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>(resolve => server.once("listening", resolve));
   const base = `http://127.0.0.1:${(server.address() as { port: number }).port}/api/project-backups`;
@@ -99,6 +114,7 @@ test("project backup routes require the current account session and isolate all 
     assert.equal((await request("", "user_a", "session-a", {
       headers: { "X-Project-Session": "session-b" },
     })).status, 401);
+    assert.equal((await request("/export")).status, 401);
 
     const backup = JSON.stringify({
       format: "cloudpainter-project",
@@ -143,6 +159,65 @@ test("project backup routes require the current account session and isolate all 
     assert.equal((await request(`/${summary.id}`, "user_b", "session-b")).status, 404);
     assert.equal((await request(`/${summary.id}`, "user_b", "session-b", { method: "DELETE" })).status, 404);
 
+    const otherAccountBackup = JSON.stringify({
+      format: "cloudpainter-project",
+      version: 1,
+      project: { title: "Private other account sketch" },
+    });
+    await store.create("user_b", randomUUID(), "Private other account sketch", otherAccountBackup);
+    const exported = await request("/export", "user_a", "session-a");
+    assert.equal(exported.status, 200);
+    assert.match(exported.headers.get("content-type") ?? "", /^application\/zip\b/);
+    assert.equal(exported.headers.get("cache-control"), "private, no-store");
+    assert.match(exported.headers.get("content-disposition") ?? "", /cloudpainter-account-backups\.zip/);
+    const archiveBytes = Buffer.from(await exported.arrayBuffer());
+    assert.equal(archiveBytes.readUInt32LE(0), 0x0403_4b50);
+    const archiveText = archiveBytes.toString("utf8");
+    assert.match(archiveText, /cloudpainter-account-backups/);
+    assert.ok(archiveText.includes(backup));
+    assert.ok(!archiveText.includes(otherAccountBackup));
+
+    const maxSizedBackup = "x".repeat(MAX_CLOUD_PROJECT_BACKUP_BYTES);
+    store.exportAll = async () => Array.from({ length: 17 }, (_, index) => ({
+      id: randomUUID(),
+      userId: "user_a",
+      requestId: randomUUID(),
+      title: `Large backup ${index}`,
+      backup: maxSizedBackup,
+      sizeBytes: MAX_CLOUD_PROJECT_BACKUP_BYTES,
+      createdAt: new Date(),
+    }));
+    const tooLarge = await request("/export", "user_a", "session-a");
+    assert.equal(tooLarge.status, 413);
+    assert.match((await tooLarge.json() as { error: string }).error, /export limit/i);
+
+    store.exportAll = async () => {
+      throw new Error("temporary database failure");
+    };
+    const failedExport = await request("/export", "user_a", "session-a");
+    assert.equal(failedExport.status, 503);
+    assert.equal(failedExport.headers.get("cache-control"), "private, no-store");
+
+    const interruptibleBackup = "x".repeat(MAX_CLOUD_PROJECT_BACKUP_BYTES);
+    store.exportAll = async () => [{
+      id: randomUUID(),
+      userId: "user_a",
+      requestId: randomUUID(),
+      title: "Interrupted download",
+      backup: interruptibleBackup,
+      sizeBytes: MAX_CLOUD_PROJECT_BACKUP_BYTES,
+      createdAt: new Date(),
+    }];
+    const abortController = new AbortController();
+    const partialExport = await request("/export", "user_a", "session-a", { signal: abortController.signal });
+    assert.equal(partialExport.status, 200);
+    const reader = partialExport.body?.getReader();
+    assert.ok(reader);
+    assert.ok((await reader.read()).value?.length);
+    abortController.abort();
+    await assert.rejects(reader.read());
+
+    store.exportAll = async () => [];
     const oversized = await request("", "user_a", "session-a", {
       method: "POST",
       body: JSON.stringify({ requestId: randomUUID(), backup: "x".repeat(2 * 1024 * 1024 + 1) }),

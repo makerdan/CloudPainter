@@ -28,6 +28,7 @@ export type CreateProjectBackupResult =
 
 export interface ProjectBackupStore {
   list(userId: string): Promise<{ backups: ProjectBackupSummary[]; totalBytes: number }>;
+  exportAll(userId: string): Promise<ProjectBackupRow[]>;
   get(userId: string, id: string): Promise<ProjectBackupRow | null>;
   create(
     userId: string,
@@ -63,6 +64,12 @@ export function createProjectBackupStore(
         totalBytes: sql<number>`coalesce(sum(${projectBackupsTable.sizeBytes}), 0)::int`,
       }).from(projectBackupsTable).where(eq(projectBackupsTable.userId, userId));
       return { backups: rows, totalBytes: usage?.totalBytes ?? 0 };
+    },
+    async exportAll(userId) {
+      return database.select().from(projectBackupsTable)
+        .where(eq(projectBackupsTable.userId, userId))
+        .orderBy(desc(projectBackupsTable.createdAt), desc(projectBackupsTable.id))
+        .limit(MAX_CLOUD_PROJECT_BACKUPS + 1);
     },
     async get(userId, id) {
       const [row] = await database.select().from(projectBackupsTable).where(and(

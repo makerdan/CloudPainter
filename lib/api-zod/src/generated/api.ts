@@ -552,6 +552,20 @@ export const DeleteProjectBackupResponse = zod.void()
 
 
 /**
+ * @summary Download a bounded archive of the signed-in account's uploaded sketch backups
+ */
+export const exportProjectBackupsHeaderXProjectSessionMax = 256;
+
+
+
+export const ExportProjectBackupsHeader = zod.object({
+  "X-Project-Session": zod.string().max(exportProjectBackupsHeaderXProjectSessionMax).describe('Must match the verified current Clerk session to prevent delayed requests crossing accounts.')
+})
+
+export const ExportProjectBackupsResponse = zod.unknown()
+
+
+/**
  * Returns server health status
  * @summary Health check
  */
