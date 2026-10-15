@@ -1,0 +1,72 @@
+Help resolve Failure Gate Unified tasks blocked by requests to "restore supported
+local execution authority." Keep the architecture flexible: enforce the contract
+without prescribing receipts, boot/device/inode checks, one authoritative
+workspace, remote infrastructure, signed task identities, or a new tier.
+Before edits, use a supported action to create and verify the backup, or reuse
+a verified existing migration backup if it still covers these changes. If you
+cannot create it, give me the minimal actual UI action and wait for confirmation.
+Record coverage appropriate to the gate/source metadata changes. Do not expose
+secrets, overwrite live resources, or demand a blanket recovery exercise.
+Read current project instructions, the approved canonical
+.agents/skills/failure-gate-unified/SKILL.md, policy, provisioner, plan guards,
+runner, local admission/recovery mechanisms, and relevant migration/acceptance
+records. Use only canonical skill sources under .agents as skill authority.
+If the revised skill is absent, identify that gap; do not invent its contents.
+Retrieve evidence yourself; do not ask me for original receipts or identifiers
+you can discover. Do not merge older Failure Gate variants into the contract.
+First diagnose read-only. Identify the exact failing check and actual execution
+context, distinguishing a stale local receipt/location, copied or unauthorized
+checkout, missing retained records, policy/source drift, and uncertain active
+runs or leases. Record observations and unknowns without exposing credentials.
+Determine whether ordinary tasks run here or in isolated environments, and which
+expected lifecycle events invalidate admission. A matching environment ID or
+copied receipt is not proof of safe authority. Do not assume CloudPainter's
+implementation or any other app's failure applies here.
+This prompt authorizes use of an EXISTING supported non-destructive recovery
+mechanism within the currently approved trust boundary, after its prerequisites
+and retained state are verified. Do not ask me to authorize that same routine
+recovery again. Preserve consumed IDs/tombstones, bindings, baseline/history and
+current policy; reconcile uncertain runs/leases, prevent conflicting writers,
+and record recovery provenance. Verify restored admission and affected guards
+before resuming ordinary work. Do not weaken rejection just to clear BLOCKED.
+If no suitable mechanism exists, do not improvise one under this authorization.
+Return a read-only blocker record specifying the missing capability, the
+least restrictive remedy, and the exact bounded maintenance/bootstrap route
+and authorization needed to implement it. Do not merely ask me to "restore
+authority." Owner consent alone does not make a missing route exist.
+Before publishing any implementation task plan, confirm that the supported
+provisioner generated its unique Unified ID, exactly one registered tier is
+bound and adequately covers the change, baseline declarations are complete,
+and the sealed plan passes local plan guards. If authority loss prevents those
+steps, keep the output a diagnostic/prerequisite record; do not publish an
+unprovisioned implementation plan or fabricate evidence. Do not evade admission
+by reopening initial staging, resetting the registry, editing receipt/authority
+flags, manually minting IDs, or pretending independent checks are bound-tier PASS.
+If an explicitly approved, supported bounded maintenance route is subsequently
+established, implement only its approved repair scope. Include Regression Guard
+coverage for material changes to the existing admission/recovery contract.
+An established route may require independent acceptance under current policy;
+do not invent a new universal reviewer or signing service.
+For the repair, favor supported continuity or repeatable recovery for expected
+host/task lifecycle changes. Retain stronger current project boundaries unless
+their amendment is specifically approved. Explain any necessary owner decision
+in terms of the concrete changed boundary, not technical chores I must perform.
+Do not promise automatic recovery where safe authority cannot be established.
+Use bounded isolated fixtures or supported non-destructive probes for applicable
+lifecycle invalidation, copied-context rejection, authorized recovery/continuity,
+preserved consumed IDs/bindings/history, uncertain runs/leases and continued
+wrong-tier/concurrency rejection. Run only checks authorized by the supported
+maintenance route or the generated task's bound tier; fixture success is not
+proof of untested live-host behavior. No live reboot, destructive restore,
+production change, remote CI dispatch or external infrastructure is authorized.
+Reuse unaffected valid migration and activation evidence. Do not repeat the full
+migration, reapprove an unchanged cutover, reopen closed IDs or activate a staged
+policy merely because recovery succeeded. If repair changes acceptance-covered
+sources or configuration, obtain only the affected required verification/
+acceptance before resuming. Keep unrelated Drafts and legacy contracts unchanged.
+Finish with the observed cause, supported recovery performed or exact remaining
+prerequisite, changed files/state, preserved records, commands and observed
+results, lifecycle evidence and limitations, and PASS/FAIL/BLOCKED/INCOMPLETE
+as appropriate. Separate successful recovery from completion of the original
+task's own validation. Update discoverable project instructions with the actual
+execution/recovery route so future Agents do not repeat this approval loop.
