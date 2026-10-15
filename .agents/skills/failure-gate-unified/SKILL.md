@@ -23,9 +23,12 @@ Failure Gate Unified. Govern both phases:
    catalog and available evidence.
 
 If the project's required provisioning, binding, or runner protections are
-missing, do not simulate them manually or claim the gate is enforced. Report the
-specific gap and mark the task `BLOCKED` until the project owner establishes
-the required machinery.
+missing, do not simulate them manually or claim the gate is enforced. Diagnose
+the specific gap and use an available supported recovery route within existing
+authorization. If recovery is unavailable or cannot safely complete, mark the
+affected task `BLOCKED`, record what was attempted, and identify the smallest
+missing capability or consequential owner decision. Do not substitute a generic
+request to "restore authority" for a diagnosis and actionable remedy.
 
 ## Non-negotiable contract
 
@@ -60,6 +63,61 @@ the required machinery.
 - `.local/tasks/` is environment-local task archive state. Do not bulk-commit
   it as part of source deliverables.
 
+## Portable execution and recovery
+
+The guarantees above are fixed; their implementation is project-specific.
+Use the least restrictive supported mechanism that enforces them in the actual
+host and task execution model. Unified does not prescribe boot fingerprints,
+device/inode checks, receipts, signed native-task identity, a single workspace,
+remote infrastructure, or a new validation tier. An environment ID, copied
+registry, token, or editable flag alone does not prove admission is enforced.
+Do not silently weaken an adopted project boundary; distinguish an unnecessary
+implementation restriction from a real safety requirement before changing it.
+
+Before declaring an installation operationally ready, establish and document:
+
+- Where ordinary Agent tasks provision, amend, and validate their plans,
+  including isolated task environments when the host actually uses them.
+- Which expected lifecycle events can invalidate that route, such as workspace
+  restart, host replacement, path changes, or task checkout creation.
+- How the route remains usable or is safely restored after applicable events,
+  how retained state is reconciled, and what genuinely requires owner approval.
+  No special re-enrollment is needed when the chosen mechanism remains valid.
+
+Verify applicable lifecycle behavior with bounded fixtures or supported
+non-destructive probes. Do not reboot a live host, restore live resources, or
+provision infrastructure merely to satisfy this requirement. A current-session
+PASS alone does not prove lifecycle readiness. Do not impose irrelevant host
+scenarios, a universal recovery drill, or arbitrary evidence expiry.
+
+When admission fails:
+
+1. Inspect current policy, execution context, available commands, retained
+   records, and prior authorization. Distinguish stale location metadata from
+   a copied/unauthorized environment, missing state, policy drift, or unresolved
+   active execution. Attribute observations; do not infer trust from a match
+   of identifiers alone. Retrieve evidence rather than asking for original receipts.
+2. If a supported recovery mechanism exists and the repair is within existing
+   authorization, use it without another routine approval. It must preserve
+   consumed IDs, tombstones, tier bindings, baseline/history and current policy,
+   reconcile uncertain runs/leases, and prevent concurrent or copied writers
+   from silently gaining authority. Verify restored admission and affected
+   guards before resuming the task.
+3. If the mechanism is missing or repair changes the approved boundary, provide
+   a read-only blocker record and the smallest required decision/capability.
+   Establish repairs only through an explicitly authorized, bounded maintenance
+   or bootstrap route with independent verification as required by project policy.
+   Owner approval alone is not proof that such a route exists or is safe.
+   Do not manufacture an ID, publish an unguarded implementation plan, reset
+   the ledger, edit receipt/authority flags as a shortcut, or reopen initial
+   staging merely to evade admission.
+
+Record recovery provenance, changed state, checks and remaining limits in
+supported project records without exposing credentials. Recovery does not
+rebind tasks, waive a tier, reactivate policy automatically, or turn historical
+results into a fresh validation PASS. Ask only for permissions or consequential
+decisions not already covered; continue independent safe discovery while blocked.
+
 ## Plan-time procedure
 
 Complete these steps before writing the first plan heading:
@@ -86,6 +144,11 @@ Complete these steps before writing the first plan heading:
    task; its ID is bound to this tier.
 5. **Validate the plan.** Run the project's local plan validation guards and
    resolve structural or formatting errors before execution.
+
+Before proposing or publishing an implementation task, confirm the provisioner
+generated its unique ID, exactly one adequate registered tier is bound, baseline
+declarations are complete, and the sealed plan passes local plan guards.
+A diagnostic or prerequisite record is not an admitted implementation plan.
 
 Every plan must include this section, naming exactly one authorized tier:
 
