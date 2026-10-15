@@ -5,7 +5,22 @@
   "authoritativeWorkspace": "/home/runner/workspace",
   "allocatorAuthorityVerified": false,
   "canonicalSource": ".agents/skills/failure-gate-unified/SKILL.md",
-  "canonicalSha256": "f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12",
+  "canonicalSha256": "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0",
+  "contractRevisions": [
+    {
+      "revision": 1,
+      "recordedAt": "2026-10-15T20:56:33Z",
+      "fromCanonicalSha256": "f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12",
+      "replacedInstalledSha256": "b04decfc03db49cab37c221f749f77be1000845d537ea4f9f6f6a25b629d1a06",
+      "toCanonicalSha256": "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0",
+      "sourceArchive": "attached_assets/failure-gate-unified-reviewed-final_1792097479101.zip",
+      "sourceArchiveSha256": "308f65bbcd275a6c58ee4cc6b99533a02070e78734886f91a97f4ca17b18c536",
+      "authorization": "Owner explicitly requested installation of this latest canonical skill as a contract revision resolving canonical source drift.",
+      "scope": "Canonical definition and policy pin only; preserve existing task contracts, IDs, bindings, history, activation marker and workspace-authority boundary.",
+      "record": "docs/validation/unified-contract-revision.md",
+      "operationalAcceptance": "Not established by source installation or pin alignment; workspace-authority failure remains."
+    }
+  ],
   "cutover": {
     "at": "2026-10-14T04:48:37.343Z",
     "migrationId": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",

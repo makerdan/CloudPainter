@@ -5,6 +5,11 @@ CloudPainter is a browser-based sketch workspace for noticing shapes in a photog
 ## Failure Gate migration state — ACTIVE
 
 - The sole migration target is `.agents/skills/failure-gate-unified/SKILL.md`.
+  The owner-approved latest canonical revision and matching policy pin are
+  recorded in `docs/validation/unified-contract-revision.md`; existing task
+  contracts and historical acceptance retain their original revisions.
+  Source/pin alignment does not repair the separate stale workspace authority
+  or establish operational acceptance of the revised contract. Do not bypass it.
   Effective state is recorded in `docs/validation/unified-policy.json`. It is
   `active`, following accepted cutover at **2026-10-14T04:48:37.343Z**.
   **Failure Gate Unified governs new tasks from this point forward.**

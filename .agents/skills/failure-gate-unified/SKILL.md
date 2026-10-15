@@ -39,6 +39,13 @@ request to "restore authority" for a diagnosis and actionable remedy.
   required stubs.
 - IDs are permanently unique and never reusable, including after a plan is
   deleted or cancelled.
+- Allocation must safely reserve identities under the project's actual writer
+  concurrency. Preserve consumed reservations after partial provisioning
+  failures; do not reissue them or expose partially provisioned tasks as
+  admitted. A supported retry may finish the same reservation for the same
+  task, but must not assign it to different work. Publish only after generation,
+  single-tier binding, complete declarations and sealed-plan guards succeed.
+  The storage and transaction mechanism remain project-specific.
 - Locate and verify the actual provisioning command in the project before
   relying on it. Do not invent a command or manually reuse an ID.
 
@@ -47,11 +54,17 @@ request to "restore authority" for a diagnosis and actionable remedy.
 - Bind each task ID to exactly one registered validation tier:
   `test-fast`, `test-standard`, `test-standard-plus`, or `test-heavy`.
 - Select the lightest registered tier that adequately covers the task.
+  Inspect the project's current tier definitions and actual check workloads;
+  do not infer coverage from a tier's name or assume the four names have
+  universal workloads. Record the definition reference and coverage rationale.
 - The runner must reject execution of that task ID under any tier other than
   its registered tier. All other tiers must block the ID.
-- If a task genuinely needs a heavier tier mid-flight, amend the plan and its
-  binding through the project's supported mechanism, recording the rationale.
-  Never bypass the guard or silently change tiers.
+- Every tier change, including escalation or downgrade, must use the project's
+  supported plan-and-binding amendment mechanism. Record the old/new tier,
+  rationale and coverage evidence; re-seal, re-guard and satisfy the applicable
+  approval policy before execution. Reject unsupported changes. Never silently
+  switch tiers, lower coverage to avoid a failure/resource limit, or assume
+  that this provision grants permission to downgrade.
 
 ### Baseline source and task metadata
 
@@ -120,13 +133,27 @@ decisions not already covered; continue independent safe discovery while blocked
 
 ## Plan-time procedure
 
-Complete these steps before writing the first plan heading:
+Preparation and generated stubs are not publication of an implementation task.
+Complete the following before proposing or publishing the plan. Follow the
+supported provisioner's input order, including supplying a tier/specification
+upfront when required; do not impose an impossible "no headings before a plan"
+sequence.
 
-1. **Provision safely.** Use the verified project provisioning script to mint
-   a unique ID and generate the plan file with its required stubs.
-2. **Scan the catalog.** Read `docs/validation/failure-baseline.json` and look
-   for exact suite, test, and signature matches.
-3. **Record the baseline.** Include the following section in every plan,
+1. **Establish scope and coverage.** Inspect the requested change, current
+   tier definitions and actual workloads. Choose the lightest adequate
+   registered tier and identify its supported invocation. Distinguish tier
+   registration, adequate coverage and current execution availability. An
+   unavailable required tier is not permission to select an inadequate one;
+   record any execution blocker without misrepresenting plan readiness.
+2. **Inspect the baseline catalog.** Read and validate
+   `docs/validation/failure-baseline.json`; look for exact suite, test, and
+   signature matches. Missing, unreadable or malformed data is not an empty
+   catalog and must not be reported as "None known." Resolve that prerequisite
+   through the supported route before declaring baseline admission complete.
+3. **Provision and bind safely.** Use the verified project script to mint the
+   unique ID and generate its plan/stubs with exactly one selected tier bound
+   through the supported mechanism. Do not fabricate an ID or binding.
+4. **Complete baseline declarations.** Include the following section in every plan,
    including when no failures are known:
 
    ```markdown
@@ -139,11 +166,11 @@ Complete these steps before writing the first plan heading:
    Replace the default statement with the exact known issues and their required
    `**Ignored baseline:**` or `**Owned baseline repair:**` labels when
    applicable. Do not treat a retry, by itself, as proof that a failure
-   predates the task.
-4. **Choose one tier.** Select the lightest registered tier that covers the
-   task; its ID is bound to this tier.
-5. **Validate the plan.** Run the project's local plan validation guards and
-   resolve structural or formatting errors before execution.
+   predates the task. Use "None known" only after successful catalog inspection
+   establishes no applicable known entries, not when inspection is unavailable.
+5. **Complete, seal and guard.** Fill in scope, baseline declarations and the
+   validation section, then seal through the project's supported mechanism.
+   Run local plan guards against that revision and resolve admission errors.
 
 Before proposing or publishing an implementation task, confirm the provisioner
 generated its unique ID, exactly one adequate registered tier is bound, baseline
@@ -156,11 +183,34 @@ Every plan must include this section, naming exactly one authorized tier:
 ## Validation
 **Command:** `test-standard`
 **Why:** <one-line reason this tier covers the task>
-**Do not escalate:** This task ID is strictly bound to this tier. Other tiers will block execution.
+**Coverage evidence:** <current tier definition/workload reference and supported invocation>
+**Do not switch tiers:** This task ID is strictly bound to this tier. Other tiers will block execution; changes require a supported amendment.
 ```
 
 Replace `test-standard` with the chosen registered tier. Keep the rationale
 specific to the task.
+
+## Approval, revisions and amendments
+
+A guard PASS establishes plan validity, not permission to implement. Before
+implementation, verify the project's supported approval policy is satisfied
+for this task and identifiable sealed plan revision. Valid prior authorization
+may suffice when it actually covers that scope and revision; do not invent a
+universal extra owner click, approval service, signature, or receipt format.
+
+Use the host's supported revision/seal mechanism to keep the task ID, plan
+contents, binding and approval evidence consistent. A path or mutable title
+alone is not a revision. Material scope, validation or baseline-ownership
+changes require a supported amendment, an updated seal and guard result.
+Obtain renewed approval when the change exceeds or invalidates the existing
+authorization under project policy; do not carry approval forward by assumption
+or request it again for unchanged authorized work.
+
+Tier names alone do not establish unchanged coverage. If a tier's actual
+workload materially changes, reassess the plan's coverage rationale and affected
+validation/approval evidence through the supported mechanism before using it.
+A matching alias is not permission to omit required checks. Do not turn
+unrelated changes or purely cosmetic edits into blanket reapproval requirements.
 
 ## Bounded execution
 
@@ -172,16 +222,38 @@ export TASK_PLAN_FILE=.local/tasks/<task-id>.md
 ```
 
 Follow the project's documented invocation for the bound validation tier.
-Before running, confirm the runner resolves the task ID to its registered tier.
+At admission, require agreement among the task ID, supplied plan, current
+sealed/admitted revision, registered tier and applicable approval evidence.
+Reject mismatched or stale context before workload execution. Use the host's
+actual context requirements; setting `TASK_PLAN_FILE` alone is not proof that
+these checks passed. Do not execute a plan for one ID using another ID's binding.
 
-- **Tier lock:** A command that does not match the ID's bound tier must be
-  blocked immediately.
+Check current task eligibility under the host's supported lifecycle before
+implementation or validation. Cancellation, supersession or closure must not
+silently retain permission for ordinary execution. Historical revalidation may
+use an explicitly authorized supported route without reopening the task or
+reassigning its ID. Do not impose universal lifecycle labels or a new approval
+step when existing authorization already covers that operation.
+
+- **Tier lock:** A top-level tier invocation that does not match the ID's bound
+  tier must be blocked immediately. Supported workload steps supervised by that
+  tier are not separate tier assignments.
 - **Bounded processes:** Use clean timeout bounds. Do not leave orphaned
   daemons, unmanaged child processes, or unmonitored process trees.
 - **Single flight:** Do not start duplicate top-level validation runs
   concurrently against the same target.
 - **Honest reporting:** A command that was skipped, interrupted, timed out, or
   could not be observed to completion is not a passing check.
+
+Retries, filtered checks and diagnostics must preserve task context and use a
+supported route that enforces the binding and permits the requested operation.
+A filtered retry does not replace the full required bound-tier workload.
+Direct invocation is allowed when it is a supported entry point enforcing the
+required admission and execution guards. Prohibit unguarded bypasses, not a
+particular command shape. Supervised steps within the assigned tier remain
+allowed; do not change filters/skip flags to omit required checks or use another
+tier to evade admission. Separately authorized independent checks may inform
+diagnosis, but cannot substitute for assigned-tier validation or establish its PASS.
 
 ## Failure classification and evidence gate
 
@@ -192,9 +264,11 @@ For each test failure, apply these rules in order:
    Skip it; do not investigate or fix it as part of the current task.
 2. **Owned baseline repair:** If the plan owns repair of the matching baseline,
    fix it and verify the resolution.
-3. **Unlisted failure:** Retry the failing test in isolation. A passing retry
-   establishes intermittency only; it does not establish pre-existing
-   provenance.
+3. **Unlisted failure:** Retry the failing test in isolation through a
+   supported diagnostic/retry route preserving task context and tier controls.
+   If no such route is available, record that limitation rather than bypassing
+   admission or claiming a retry occurred. A passing retry establishes
+   intermittency only; it does not establish pre-existing provenance.
 4. **Pragmatic evidence gate:** An unlisted failure may be self-classified as
    pre-existing only when strong contextual evidence supports that conclusion,
    such as relevant files being untouched by the task's diff or a documented
@@ -226,6 +300,14 @@ Conclude every task in exactly one of these states:
 
 Report the state with the validation command and its observed result. Do not
 report `PASS` when required checks were skipped, unverified, or failed.
+
+Associate validation evidence with its task ID, admitted plan revision, assigned
+tier, applicable workload definition and tested implementation/target through
+supported project records. A correct-tier PASS from before relevant source,
+configuration or target changes does not automatically validate the current
+work. Reuse unaffected evidence when its applicability is supported; rerun
+affected required checks and disclose remaining gaps. Do not impose arbitrary
+expiry, a universal fingerprint format or blanket full-suite retesting.
 
 ### Owner-directed administrative closure
 
