@@ -82,6 +82,58 @@ The automated owner-closure CLI stays denied without authentic direction
 integration. Visible owner instructions may be reported administratively under
 the canonical contract, never as test PASS or forged CLI authority.
 
+## Lifecycle readiness
+
+Ordinary tasks use `node scripts/new-plan.mjs path/to/spec.json` to provision
+their identity and sealed plan, and
+`node scripts/amend-plan.mjs ID TIER "rationale" [spec.json]` for supported
+amendments. In the task's own main-workspace or assigned task checkout, work
+from that environment's repository root. Confirm the recorded ID is still
+eligible and its exact sealed plan and registry binding are present; do not
+re-provision or fabricate replacement context when they are missing.
+Set `UNIFIED_TASK_ID` to that ID and `TASK_PLAN_FILE` to its recorded
+repository-relative plan path, then run `node scripts/validate-task-plans.mjs`
+and the full bound tier with `pnpm run <bound-tier> -- "$UNIFIED_TASK_ID"`.
+For an ID bound to `test-fast`, that runner command is
+`pnpm run test-fast -- "$UNIFIED_TASK_ID"`. A task executing in a separate
+checkout must validate there, not substitute a main-workspace result.
+Plan-guard success establishes plan validity, not implementation permission.
+
+Normal restarts and different checkout paths do not themselves invalidate
+admission: the current gate uses no machine-identity enrollment, boot/device
+fingerprint or workspace-location receipt. Provisioning, sealed-plan guards,
+single-tier binding, bounded execution and single flight remain enforced.
+The [owner-directed repair record](unified-gate-repair.md), especially
+"Changes" and "Observed maintenance checks", documents bounded disposable
+fixtures for changed boot/device inputs without reading machine identity,
+provisioning/guards/runs at a different checkout path, historical sealed
+contracts, supported amendments, and wrong-tier/changed-plan rejection.
+Those are simulated lifecycle/copy fixtures, not a live reboot, production
+recovery exercise or actual platform task-agent test. The repair's maintenance
+results are not a live validation-tier PASS or proof that every tier is ready.
+
+Admission still blocks on:
+
+- Canonical skill/policy pin drift.
+- Missing or malformed policy, registry or baseline catalog.
+- An unknown sealed-contract template.
+- An ineligible ID, missing or changed sealed plan, or missing/mismatched task
+  context.
+- A wrong tier or changed workload definition without a supported amendment.
+- Retained transaction/target locks or an active or uncertain owned run.
+- Unavailable required capabilities; higher-tier database/browser routes remain
+  denied rather than certified by fast-tier evidence.
+
+For gate defects, follow the canonical
+`.agents/skills/failure-gate-unified/SKILL.md` section "Installing, updating and
+repairing the gate" under an authentic owner instruction. That gate-only
+maintenance is outside ordinary task admission, does not mint IDs or rewrite
+ledger records/bindings, and reports its own checks as maintenance, not a tier
+PASS. Without the required owner instruction, report the exact blocker and
+smallest repair rather than bypassing it. Task-specific corrections and
+amendments still use the normal supported admission routes; gate repair does
+not waive them or replace a task's required bound-tier run.
+
 ## Verification and historical activation
 
 Migration tier: `test-fast`, justified in the generated specification. It runs

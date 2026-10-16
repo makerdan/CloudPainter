@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
-  "revision": 6,
+  "revision": 8,
   "records": {
     "FGU-81af9606-cc13-465c-99a0-820e95ec1e03": {
       "id": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
@@ -84,11 +84,29 @@
         {
           "kind": "provisioned",
           "at": "2026-10-16T20:15:36.721Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "da1ca297-df2c-479d-9f0a-4f68fc1ec40b",
+          "state": "PASS",
+          "at": "2026-10-16T20:26:41.261Z"
         }
       ],
-      "runs": [],
+      "runs": [
+        {
+          "runId": "da1ca297-df2c-479d-9f0a-4f68fc1ec40b",
+          "reportPath": ".local/failure-gate/runs/FGU-f04fbe19-d141-41c9-92c4-e0e54bbb2ac5/da1ca297-df2c-479d-9f0a-4f68fc1ec40b/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-16T20:26:27.334Z"
+        }
+      ],
       "preexistingNotes": [],
-      "planHash": "0f041cf5b1e2c88147754e352a278fab6f22d42650197a5ce66923233dd02eb7"
+      "planHash": "0f041cf5b1e2c88147754e352a278fab6f22d42650197a5ce66923233dd02eb7",
+      "assessment": {
+        "state": "PASS",
+        "runId": "da1ca297-df2c-479d-9f0a-4f68fc1ec40b",
+        "at": "2026-10-16T20:26:41.261Z"
+      }
     }
   }
 }
