@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
-  "revision": 4,
+  "revision": 6,
   "records": {
     "FGU-81af9606-cc13-465c-99a0-820e95ec1e03": {
       "id": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
@@ -54,6 +54,41 @@
         "runId": "664621dd-a244-4522-8e6f-47bd631fcc01",
         "at": "2026-10-14T04:29:07.420Z"
       }
+    },
+    "FGU-f04fbe19-d141-41c9-92c4-e0e54bbb2ac5": {
+      "id": "FGU-f04fbe19-d141-41c9-92c4-e0e54bbb2ac5",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "f2718cf9f0ec3351b14ebfeecfb3181a930bc1dffed813b0ffafb6415dfd3478",
+      "contract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-f04fbe19-d141-41c9-92c4-e0e54bbb2ac5.md",
+      "spec": {
+        "title": "Document Unified lifecycle readiness",
+        "tier": "test-fast",
+        "why": "This documentation-only addition describes existing gate behavior without changing code, policy, workloads or resources; the lightest registered tier exercises the gate lifecycle and plan guards.",
+        "coverageEvidence": "docs/validation/unified-tiers.json tiers.test-fast runs scripts/tests/failure-gate.test.mjs and scripts/tests/check-regression-guard.test.mjs, including portable checkout/restart fixtures, sealed revisions and wrong-tier rejection; supported invocation is pnpm run test-fast -- followed by this plan's generated Unified ID.",
+        "what": "Add exactly one Lifecycle readiness section to docs/validation/unified-local-execution.md and cite docs/validation/unified-gate-repair.md. State that ordinary tasks provision with node scripts/new-plan.mjs, amend with node scripts/amend-plan.mjs, and guard/validate with node scripts/validate-task-plans.mjs and their bound-tier runner in their own main-workspace or task checkout, using that environment's repository root, recorded Unified ID and exact sealed plan. Explain that normal restarts and different checkout paths do not invalidate admission because no machine identity enrollment is used, citing the bounded lifecycle evidence without claiming a live reboot or actual platform task-agent test. List remaining admission blockers: canonical-pin drift, missing or malformed policy/registry/baseline, unknown contract template, missing or changed sealed plan/context, wrong tier or changed workload definition, retained locks/uncertain runs, and unavailable required capabilities. State that owner-instructed gate repairs follow the canonical skill's Installing, updating and repairing the gate section; task-specific amendments still use normal supported admission. Preserve all other documentation, historical contracts, gate code, registry bindings, baseline, workloads, application code and resources. At execution, confirm the same generated ID and sealed plan are available and eligible inside the task environment; do not re-provision or fabricate a replacement if context is missing. Review the added prose against the cited repair evidence, then run only the full bound test-fast tier inside that task environment with UNIFIED_TASK_ID and TASK_PLAN_FILE set to this record and plan path. Do not substitute main-workspace results, direct unguarded tests or another tier. Planning approval is not implementation permission.",
+        "regression": {
+          "covers": "Existing portable admission, sealed-plan preservation and single-tier enforcement remain unchanged by this documentation-only addition.",
+          "testLocation": "scripts/tests/failure-gate.test.mjs and scripts/tests/check-regression-guard.test.mjs",
+          "checks": "The bound tier retains coverage for lifecycle and copied-checkout admission, historical sealed revisions, wrong-tier and edited-plan rejection; implementation also checks the new prose against the repair record and changes no runtime behavior."
+        },
+        "baselines": []
+      },
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-16T20:15:36.697Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-16T20:15:36.721Z"
+        }
+      ],
+      "runs": [],
+      "preexistingNotes": [],
+      "planHash": "0f041cf5b1e2c88147754e352a278fab6f22d42650197a5ce66923233dd02eb7"
     }
   }
 }
