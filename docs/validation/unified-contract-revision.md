@@ -1,5 +1,19 @@
 # Explicit canonical contract revision
 
+**Historical revision 1 below. Current revision 2:** owner-directed gate repair,
+recorded in `unified-gate-repair.md`, installs
+`attached_assets/failure-gate-unified-2026-10-15_1792180022158.zip` exactly.
+Archive SHA-256:
+`36af4dd4fbfd792159e8804c60c1519e3cc9f3224d056a193b226116a58adf11`.
+The canonical pin changes from
+`d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0`
+to `73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc`.
+The owner-authorized portable gate supersedes the location-bound restriction;
+existing task IDs, sealed contracts, tiers and historical evidence are unchanged.
+The earlier admission failures and acceptance limits below describe their
+inspection date, not current instructions. Old plans use their sealed template;
+only new provisioning or a supported amendment applies the current template.
+
 ## Authorization and boundary
 
 The owner explicitly requested installing the latest attached canonical skill

@@ -1,10 +1,10 @@
-# Local Unified execution boundary
+# Unified execution
 
 **Effective state: ACTIVE**, cutover **2026-10-14T04:48:37.343Z** via
 `configure-local-gate.mjs activate`, after independent acceptance recorded in
 `unified-cutover-acceptance.json` and fresh reconciliation in
 `unified-phase6-reconciliation.md`. Failure Gate Unified governs new tasks from
-this point forward, within the local execution boundary below. The pre-cutover
+this point forward, through the portable admission controls below. The pre-cutover
 bootstrap instructions are retained as history, not a second admission policy.
 
 ## Authorized scope and acceptance
@@ -16,26 +16,20 @@ Unified contract. Distributed allocation, signed task identities, external
 evidence storage, blanket recovery drills and remote CI integration are deferred,
 not prerequisites for this local-only change.
 
-Canonical authority: `.agents/skills/failure-gate-unified/SKILL.md`, SHA-256
-`f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12`.
+Canonical authority: `.agents/skills/failure-gate-unified/SKILL.md`; the current
+SHA-256 is recorded in `unified-policy.json`. Historical task contracts retain
+their own sealed revision, not the latest pin by substitution.
 Exactly one bound tier is authorized; references to a "ceiling" never authorize
 another tier. Canonical Regression Guard requirements remain applicable.
 
 ## Supported routes
 
-The Agent's shell executes from this workspace. The CLI derives its root from
-its module location, not a caller flag. Enrollment records the real root,
-filesystem device/inode and current kernel boot fingerprint in an ignored local
-receipt, with its digest pinned in policy. These are execution-location checks,
-not authentication. `REPL_ID` alone grants no authority.
-
-Isolated task copies, CI checkouts, moved roots and reboots cannot reuse this
-receipt. A missing or mismatched receipt blocks before provisioning or running.
-They may return proposed artifacts for authorized local application, but must not
-claim to run Unified or start implementation requiring an unprovisioned plan.
-There is no remote execution route or automatic re-enrollment. A new host/boot
-requires explicit review of identities, retained leases and recovery before an
-approved re-enrollment mechanism is added; never edit the receipt to bypass it.
+The CLI derives its root from its module location, not a caller flag. Admission
+works after restarts and in task environments, enforced by the provisioner,
+sealed plans and the tier-bound runner. No machine-identity enrollment is needed.
+Random UUIDs, transactional reservations and retained tombstones prevent reuse.
+The merge guard compares against the committed registry and rejects lost IDs,
+lost tombstones, rewritten history and unsupported record changes.
 
 This is cooperative repository enforcement, not a sandbox against a malicious
 workspace writer who can rewrite the gate itself. App credentials, Clerk roles
@@ -43,12 +37,9 @@ and provider authorization are unchanged.
 
 ## Commands and caller coverage
 
-Before cutover, `node scripts/configure-local-gate.mjs enroll-migration` enables
-only the exact approved migration specification. It does not activate Unified
-for general work. `node scripts/new-plan.mjs
-docs/validation/unified-local-migration-spec.json` reserves one permanent ID and
-generates its sealed plan. A failed/cancelled migration cannot mint a replacement
-under this bootstrap; reconcile explicitly instead.
+The original migration enrollment and activation commands are retired.
+Their reports, bootstrap records and cutover marker are history, not instructions
+to repeat staging or re-enrollment.
 
 After cutover, create a filled repository-relative specification and run:
 
@@ -62,13 +53,21 @@ pnpm run test-fast -- "$UNIFIED_TASK_ID"
 
 Replace `test-fast` with the ID's actual bound tier, never a convenient tier.
 All four package tier aliases use the checked CLI; direct `run-validation.mjs`
-also checks the ID, sealed plan, tier, authority and target lease. The plan guard
+also checks the ID, sealed plan, recorded contract, tier and target lease. The plan guard
 requires both context variables. Nested tier workload steps are covered by the
 parent's admission and supervision; they do not allocate another ID.
 
 Use `node scripts/amend-plan.mjs ID TIER "rationale" [spec.json]` after cutover
 for a supported recorded amendment. Do not mutate sealed plans or registry
-records manually. The bootstrap's fixed approved scope is not amendable.
+records manually. New specifications require `coverageEvidence`, identifying
+the tier definition/workload and supported invocation. An amendment applying the
+current contract requires a complete current specification; it records the
+old/new contract and tier and reseals the same ID.
+
+For gate installation, update or repair, follow the canonical skill's
+"Installing, updating and repairing the gate" section under an authentic owner
+instruction. Gate maintenance runs the gate tests directly as maintenance checks,
+not a tier PASS; it does not mint a task ID or rewrite ledger records.
 
 Independent application unit/build commands and
 `.github/workflows/cloudpainter-ci.yml` remain independent checks, not alternate
@@ -83,18 +82,17 @@ The automated owner-closure CLI stays denied without authentic direction
 integration. Visible owner instructions may be reported administratively under
 the canonical contract, never as test PASS or forged CLI authority.
 
-## Verification and activation
+## Verification and historical activation
 
 Migration tier: `test-fast`, justified in the generated specification. It runs
 gate fixtures and Regression Guard, with finite per-test/step/overall timeouts,
 process supervision and target exclusion. Wrong-tier/concurrency demonstrations
 use private fixture roots, not duplicate or unauthorized live runs.
 
-Activation is through `configure-local-gate.mjs activate ID acceptance.json`.
-It requires the migration's completed bound-tier PASS, quiescence, current raw
-logs, unchanged execution sources and independent acceptance covering those
-sources and current task reconciliation. A retry-only pass is insufficient.
-Acceptance is a trusted Agent/reviewer record, not an untrusted user-auth API.
+The completed cutover used `configure-local-gate.mjs activate ID acceptance.json`
+with independent acceptance and a completed migration run. That command is now
+retired; do not reactivate or treat old results as a fresh PASS. Current repair
+evidence is in `unified-gate-repair.md`.
 
 ## Preservation and recovery
 
@@ -111,5 +109,5 @@ superseded by this approved scope, not simultaneous new-task policies.
 During recovery stop admission first. Recover source through an approved
 checkpoint/Remix action, but never overwrite newer identity/tombstone or run
 records with an old ledger. Reconcile consumed IDs and uncertain leases before
-resuming. A stale or absent authority receipt must block. No live restore,
+resuming. No live restore,
 deletion, blanket recovery exercise or backup retirement is authorized.

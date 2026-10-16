@@ -8,15 +8,17 @@ CloudPainter is a browser-based sketch workspace for noticing shapes in a photog
   The owner-approved latest canonical revision and matching policy pin are
   recorded in `docs/validation/unified-contract-revision.md`; existing task
   contracts and historical acceptance retain their original revisions.
-  Source/pin alignment does not repair the separate stale workspace authority
-  or establish operational acceptance of the revised contract. Do not bypass it.
+  Current owner-directed maintenance is recorded in
+  `docs/validation/unified-gate-repair.md`. Machine-bound admission is removed;
+  IDs, sealed contracts, tier bindings and guarded execution remain enforced.
   Effective state is recorded in `docs/validation/unified-policy.json`. It is
   `active`, following accepted cutover at **2026-10-14T04:48:37.343Z**.
   **Failure Gate Unified governs new tasks from this point forward.**
   Every new plan must use the supported local provisioner and one recorded
   tier; do not bypass admission or mint a manually compliant ID.
-- Follow `docs/validation/unified-migration-record.md` for the approved local
-  scope, actual checks, remaining blockers, and cutover conditions. The historical
+- `docs/validation/unified-migration-record.md` preserves the original migration
+  scope, checks and cutover conditions as history, not extra prerequisites for
+  current gate maintenance or new tasks. The historical
   `failure-gate` prompt is not a second policy source. Old v4/Core reports and
   plans remain historical, not instructions for new Unified tasks.
 - The subsequent owner-authorized narrowed implementation and execution boundary
@@ -25,7 +27,9 @@ CloudPainter is a browser-based sketch workspace for noticing shapes in a photog
   acceptance and fresh task reconciliation are recorded in
   `docs/validation/unified-local-handoff.md` and
   `docs/validation/unified-cutover-acceptance.json`.
-  Authority is local-workspace-bound; isolated copies must fail closed.
+  Admission works after restarts and in task environments, enforced by the
+  provisioner, sealed plans and the tier-bound runner. Gate maintenance follows
+  the canonical skill's "Installing, updating and repairing the gate" section.
 - Preserve the original native sketch-recovery task contract and native ID.
   There is no prior local gate ID/tier to invent or rebind. The candidate legacy
   allowlist is not permission to bypass tier admission.

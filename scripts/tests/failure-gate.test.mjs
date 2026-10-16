@@ -5,12 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
-import { provision, checkPlan, amend, cancel } from "../failure-gate/plans.mjs";
+import { provision, checkPlan, amend, cancel, render } from "../failure-gate/plans.mjs";
 import { run, parseFailures, evaluateFailures, selfClassify, closeOwnerDirection } from "../failure-gate/runner.mjs";
-import { registry, readJson, atomicJson, lease, sha, TIERS, baseline, warnings, safePath } from "../failure-gate/store.mjs";
+import { registry, readJson, atomicJson, lease, sha, TIERS, baseline, warnings, safePath, policy } from "../failure-gate/store.mjs";
 import { transaction } from "../failure-gate/store.mjs";
 import { recoveryPreview } from "../failure-gate/recovery.mjs";
-import { workspaceIdentity, RECEIPT, enrollLocalMigration, activateLocal, SPEC, executionSources } from "../failure-gate/local-authority.mjs";
+import { assertRegistryEvolution } from "../failure-gate/merge-guard.mjs";
 
 const SOURCE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 process.env.REPL_ID ??= "private-fixture";
@@ -19,6 +19,7 @@ const json = (root, file, value) => atomicJson(root, file, value);
 const context = (root, id) => registry(root).records[id].planPath;
 const spec = (tier = "test-fast", extra = {}) => ({
   title: "Private fixture task", tier, why: "Exercise the fixture's bounded command",
+  coverageEvidence: "docs/validation/unified-tiers.json fixture work; node scripts/run-validation.mjs ID " + tier,
   what: "Verify local gate invariants using disposable files only.",
   regression: { covers: "Wrong-tier execution and lost task identity", testLocation: "scripts/tests/failure-gate.test.mjs", checks: "Rejects mismatched tiers before child launch and retains allocated identities." },
   baselines: [], ...extra,
@@ -35,15 +36,11 @@ function fixture(t, work = 'console.log("ok")', adapter = "exit") {
   const canonical = fs.readFileSync(path.join(SOURCE, ".agents/skills/failure-gate-unified/SKILL.md"));
   fs.writeFileSync(path.join(root, ".agents/skills/failure-gate-unified/SKILL.md"), canonical);
   json(root, "docs/validation/unified-policy.json", {
-    schemaVersion: 1, mode: "active", projectId: process.env.REPL_ID, authoritativeWorkspace: root,
+    schemaVersion: 1, mode: "active", projectId: process.env.REPL_ID,
     allocatorAuthorityVerified: true, canonicalSource: ".agents/skills/failure-gate-unified/SKILL.md",
-    canonicalSha256: sha(canonical), capabilities: [], legacyNativeTasks: [{ ref: "#2" }]
+    canonicalSha256: sha(canonical), planTemplates: { [sha(canonical)]: "unified-v2" },
+    capabilities: [], legacyNativeTasks: [{ ref: "#2" }]
   });
-  const receipt = { schemaVersion: 1, projectId: process.env.REPL_ID, identity: workspaceIdentity(root) };
-  json(root, RECEIPT, receipt);
-  const p = readJson(root, "docs/validation/unified-policy.json");
-  p.authority = { kind: "local-workspace-v1", receiptHash: sha(JSON.stringify(receipt)) };
-  json(root, "docs/validation/unified-policy.json", p);
   json(root, "docs/validation/unified-task-registry.json", { schemaVersion: 1, projectId: process.env.REPL_ID, revision: 0, records: {} });
   json(root, "docs/validation/failure-baseline.json", { schemaVersion: 1, entries: [] });
   const tiers = {};
@@ -181,15 +178,11 @@ test("explicit amendments update plan and binding together; drift requires renew
   await assert.rejects(run(root, id, "test-fast", context(root, id)), /Wrong contract/);
   assert.equal(registry(root).records[id].events.at(-1).kind, "amended");
 });
-test("legacy native linkage and copied authoritative workspace are rejected", t => {
+test("legacy native linkage cannot be retroactively bound", t => {
   const root = fixture(t);
   assert.throws(() => provision(root, spec("test-fast", { nativeTaskRef: "#2" })), /retroactively/);
-  const p = readJson(root, "docs/validation/unified-policy.json");
-  p.authoritativeWorkspace += "-other";
-  json(root, "docs/validation/unified-policy.json", p);
-  assert.throws(() => provision(root, spec()), /workspace authority/);
 });
-test("actual CLI route admits enrolled workspace but rejects a copied tree despite identical project environment", t => {
+test("actual CLI route admits a different checkout path with sealed plans and tier enforcement", async t => {
   const root = fixture(t);
   json(root, "spec.json", spec());
   const minted = cli(root, "new-plan", ["spec.json"]);
@@ -202,66 +195,128 @@ test("actual CLI route admits enrolled workspace but rejects a copied tree despi
   const copied = fs.mkdtempSync(path.join(os.tmpdir(), "cloudpainter-copied-gate-"));
   t.after(() => fs.rmSync(copied, { recursive: true, force: true }));
   fs.cpSync(root, copied, { recursive: true });
-  // Even rewriting the configured path and receipt hash cannot preserve the
-  // original filesystem identity. REPL_ID is identical in both subprocesses.
-  const p = readJson(copied, "docs/validation/unified-policy.json");
-  p.authoritativeWorkspace = copied;
-  json(copied, "docs/validation/unified-policy.json", p);
-  const rejected = cli(copied, "check-failure-gate", [id], { TASK_PLAN_FILE: plan });
-  assert.notEqual(rejected.status, 0);
-  assert.match(rejected.stderr, /workspace authority/);
+  const admitted = cli(copied, "check-failure-gate", [id], { TASK_PLAN_FILE: plan });
+  assert.equal(admitted.status, 0, admitted.stderr);
+  assert.equal(cli(copied, "validate-task-plans", [], { TASK_PLAN_FILE: plan, UNIFIED_TASK_ID: id }).status, 0);
+  assert.equal((await run(copied, id, "test-fast", plan)).state, "PASS");
+  assert.throws(() => checkPlan(copied, id, "test-heavy", plan), /Wrong contract\/tier/);
+  json(copied, "spec.json", spec());
+  const generated = cli(copied, "new-plan", ["spec.json"]);
+  assert.equal(generated.status, 0, generated.stderr);
+  assert.notEqual(generated.stdout.trim(), id);
   assert.equal(cli(root, "check-failure-gate", [id], { TASK_PLAN_FILE: plan }).status, 0);
 });
-function migrationFixture(t) {
+test("admission, provisioning and runner remain usable across simulated boot/device changes", async t => {
   const root = fixture(t);
-  const p = readJson(root, "docs/validation/unified-policy.json");
-  p.mode = "staging";
-  p.cutover = null;
-  delete p.authority;
-  json(root, "docs/validation/unified-policy.json", p);
-  json(root, SPEC, spec());
-  enrollLocalMigration(root);
-  return root;
-}
-test("restricted bootstrap mints one permanent migration ID without adopting general work", t => {
-  const root = migrationFixture(t);
-  assert.equal(readJson(root, "docs/validation/unified-policy.json").mode, "staging");
-  assert.throws(() => provision(root, spec("test-standard")), /approved migration/);
-  const id = provision(root, spec());
-  assert.throws(() => provision(root, spec()), /already consumed/);
-  assert.throws(() => amend(root, id, "test-standard", "Not an authorized migration amendment"), /fixed/);
-  cancel(root, id, "Retain a consumed migration identity");
-  assert.throws(() => provision(root, spec()), /already consumed/);
-  assert.equal(registry(root).records[id].status, "cancelled");
+  const read = fs.readFileSync, stat = fs.statSync;
+  let device = 1, boot = "fixture-first-boot", identityReads = 0;
+  // Instrument only the disposable root; no live host identity is changed.
+  fs.statSync = function(file, ...args) {
+    const result = stat.call(this, file, ...args);
+    if (file === root) { identityReads++; return { ...result, dev: device, ino: 256 }; }
+    return result;
+  };
+  fs.readFileSync = function(file, ...args) {
+    if (String(file) === "/proc/sys/kernel/random/boot_id") { identityReads++; return boot; }
+    return read.call(this, file, ...args);
+  };
+  try {
+    const id = provision(root, spec());
+    checkPlan(root, id, "test-fast", context(root, id));
+    device = 77; boot = "fixture-next-boot";
+    assert.equal(policy(root, true).mode, "active");
+    assert.equal((await run(root, id, "test-fast", context(root, id))).state, "PASS");
+    const next = provision(root, spec());
+    assert.notEqual(next, id);
+    assert.equal(identityReads, 0, "gate must not depend on machine identity");
+  } finally { fs.readFileSync = read; fs.statSync = stat; }
 });
-test("activation needs independent current source acceptance and a completed bound-tier run", async t => {
-  const root = migrationFixture(t);
+test("older sealed contract verifies unchanged after pin update; amendment explicitly adopts current contract", async t => {
+  const root = fixture(t);
+  const p = policy(root);
+  const oldContract = p.canonicalSha256;
+  p.planTemplates[oldContract] = "legacy-v1";
+  json(root, "docs/validation/unified-policy.json", p);
+  const oldSpec = spec(); delete oldSpec.coverageEvidence;
+  const id = provision(root, oldSpec);
+  const plan = context(root, id);
+  const sealed = fs.readFileSync(path.join(root, plan), "utf8");
+  assert.match(sealed, /Do not escalate/);
+  fs.appendFileSync(path.join(root, p.canonicalSource), "\nFixture next revision\n");
+  p.canonicalSha256 = sha(fs.readFileSync(path.join(root, p.canonicalSource)));
+  p.planTemplates[p.canonicalSha256] = "unified-v2";
+  json(root, "docs/validation/unified-policy.json", p);
+  checkPlan(root, id, "test-fast", plan);
+  assert.equal((await run(root, id, "test-fast", plan)).state, "PASS");
+  assert.equal(registry(root).records[id].contract, oldContract);
+  assert.equal(fs.readFileSync(path.join(root, plan), "utf8"), sealed);
+  const current = provision(root, spec());
+  assert.equal(registry(root).records[current].contract, p.canonicalSha256);
+  assert.throws(() => amend(root, id, "test-fast", "Adopt current contract"), /coverageEvidence/);
+  amend(root, id, "test-fast", "Adopt current contract", spec());
+  assert.equal(registry(root).records[id].contract, p.canonicalSha256);
+  checkPlan(root, id, "test-fast", plan);
+  const broken = policy(root); delete broken.planTemplates[p.canonicalSha256];
+  json(root, "docs/validation/unified-policy.json", broken);
+  assert.throws(() => checkPlan(root, id, "test-fast", plan), /Unknown sealed contract/);
+});
+test("new plans render the canonical Validation section exactly and require coverage evidence", t => {
+  const root = fixture(t);
+  const input = spec();
+  const canonical = fs.readFileSync(path.join(root, policy(root).canonicalSource), "utf8");
+  const required = canonical.match(/Every plan must include this section[\s\S]*?```markdown\n([\s\S]*?)```/)[1]
+    .replace("`test-standard`", "`test-fast`")
+    .replace("<one-line reason this tier covers the task>", input.why)
+    .replace("<current tier definition/workload reference and supported invocation>", input.coverageEvidence);
+  const id = provision(root, input);
+  const plan = fs.readFileSync(path.join(root, context(root, id)), "utf8");
+  assert.ok(plan.includes(required));
+  for (const section of ["What & Why", "Pre-existing failures to ignore", "Validation", "Regression Guard"]) {
+    assert.ok(plan.includes("## " + section));
+  }
+  const before = Object.keys(registry(root).records);
+  assert.throws(() => provision(root, { ...input, coverageEvidence: undefined }), /coverageEvidence/);
+  assert.deepEqual(Object.keys(registry(root).records), before);
+  assert.throws(() => render(id, policy(root).canonicalSha256, input, "unknown"), /Unknown/);
+});
+test("committed merge guard rejects lost IDs, tombstones and unsupported binding edits", async t => {
+  const root = fixture(t);
+  const git = args => {
+    const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8", timeout: 5000 });
+    assert.equal(result.status, 0, result.stderr);
+  };
   const id = provision(root, spec());
-  assert.throws(() => activateLocal(root, id, "acceptance.json"), /PASS required/);
-  const report = await run(root, id, "test-fast", context(root, id));
-  assert.equal(report.state, "PASS");
-  const accepted = { state: "PASS", independent: false, reviewer: "Private reviewer fixture",
-    taskId: id, runId: report.runId, nativeTaskReconciliation: "Private fixture contains no native tasks",
-    files: executionSources(root) };
-  json(root, "acceptance.json", accepted);
-  assert.throws(() => activateLocal(root, id, "acceptance.json"), /Independent acceptance/);
-  accepted.independent = true;
-  json(root, "acceptance.json", accepted);
-  const source = "scripts/failure-gate/cli.mjs";
-  const original = fs.readFileSync(path.join(root, source), "utf8");
-  fs.appendFileSync(path.join(root, source), "\n// drift\n");
-  assert.throws(() => activateLocal(root, id, "acceptance.json"), /source drift/);
-  accepted.files = executionSources(root);
-  json(root, "acceptance.json", accepted);
-  assert.throws(() => activateLocal(root, id, "acceptance.json"), /Run\/review source drift/);
-  fs.writeFileSync(path.join(root, source), original);
-  accepted.files = executionSources(root);
-  json(root, "acceptance.json", accepted);
-  const cutover = activateLocal(root, id, "acceptance.json");
-  assert.equal(cutover.migrationId, id);
-  assert.equal(readJson(root, "docs/validation/unified-policy.json").mode, "active");
-  assert.equal(registry(root).records[id].tier, "test-fast");
-  assert.notEqual(provision(root, spec()), id);
+  const tombstone = provision(root, spec());
+  cancel(root, tombstone, "Retain fixture cancellation");
+  const committed = registry(root);
+  git(["init", "--quiet"]);
+  git(["add", "docs/validation/unified-task-registry.json"]);
+  git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "core.hooksPath=/dev/null", "commit", "--quiet", "-m", "Fixture registry baseline"]);
+  const restore = () => json(root, "docs/validation/unified-task-registry.json", committed);
+  for (const missing of [id, tombstone]) {
+    const dropped = structuredClone(committed); delete dropped.records[missing];
+    json(root, "docs/validation/unified-task-registry.json", dropped);
+    const denied = cli(root, "check-failure-gate", []);
+    assert.notEqual(denied.status, 0); assert.match(denied.stderr, /dropped ID or tombstone/);
+    restore();
+  }
+  for (const key of ["tier", "planHash", "contract"]) {
+    const changed = structuredClone(committed); changed.records[id][key] = key === "tier" ? "test-heavy" : "0".repeat(64);
+    json(root, "docs/validation/unified-task-registry.json", changed);
+    assert.throws(() => registry(root), /unsupported record change/);
+    restore();
+  }
+  const resurrected = structuredClone(committed); resurrected.records[tombstone].status = "provisioned";
+  assert.throws(() => assertRegistryEvolution(committed, resurrected), /terminal identity reopened/);
+  const withTombstones = { ...committed, tombstones: { retained: { tier: "test-fast" } } };
+  assert.throws(() => assertRegistryEvolution(withTombstones, committed), /dropped or changed tombstone/);
+  const deletedHistory = structuredClone(committed); deletedHistory.records[id].events.shift();
+  assert.throws(() => assertRegistryEvolution(committed, deletedHistory), /rewritten event\/run history/);
+  assert.equal(cli(root, "check-failure-gate", []).status, 0);
+  amend(root, id, "test-standard", "Supported fixture amendment");
+  assert.equal((await run(root, id, "test-standard", context(root, id))).state, "PASS");
+  cancel(root, id, "Supported fixture cancellation");
+  assert.equal(registry(root).records[id].status, "cancelled");
 });
 test("symlinks including dangling links and traversal are denied", t => {
   const root = fixture(t);
@@ -402,7 +457,7 @@ test("superseded alias cannot import the former rules; canonical target remains 
   assert.match(command, /historical alias, not a policy definition/);
   assert.doesNotMatch(command, /three isolated retries|at least two factors/);
   assert.equal(sha(fs.readFileSync(path.join(SOURCE, ".agents/skills/failure-gate-unified/SKILL.md"))),
-    "f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12");
+    readJson(SOURCE, "docs/validation/unified-policy.json").canonicalSha256);
 });
 test("administrative closure cannot forge authority or overwrite failed assessment", async t => {
   const root = fixture(t, 'process.exit(1)');

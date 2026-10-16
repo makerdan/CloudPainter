@@ -2,10 +2,14 @@
   "schemaVersion": 1,
   "mode": "active",
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
-  "authoritativeWorkspace": "/home/runner/workspace",
   "allocatorAuthorityVerified": false,
   "canonicalSource": ".agents/skills/failure-gate-unified/SKILL.md",
-  "canonicalSha256": "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0",
+  "canonicalSha256": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+  "planTemplates": {
+    "f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12": "legacy-v1",
+    "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0": "legacy-v1",
+    "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc": "unified-v2"
+  },
   "contractRevisions": [
     {
       "revision": 1,
@@ -19,6 +23,17 @@
       "scope": "Canonical definition and policy pin only; preserve existing task contracts, IDs, bindings, history, activation marker and workspace-authority boundary.",
       "record": "docs/validation/unified-contract-revision.md",
       "operationalAcceptance": "Not established by source installation or pin alignment; workspace-authority failure remains."
+    },
+    {
+      "revision": 2,
+      "recordedAt": "2026-10-16T19:51:45Z",
+      "fromCanonicalSha256": "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0",
+      "toCanonicalSha256": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "sourceArchive": "attached_assets/failure-gate-unified-2026-10-15_1792180022158.zip",
+      "sourceArchiveSha256": "36af4dd4fbfd792159e8804c60c1519e3cc9f3224d056a193b226116a58adf11",
+      "authorization": "Owner direction attached in the active conversation authorizes gate-only maintenance without task admission or a separate reviewer/bootstrap.",
+      "scope": "Remove machine-bound admission, preserve sealed contracts by revision, update plan rendering and enforce merge preservation without changing ledger records.",
+      "record": "docs/validation/unified-gate-repair.md"
     }
   ],
   "cutover": {
@@ -40,10 +55,6 @@
     }
   ],
   "ownerDirectionAdapter": null,
-  "authority": {
-    "kind": "local-workspace-v1",
-    "receiptHash": "a5100fcdd0062ff3c4623251e3f5357feed9571a3a84091b897df85ccf06ac37"
-  },
   "bootstrap": {
     "specHash": "a36609461e1976b3ae401760664a542838b024e20bd19b6dfe687ce72db10b4d",
     "specFile": "docs/validation/unified-local-migration-spec.json"

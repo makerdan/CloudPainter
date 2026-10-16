@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { performance } from "node:perf_hooks";
 import { checkPlan } from "./plans.mjs";
 import { policy, registry, tier, baseline, warnings, lease, transaction, atomicJson, readJson, readText, safePath, stamp, sha } from "./store.mjs";
-import { executionSources } from "./local-authority.mjs";
+import { executionSources } from "./execution-sources.mjs";
 
 export function parseFailures(step, text) {
   if (step.adapter !== "node-tap") return null;
@@ -79,7 +79,7 @@ export async function run(root, id, selectedTier, planPath, retryRequest = null)
   let quiescent = true;
   const runId = crypto.randomUUID();
   const directory = ".local/failure-gate/runs/" + id + "/" + runId;
-  const report = { schemaVersion: 1, id, runId, tier: selectedTier, planHash: admission.record.planHash,
+  const report = { schemaVersion: 1, id, runId, tier: selectedTier, contract: admission.record.contract, planHash: admission.record.planHash,
     tierHash: admission.t.hash, sources: executionSources(root), startedAt: stamp(), state: "INCOMPLETE", required: 0, steps: [], retryOf: retryRequest, warnings: [] };
   const reportPath = directory + "/report.json";
   try {

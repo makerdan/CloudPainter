@@ -10,8 +10,7 @@ accepted cutover, every new task plan and its validation must use the verified
 local provisioner, one bound tier and sealed plan context. Do not use independent
 app checks as a substitute for the task's tier.
 
-An isolated task checkout is not the authoritative workspace merely because it
-has the same path, environment/project identifier or copied policy. If local
-authority admission fails, stop and report BLOCKED; do not manufacture an ID,
-edit the receipt/authority flags, or implement an unprovisioned new task. Do not
-rebind historical/native task IDs. Existing CI remains independent CI.
+If Failure Gate admission or a plan guard fails, follow the canonical skill's
+"Installing, updating and repairing the gate" section. Never manufacture an ID
+or implement an unprovisioned task. Do not rebind historical/native task IDs.
+Existing CI remains independent CI.

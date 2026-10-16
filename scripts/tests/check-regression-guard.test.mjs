@@ -688,18 +688,19 @@ test("relative TASK_PLAN_FILE is resolved from the caller's working directory", 
   assert.equal(result.status, 0, result.stderr);
 });
 
-test("project runner repairs then strictly checks only the selected plan", (t) => {
+test("active Unified runner refuses an unprovisioned plan without inserting stubs", (t) => {
   const directory = fixture(t, {
     "current.md": QUALIFYING_MISSING_PLAN,
     "sibling.md": QUALIFYING_MISSING_PLAN,
   });
   const current = path.join(directory, "current.md");
+  const currentBefore = fs.readFileSync(current, "utf8");
   const siblingBefore = fs.readFileSync(path.join(directory, "sibling.md"), "utf8");
   const result = runRunner({ TASK_PLAN_FILE: current });
   assert.equal(result.status, 1);
-  assert.match(result.stdout, /inserted 1 stub/);
-  assert.match(result.stderr, /unfilled placeholder/);
-  assert.match(fs.readFileSync(current, "utf8"), /## Regression Guard/);
+  assert.doesNotMatch(result.stdout, /inserted .*stub/);
+  assert.match(result.stderr, /requires UNIFIED_TASK_ID and TASK_PLAN_FILE/);
+  assert.equal(fs.readFileSync(current, "utf8"), currentBefore);
   assert.equal(fs.readFileSync(path.join(directory, "sibling.md"), "utf8"), siblingBefore);
 });
 

@@ -4,7 +4,8 @@ description: >-
   Applies an end-to-end validation gate to task planning and execution. Use when
   a project adopts Failure Gate Unified and tasks need transactional IDs,
   one-tier authorization, baseline handling, bounded test runs, evidence-based
-  failure classification, and explicit completion states.
+  failure classification, explicit completion states, and owner-directed
+  installation, update and repair of the gate itself.
 ---
 
 # Failure Gate Unified
@@ -23,12 +24,10 @@ Failure Gate Unified. Govern both phases:
    catalog and available evidence.
 
 If the project's required provisioning, binding, or runner protections are
-missing, do not simulate them manually or claim the gate is enforced. Diagnose
-the specific gap and use an available supported recovery route within existing
-authorization. If recovery is unavailable or cannot safely complete, mark the
-affected task `BLOCKED`, record what was attempted, and identify the smallest
-missing capability or consequential owner decision. Do not substitute a generic
-request to "restore authority" for a diagnosis and actionable remedy.
+missing or broken, do not simulate them manually or claim the gate is enforced.
+Name the exact failing check and the smallest fix. When the gate itself is
+missing, incomplete or broken, follow "Installing, updating and repairing the
+gate" below.
 
 ## Non-negotiable contract
 
@@ -46,6 +45,9 @@ request to "restore authority" for a diagnosis and actionable remedy.
   task, but must not assign it to different work. Publish only after generation,
   single-tier binding, complete declarations and sealed-plan guards succeed.
   The storage and transaction mechanism remain project-specific.
+- Random, collision-resistant IDs (such as UUIDs) satisfy uniqueness without a
+  central allocator or a single authoritative workspace. When records from
+  separate environments merge, preserve every known ID, tombstone and binding.
 - Locate and verify the actual provisioning command in the project before
   relying on it. Do not invent a command or manually reuse an ID.
 
@@ -76,60 +78,95 @@ request to "restore authority" for a diagnosis and actionable remedy.
 - `.local/tasks/` is environment-local task archive state. Do not bulk-commit
   it as part of source deliverables.
 
-## Portable execution and recovery
+## Portable execution
 
-The guarantees above are fixed; their implementation is project-specific.
-Use the least restrictive supported mechanism that enforces them in the actual
-host and task execution model. Unified does not prescribe boot fingerprints,
-device/inode checks, receipts, signed native-task identity, a single workspace,
-remote infrastructure, or a new validation tier. An environment ID, copied
-registry, token, or editable flag alone does not prove admission is enforced.
-Do not silently weaken an adopted project boundary; distinguish an unnecessary
-implementation restriction from a real safety requirement before changing it.
+The guarantees above are fixed; their implementation is project-specific. Use
+the simplest mechanism that enforces them where the project's tasks actually
+run, including isolated task environments when the host uses them.
 
-Before declaring an installation operationally ready, establish and document:
+- Unified does not require workspace-identity or machine-bound admission
+  checks, and projects should not add them by default: boot fingerprints,
+  device/inode comparisons, workspace receipts, signed task identity, a single
+  authoritative workspace, remote infrastructure, or a new tier. If the owner
+  requires such a check, it must keep working across normal restarts and the
+  host's task environments, or come with a coded recovery command that
+  preserves the ledger.
+- Removing, at owner direction, an implementation restriction the contract
+  does not require is not weakening the gate. Never remove the contract's
+  guarantees: unique IDs, single-tier binding, sealed and guarded plans,
+  wrong-tier rejection, bounded execution and honest reporting.
+- Before calling an installation ready, confirm the provisioner, plan guards
+  and bound-tier runner work where ordinary tasks run and after a normal
+  workspace restart. Use bounded fixtures or non-destructive probes; do not
+  reboot a live host, restore live resources or provision infrastructure to
+  prove it. A single-session PASS alone is not proof.
 
-- Where ordinary Agent tasks provision, amend, and validate their plans,
-  including isolated task environments when the host actually uses them.
-- Which expected lifecycle events can invalidate that route, such as workspace
-  restart, host replacement, path changes, or task checkout creation.
-- How the route remains usable or is safely restored after applicable events,
-  how retained state is reconciled, and what genuinely requires owner approval.
-  No special re-enrollment is needed when the chosen mechanism remains valid.
+## Installing, updating and repairing the gate
 
-Verify applicable lifecycle behavior with bounded fixtures or supported
-non-destructive probes. Do not reboot a live host, restore live resources, or
-provision infrastructure merely to satisfy this requirement. A current-session
-PASS alone does not prove lifecycle readiness. Do not impose irrelevant host
-scenarios, a universal recovery drill, or arbitrary evidence expiry.
+The gate cannot admit changes to itself. Installing, completing, updating and
+repairing it is gate work. Gate work is done outside task admission on an
+authentic owner instruction, visible in the active conversation or verifiable
+in project records. No separate specification, reviewer, bootstrap route or
+task is required. All gate work:
 
-When admission fails:
+- is limited to gate scripts, gate policy and the skill revision pin, tier
+  definitions, the baseline catalog's structure, gate tests, the plan renderer
+  and guards, and gate instructions;
+- does not mint task IDs, edit or drop ledger records, tombstones or tier
+  bindings, reset the ledger, change application code, or add baseline entries
+  without evidence;
+- verifies itself with the gate's own tests, reported as setup or maintenance
+  checks, never as a tier PASS;
+- ends when the provisioner, single-tier binding, plan guards and bound-tier
+  runner work. The next implementation plan uses normal admission.
 
-1. Inspect current policy, execution context, available commands, retained
-   records, and prior authorization. Distinguish stale location metadata from
-   a copied/unauthorized environment, missing state, policy drift, or unresolved
-   active execution. Attribute observations; do not infer trust from a match
-   of identifiers alone. Retrieve evidence rather than asking for original receipts.
-2. If a supported recovery mechanism exists and the repair is within existing
-   authorization, use it without another routine approval. It must preserve
-   consumed IDs, tombstones, tier bindings, baseline/history and current policy,
-   reconcile uncertain runs/leases, and prevent concurrent or copied writers
-   from silently gaining authority. Verify restored admission and affected
-   guards before resuming the task.
-3. If the mechanism is missing or repair changes the approved boundary, provide
-   a read-only blocker record and the smallest required decision/capability.
-   Establish repairs only through an explicitly authorized, bounded maintenance
-   or bootstrap route with independent verification as required by project policy.
-   Owner approval alone is not proof that such a route exists or is safe.
-   Do not manufacture an ID, publish an unguarded implementation plan, reset
-   the ledger, edit receipt/authority flags as a shortcut, or reopen initial
-   staging merely to evade admission.
+### Skill revision pin
 
-Record recovery provenance, changed state, checks and remaining limits in
-supported project records without exposing credentials. Recovery does not
-rebind tasks, waive a tier, reactivate policy automatically, or turn historical
-results into a fresh validation PASS. Ask only for permissions or consequential
-decisions not already covered; continue independent safe discovery while blocked.
+The project records which revision of this skill is current, using a content
+fingerprint of the canonical skill file (for example, a SHA-256 hash) or an
+equivalent supported mechanism. Gate operations stop when the canonical file
+does not match the pin. Each task records the revision it was sealed under and
+is checked against that revision; a later pin update does not invalidate it.
+New tasks use the current pin. Apply a newer revision to an existing task only
+through a supported amendment.
+
+### Installing or completing the gate
+
+- Install this skill at the project's canonical skill location and record its
+  pin.
+- Retire older Failure Gate skills, instructions, hooks and scripts so exactly
+  one gate is active. Keep old reports and records as history, labelled as not
+  instructions. Do not merge older rules into Unified.
+- Define the four tiers from the project's actual checks. The owner approves
+  the workloads; a tier with no meaningful workload is reported, not invented.
+- Tasks created under an older gate keep their original IDs and records. Do not
+  rebind them; finish, cancel or close them under their original rules or by
+  owner direction.
+
+### Updating this skill
+
+Replace the canonical skill file as a whole and update the pin in the same
+change. In-flight tasks keep the revision they were sealed under.
+
+### Repairing the gate
+
+When admission or a plan guard fails:
+
+1. Find the exact failing check and its cause from current code, policy and
+   records. Retrieve evidence yourself; do not ask for original receipts.
+2. If the cause is task-specific, such as a wrong tier, a changed plan, stale
+   task context or an unmatched baseline, fix it through the supported plan,
+   amendment or retry route.
+3. If the gate's own code, policy, pin, renderer or instructions are missing or
+   defective, repair them as gate work under an owner instruction.
+4. Without that owner instruction, mark the task `BLOCKED`, name the failing
+   check and the smallest fix, and ask once for the instruction. Do not ask
+   again for work already authorized, and do not substitute a generic request
+   to "restore authority."
+
+Record what changed and what was verified in the project's records without
+exposing credentials. Gate work does not rebind tasks, waive a tier or turn
+historical results into a fresh validation PASS.
 
 ## Plan-time procedure
 

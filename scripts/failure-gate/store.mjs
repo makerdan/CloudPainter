@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { verifyLocalAuthority } from "./local-authority.mjs";
+import { assertCommittedRegistry, assertRegistryEvolution } from "./merge-guard.mjs";
 
 export const TIERS = ["test-fast", "test-standard", "test-standard-plus", "test-heavy"];
 export const sha = value => crypto.createHash("sha256").update(value).digest("hex");
@@ -65,7 +65,6 @@ export function policy(root, execution = true) {
   if (sha(readText(root, p.canonicalSource)) !== p.canonicalSha256) throw new Error("Canonical source drift");
   if (execution) {
     if (p.mode !== "active" && !p.bootstrap) throw new Error("BLOCKED: staged policy; cutover is not authorized");
-    verifyLocalAuthority(root, p);
   }
   return p;
 }
@@ -76,8 +75,9 @@ export function registry(root) {
     throw new Error("Malformed identity registry");
   }
   for (const [id, record] of Object.entries(r.records)) {
-    if (!/^FGU-[a-f0-9-]{36}$/.test(id) || id !== record.id || !TIERS.includes(record.tier) || !Array.isArray(record.events)) throw new Error("Malformed task binding");
+    if (!/^FGU-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id) || id !== record.id || !TIERS.includes(record.tier) || !Array.isArray(record.events) || !Array.isArray(record.runs)) throw new Error("Malformed task binding");
   }
+  assertCommittedRegistry(root, r);
   return r;
 }
 export function transaction(root, callback) {
@@ -85,8 +85,10 @@ export function transaction(root, callback) {
   let writing = false;
   try {
     const r = registry(root);
+    const before = structuredClone(r);
     const result = callback(r);
     r.revision++;
+    assertRegistryEvolution(before, r);
     writing = true;
     atomicJson(root, registryPath, r);
     writing = false;
