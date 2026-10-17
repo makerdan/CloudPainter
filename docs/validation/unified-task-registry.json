@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
-  "revision": 8,
+  "revision": 12,
   "records": {
     "FGU-81af9606-cc13-465c-99a0-820e95ec1e03": {
       "id": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
@@ -106,6 +106,60 @@
         "state": "PASS",
         "runId": "da1ca297-df2c-479d-9f0a-4f68fc1ec40b",
         "at": "2026-10-16T20:26:41.261Z"
+      }
+    },
+    "FGU-13e2aa7f-da2e-4e71-bf00-293a626b9026": {
+      "id": "FGU-13e2aa7f-da2e-4e71-bf00-293a626b9026",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "f2718cf9f0ec3351b14ebfeecfb3181a930bc1dffed813b0ffafb6415dfd3478",
+      "contract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-13e2aa7f-da2e-4e71-bf00-293a626b9026.md",
+      "spec": {
+        "nativeTaskRef": "#14",
+        "title": "Independently verify Port Authority delivery and runtime readiness",
+        "tier": "test-fast",
+        "why": "This task is a read-only repository inspection and tracked evidence report. The lightest registered tier checks Failure Gate provisioning and plan guards without executing Port Authority package code or claiming its runtime readiness.",
+        "coverageEvidence": "docs/validation/unified-tiers.json defines test-fast as scripts/tests/failure-gate.test.mjs and scripts/tests/check-regression-guard.test.mjs under bounded supervision; the supported invocation is pnpm run test-fast -- followed by the ID recorded by the provisioner.",
+        "what": "Independently inspect the current canonical Port Authority source inventory, compare it with the pinned October 11 archive and historical installation handoff without restoring or executing missing package members, and inspect actual project callers plus managed-service configuration read-only. Write one tracked evidence-linked verification report that separates canonical source availability, project delivery and wiring, runtime capability, and native task state; scope searches and classify findings Confirmed, Absent within inspected scope, or Unknown. Preserve native task #14 and its existing dependency on merged task #7; associate this generated Unified record with nativeTaskRef #14 without rebinding the numeric task ID. Keep all listed out-of-scope changes prohibited.",
+        "baselines": [],
+        "regression": {
+          "covers": "The report must not infer complete delivery, runtime activation, operational readiness, or native task completion from historical documents or task labels; it must not restore or execute the missing package.",
+          "testLocation": "scripts/tests/failure-gate.test.mjs and scripts/tests/check-regression-guard.test.mjs",
+          "checks": "The bound gate tier verifies the sealed plan and task context while preserving tier binding and Regression Guard enforcement; report-specific claims must be supported by fresh, scoped source and caller evidence."
+        }
+      },
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-16T20:56:31.134Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-16T20:56:31.161Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "44fca6b3-2e21-4584-a5e1-01752370bda6",
+          "state": "PASS",
+          "at": "2026-10-16T20:56:53.324Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "44fca6b3-2e21-4584-a5e1-01752370bda6",
+          "reportPath": ".local/failure-gate/runs/FGU-13e2aa7f-da2e-4e71-bf00-293a626b9026/44fca6b3-2e21-4584-a5e1-01752370bda6/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-16T20:56:38.728Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "3d323320727c39d5c0b25179e1b03fc4f2a8a1c2f9de108adcc5a90f07007fc6",
+      "assessment": {
+        "state": "PASS",
+        "runId": "44fca6b3-2e21-4584-a5e1-01752370bda6",
+        "at": "2026-10-16T20:56:53.324Z"
       }
     }
   }
