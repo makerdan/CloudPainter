@@ -9,7 +9,10 @@ import {
   type CreateProjectBackupResult,
   type ProjectBackupStore,
 } from "../lib/projectBackupStore";
-import { createProjectBackupRouter } from "./project-backups";
+import {
+  createProjectBackupRouter,
+  PROJECT_BACKUP_REQUEST_LIMIT_BYTES,
+} from "./project-backups";
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const jwtKey = publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -74,6 +77,61 @@ function createMemoryStore(): ProjectBackupStore {
       return true;
     },
   };
+}
+
+function createNearLimitEscapedBackup(): string {
+  const color = `rgba(${"\"".repeat(96)})`;
+  const serialize = (strokeCount: number, image: string | null) => JSON.stringify({
+    format: "cloudpainter-project",
+    version: 1,
+    project: {
+      image,
+      width: 640,
+      height: 480,
+      layers: [{
+        id: "layer-ink",
+        name: "Ink",
+        visible: true,
+        opacity: 1,
+        strokes: Array.from({ length: strokeCount }, () => ({
+          points: [{ x: 0, y: 0 }],
+          color,
+          size: 1,
+          tool: "brush",
+        })),
+        redo: [],
+      }],
+      selectedLayerId: "layer-ink",
+      title: "Near-limit escaped backup",
+      photoZoom: 1,
+      photoPan: { x: 0, y: 0 },
+      referencePhotoVisible: false,
+      referencePhotoOpacity: 100,
+    },
+  });
+
+  // Build the largest client-valid escaped stroke payload that leaves room
+  // for a syntactically valid image data URL. This mirrors the client's allowed
+  // project and stroke fields without importing browser-only code into the API.
+  const imagePrefix = "data:image/png;base64,";
+  const imageJsonGrowth = Buffer.byteLength(JSON.stringify(imagePrefix))
+    - Buffer.byteLength("null");
+  let low = 0;
+  let high = 20_000;
+  while (low < high) {
+    const candidate = Math.ceil((low + high) / 2);
+    const candidateBackup = serialize(candidate, null);
+    if (Buffer.byteLength(candidateBackup) <= MAX_CLOUD_PROJECT_BACKUP_BYTES - imageJsonGrowth) {
+      low = candidate;
+    } else {
+      high = candidate - 1;
+    }
+  }
+
+  const imageDataBytes = Math.floor(
+    (MAX_CLOUD_PROJECT_BACKUP_BYTES - Buffer.byteLength(serialize(low, null)) - imageJsonGrowth) / 4,
+  ) * 4;
+  return serialize(low, `${imagePrefix}${"A".repeat(imageDataBytes)}`);
 }
 
 test("project backup routes require the current account session and isolate all reads and deletes", { timeout: 60000 }, async () => {
@@ -223,15 +281,47 @@ test("project backup routes require the current account session and isolate all 
       body: JSON.stringify({ requestId: randomUUID(), backup: "x".repeat(2 * 1024 * 1024 + 1) }),
     });
     assert.equal(oversized.status, 413);
-    const parserLimited = await request("", "user_a", "session-a", {
+    assert.match((await oversized.json() as { error: string }).error, /larger than 2 MB/i);
+    const quotaExceeded = await request("", "user_a", "session-a", {
       method: "POST",
       body: JSON.stringify({ requestId: randomUUID(), backup: "x".repeat(2 * 1024 * 1024 + 200_000) }),
     });
-    assert.equal(parserLimited.status, 413);
+    assert.equal(quotaExceeded.status, 413);
+
+    const nearLimitBackup = createNearLimitEscapedBackup();
+    const nearLimitRequestBody = JSON.stringify({
+      requestId: randomUUID(),
+      backup: nearLimitBackup,
+    });
+    const nearLimitBackupBytes = Buffer.byteLength(nearLimitBackup, "utf8");
+    const nearLimitRequestBytes = Buffer.byteLength(nearLimitRequestBody, "utf8");
+    assert.ok(nearLimitBackupBytes > MAX_CLOUD_PROJECT_BACKUP_BYTES - 4);
+    assert.ok(nearLimitBackupBytes <= MAX_CLOUD_PROJECT_BACKUP_BYTES);
+    assert.ok(nearLimitRequestBytes > MAX_CLOUD_PROJECT_BACKUP_BYTES + 128 * 1024);
+    assert.ok(nearLimitRequestBytes <= PROJECT_BACKUP_REQUEST_LIMIT_BYTES);
+    const acceptedNearLimit = await request("", "user_a", "session-a", {
+      method: "POST",
+      body: nearLimitRequestBody,
+    });
+    assert.equal(acceptedNearLimit.status, 201);
+    const nearLimitSummary = await acceptedNearLimit.json() as { id: string; sizeBytes: number };
+    assert.equal(nearLimitSummary.sizeBytes, nearLimitBackupBytes);
+    assert.equal((await request(`/${nearLimitSummary.id}`, "user_a", "session-a")).status, 200);
+
+    const beyondRequestLimit = await request("", "user_a", "session-a", {
+      method: "POST",
+      body: JSON.stringify({
+        requestId: randomUUID(),
+        backup: "x".repeat(PROJECT_BACKUP_REQUEST_LIMIT_BYTES + 1),
+      }),
+    });
+    assert.equal(beyondRequestLimit.status, 413);
+    assert.match((await beyondRequestLimit.json() as { error: string }).error, /request size limit/i);
 
     const removed = await request(`/${summary.id}`, "user_a", "session-a", { method: "DELETE" });
     assert.equal(removed.status, 204);
     assert.equal((await request(`/${summary.id}`, "user_a", "session-a")).status, 404);
+    assert.equal((await request(`/${nearLimitSummary.id}`, "user_a", "session-a", { method: "DELETE" })).status, 204);
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }

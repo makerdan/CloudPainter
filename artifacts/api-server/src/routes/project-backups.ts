@@ -20,7 +20,11 @@ import {
   ProjectBackupArchiveLimitError,
 } from "../lib/projectBackupArchive";
 
-export const PROJECT_BACKUP_REQUEST_LIMIT_BYTES = MAX_CLOUD_PROJECT_BACKUP_BYTES + 128 * 1024;
+// A JSON string can expand to at most 2x when its quotes and backslashes are
+// escaped inside the request envelope. Keep a bounded margin for the UUID and
+// object syntax without changing the backup's own 2 MiB payload quota.
+export const PROJECT_BACKUP_REQUEST_LIMIT_BYTES =
+  2 * MAX_CLOUD_PROJECT_BACKUP_BYTES + 16 * 1024;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -205,7 +209,7 @@ export function createProjectBackupRouter(store: ProjectBackupStore) {
   const parserErrors: ErrorRequestHandler = (error, _req, res, next) => {
     const parserError = error as { status?: number; type?: string };
     if (parserError.type === "entity.too.large" || parserError.status === 413) {
-      res.status(413).json({ error: "This project backup request exceeds the 2 MiB sketch limit." });
+      res.status(413).json({ error: "This project backup request exceeds the request size limit." });
       return;
     }
     if (error instanceof SyntaxError && "body" in error) {
