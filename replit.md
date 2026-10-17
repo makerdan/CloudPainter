@@ -142,6 +142,13 @@ Root commands:
 
 ## Validation and maintenance notes
 
+Regression Guard plan authoring and executor obligations are in `AGENTS.md`
+and `docs/validation/regression-guard-authoring.md`. The installer handoff and
+requirement/evidence matrix are in
+`docs/validation/regression-guard-application-handoff.md`. The current local
+route checks sealed declarations strictly before publication and workload
+launch; this does not control Replit platform task completion.
+
 `docs/validation/workspace-typecheck.md` records the declaration-mismatch diagnosis, bounded check outcomes, supported typecheck routes, and fixture coverage.
 
 ### Drawing and photo checks

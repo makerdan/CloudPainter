@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { readJson, registry, baseline, warnings, policy } from "./store.mjs";
 import { provision, checkPlan, amend, cancel } from "./plans.mjs";
 import { run, selfClassify, closeOwnerDirection } from "./runner.mjs";
+import { validateSelectedPlan } from "../check-regression-guard.mjs";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 export async function main(action, args = process.argv.slice(2)) {
@@ -14,6 +15,10 @@ export async function main(action, args = process.argv.slice(2)) {
         console.log(provision(ROOT, readJson(ROOT, id))); break;
       case "check": {
         if (args.length > 1) throw new Error("Usage: check-failure-gate.mjs [task-id]");
+        if (Object.hasOwn(process.env, "TASK_PLAN_FILE")) {
+          validateSelectedPlan();
+          if (!id) throw new Error("TASK_PLAN_FILE requires the bound task ID; cannot use summary mode");
+        }
         if (!id) {
           const p = policy(ROOT, false);
           console.log(JSON.stringify({ mode: p.mode, assessment: "NOT_EXECUTION", registryRecords: Object.keys(registry(ROOT).records).length, warnings: warnings(baseline(ROOT)) }));

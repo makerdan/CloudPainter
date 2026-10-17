@@ -33,7 +33,7 @@ export function assertRegistryEvolution(before, after) {
       switch (event.kind) {
         case "amendment-start": allowed.add("status"); break;
         case "amended":
-          for (const key of ["status", "spec", "tier", "tierHash", "contract", "planHash", "preexistingNotes"]) allowed.add(key);
+          for (const key of ["status", "spec", "tier", "tierHash", "contract", "planTemplate", "regressionDeferral", "planHash", "preexistingNotes"]) allowed.add(key);
           break;
         case "cancelled": allowed.add("status"); break;
         case "validation-observed":

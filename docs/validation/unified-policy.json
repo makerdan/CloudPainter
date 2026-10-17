@@ -10,6 +10,7 @@
     "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0": "legacy-v1",
     "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc": "unified-v2"
   },
+  "newPlanTemplate": "unified-v3",
   "contractRevisions": [
     {
       "revision": 1,

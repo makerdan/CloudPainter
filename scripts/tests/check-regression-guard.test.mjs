@@ -152,6 +152,62 @@ test("strict mode accepts a complete qualifying regression guard", (t) => {
   assert.match(result.stdout, /strict check passed/);
 });
 
+test("material mutations override test titles, negated and unrelated exclusions", t => {
+  const plans = [
+    "# Add tests for authorization\n\n## What & Why\nFix authorization so another tenant cannot read private records.",
+    "# Fix authorization\n\n## What & Why\nFix authorization for protected records. This is not purely additive.",
+    "# Add a checker\n\n## What & Why\nThe primary deliverable is a checker. Also change existing API authorization to deny cross-tenant reads.",
+    "# Add an independent panel\n\n## What & Why\nAdd a purely additive panel without changing existing behavior. Also fix stale record overwrites.",
+    "# Update error wording\n\n## What & Why\nCosmetic error copy only. Also change retry logic for existing failures.",
+    "# Rename internal helper\n\n## What & Why\nA genuinely non-material internal refactor. Also replace existing serialization for supported clients.",
+    "# Add tests\n\n## What & Why\nAdd tests and fix authorization for protected records.",
+    "# Add an independent panel\n\n## What & Why\nThis is purely additive. One profile can display sketches from another profile.",
+  ];
+  const directory = fixture(t);
+  for (const [index, plan] of plans.entries()) {
+    const target = path.join(directory, `${index}.md`);
+    fs.writeFileSync(target, plan);
+    const result = runChecker([], { TASK_PLAN_FILE: target });
+    assert.equal(result.status, 1, `${plan}\n${result.stderr}`);
+    assert.match(result.stderr, /missing ## Regression Guard/);
+    fs.appendFileSync(target, "\n\n## Regression Guard\n**Self-satisfying** — the deliverable is the authorization regression test and checker.\n");
+    assert.match(runChecker([], { TASK_PLAN_FILE: target }).stderr, /valid only when the primary deliverable/);
+  }
+});
+
+test("legitimate exclusions survive incidental risk words and unchanged clauses", t => {
+  const plans = [
+    "# Reword an error message\n\n## What & Why\nCosmetic error copy only; no trigger changes.",
+    "# Change error message text\n\n## What & Why\nReword the error message without changing when or whether it fires.",
+    "# Rename an internal validation helper\n\n## What & Why\nA genuinely non-material internal refactor with no behavior change.",
+    EXCLUDED_ADDITIVE_PLAN,
+    "# Add tests for authorization\n\n## What & Why\nAdd tests for existing authorization failures without changing existing behavior.",
+    "# DELETE: Fix old authorization\n\n## What & Why\nThis task is marked for deletion.",
+  ];
+  const directory = fixture(t);
+  for (const [index, plan] of plans.entries()) {
+    const target = path.join(directory, `${index}.md`);
+    fs.writeFileSync(target, plan);
+    const result = runChecker([], { TASK_PLAN_FILE: target });
+    assert.equal(result.status, 0, `${plan}\n${result.stderr}`);
+  }
+});
+
+test("N/A rejects ordinary live API and race difficulty, and normal fields need specificity", t => {
+  const directory = fixture(t);
+  const guards = [
+    "**N/A**\n**Why N/A:** The live external API behavior needs additional fixture work and is expensive to test.",
+    "**N/A**\n**Why N/A:** The race condition uses real timing but is hard to test with our current harness.",
+    "**N/A**\n**Why N/A:** This is already covered by existing tests somewhere in the suite.",
+    "**Covers:** The bug\n**Test location:** existing coverage\n**What it checks:** It works",
+  ];
+  for (const [index, guard] of guards.entries()) {
+    const target = path.join(directory, `${index}.md`);
+    fs.writeFileSync(target, `${QUALIFYING_MISSING_PLAN}\n## Regression Guard\n${guard}\n`);
+    assert.equal(runChecker([], { TASK_PLAN_FILE: target }).status, 1, guard);
+  }
+});
+
 test("strict mode ignores declaration examples in fenced blocks and blockquotes", (t) => {
   const exampleFields = `**Covers:** The saved sketch is restored after a resize.
 **Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
@@ -653,6 +709,7 @@ test("--stubs-only allows filled structural errors for strict mode to report", (
 **Why N/A:** ${VALID_NA_REASONS[0]}
 **Covers:** The saved sketch is restored after a resize.
 `,
+    "duplicate-section.md": `${VALID_GUARD}\n${VALID_GUARD}`,
   };
   const directory = fixture(t);
   for (const [name, guard] of Object.entries(fixtures)) {
@@ -713,4 +770,36 @@ test("unknown and conflicting checker modes fail clearly", (t) => {
   const conflicting = runChecker(["--fix-stub", "--stubs-only"], { TASK_PLAN_FILE: target });
   assert.equal(conflicting.status, 1);
   assert.match(conflicting.stderr, /Choose at most one mode/);
+});
+
+test("fix-stub refuses sealed repairs and reports actual read/write failures honestly", t => {
+  const directory = fixture(t, {
+    "sealed.md": QUALIFYING_MISSING_PLAN.replace("\n\n", "\n\n**Unified task ID:** FGU-fixture\n\n"),
+    "editable.md": QUALIFYING_MISSING_PLAN,
+  });
+  const selected = path.join(directory, "sealed.md");
+  const sealed = fs.readFileSync(selected, "utf8");
+  const refused = runChecker(["--fix-stub"], { TASK_PLAN_FILE: selected });
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /supported amendment/);
+  assert.equal(fs.readFileSync(selected, "utf8"), sealed);
+  for (const operation of ["readFileSync", "writeFileSync"]) {
+    const target = path.join(directory, "editable.md");
+    const program = `import fs from "node:fs";
+      import { main } from ${JSON.stringify(new URL("../check-regression-guard.mjs", import.meta.url).href)};
+      const original = fs.${operation};
+      fs.${operation} = function(file, ...args) {
+        if (file === ${JSON.stringify(target)}) throw new Error("injected fixture I/O failure");
+        return original.call(this, file, ...args);
+      };
+      process.argv = [process.execPath, ${JSON.stringify(CHECKER)}, "--fix-stub"];
+      main();`;
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e", program], {
+      env: { ...process.env, TASK_PLAN_FILE: target }, encoding: "utf8", timeout: 10000,
+    });
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stderr, /cannot (?:read|write) task plan.*injected fixture I\/O failure/);
+    assert.doesNotMatch(result.stdout, /inserted .*stub/);
+    assert.equal(fs.readFileSync(target, "utf8"), QUALIFYING_MISSING_PLAN);
+  }
 });

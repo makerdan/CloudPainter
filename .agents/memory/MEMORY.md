@@ -28,3 +28,4 @@
 - [Postgres timestamp cursors](postgres-timestamp-cursors.md) — preserve microsecond timestamp precision in keyset cursors; JavaScript `Date` truncates it.
 - [Node failure reporters](node-failure-reporters.md) — select structured reporters explicitly; piped Node output is not necessarily TAP.
 - [CloudPainter account data](cloudpainter-account-data.md) — users expect account-owned data on the server; preserve explicit consent before uploading sketches.
+- [Follow-up description limits](follow-up-description-limits.md) — proposals reject descriptions over 4,000 characters; measure before submitting evidence-heavy plans.

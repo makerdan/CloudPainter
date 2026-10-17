@@ -6,6 +6,7 @@ export function executionSources(root) {
     ...fs.readdirSync(safePath(root, "scripts/failure-gate")).sort()
       .filter(file => /\.(mjs|py)$/.test(file)).map(file => "scripts/failure-gate/" + file),
     ".agents/skills/failure-gate-unified/SKILL.md",
+    ".agents/skills/regression-guard/SKILL.md",
     "docs/validation/unified-tiers.json",
     "docs/validation/failure-baseline.json",
     "scripts/check-regression-guard.mjs",

@@ -64,6 +64,31 @@ the tier definition/workload and supported invocation. An amendment applying the
 current contract requires a complete current specification; it records the
 old/new contract and tier and reseals the same ID.
 
+New plans use the policy's `newPlanTemplate: unified-v3` representation. The
+per-record representation is separate from the canonical skill revision:
+historical `legacy-v1` and `unified-v2` renderers/mappings remain unchanged.
+Amendments explicitly adopt the new complete representation; supply a complete
+replacement spec when an older spec lacks its required sections.
+See [Regression Guard authoring](regression-guard-authoring.md) for all
+declaration variants and the complete spec.
+
+Provisioning validates rendered content with the strict Regression Guard core
+before writing/sealing the plan; a post-reservation rejection retains an
+incomplete identity, never an admitted plan. Amendments validate the replacement
+before invalidating or replacing the old seal/binding. Bound checks and both
+runner admission passes invoke the same strict single-plan core before reports,
+leases or workloads can launch. No repair pass is used for Unified plans.
+If an unchanged sealed declaration fails a newer checker, its hash/binding can
+still be verified as an amendment source; only a compliant replacement can be
+published. This is not execution permission for the rejected source.
+
+`check-failure-gate.mjs` without an ID remains a read-only policy summary only
+when `TASK_PLAN_FILE` is unset. A selected target requires its bound ID; empty,
+non-Markdown, missing or directory targets fail rather than scanning archives.
+Standalone `check-regression-guard.mjs` retains strict, fix-stub and stubs-only
+modes. Fix-stub is only for genuinely editable legacy plans where that contract
+permits it; it refuses to repair a Unified plan. Legacy routing is not reactivated.
+
 For gate installation, update or repair, follow the canonical skill's
 "Installing, updating and repairing the gate" section under an authentic owner
 instruction. Gate maintenance runs the gate tests directly as maintenance checks,

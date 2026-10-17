@@ -26,7 +26,7 @@ function parseMode(args) {
       : "strict";
 }
 
-function validateSelectedPlan() {
+export function validateSelectedPlan() {
   if (!Object.hasOwn(process.env, "TASK_PLAN_FILE")) return null;
   const rawPath = process.env.TASK_PLAN_FILE;
   if (!rawPath) {
@@ -158,8 +158,9 @@ function isCosmeticErrorCopy(title, body) {
     /\b(?:error\s+(?:message|string|text)|copy|wording)\b/i.test(`${title}\n${body}`);
   const explicitlyCopyOnly =
     /\b(?:cosmetic|copy-only|wording-only|rewording-only)\b[\s\S]{0,80}\b(?:error|message|string)\b/i.test(body);
-  const behaviorChanges = /\b(?:when it fires|whether it fires|trigger(?:s|ing)?|error handling|catch(?:es|ing)?|retry|recover(?:y|s|ing)?)\b/i.test(body);
-  return (titleIsCopyEdit || explicitlyCopyOnly) && !behaviorChanges;
+  // Real mutations and observable malfunction clauses are evaluated separately;
+  // "without changing when it fires" must not itself negate a copy-only scope.
+  return titleIsCopyEdit || explicitlyCopyOnly;
 }
 
 function isExplicitlyAdditive(title, body) {
@@ -173,16 +174,39 @@ function isExplicitlyAdditive(title, body) {
   return addsNewCapability && (!changesExistingBehavior || explicitlyNoReplacement);
 }
 
+// Deliberately bounded heuristics, not semantic proof. Exclusions are scoped to
+// their own clauses; a title or an unrelated "unchanged" sentence cannot waive
+// an explicit material mutation elsewhere in the plan.
+function hasMaterialMutation(title, body) {
+  return `${title}\n${body}`.split(/\n|[.!;]|\bbut\b|\balso\b/i).some(clause => {
+    if (/^\s*(?:[-*\d.)]+\s*)?(?:without|no|not|never|does not|do not|cannot|unchanged)\b/i.test(clause)) return false;
+    const active = clause.replace(/\b(?:without|does not|do not|no)\s+(?:changing|change|replacing|replace|altering|alter)\b.*$/i, "");
+    if (/\b(?:change|edit|polish|reword|rewrite|update)\s+(?:the\s+)?error\s+(?:message|string|text)\b/i.test(active) &&
+        !/\b(?:retry|retries|trigger|catch|recover|boundary|when|whether)\b/i.test(active) &&
+        !/\b(?:and|then)\s+(?:fix|change|replace|alter|repair|modify)\b/i.test(active)) return false;
+    if (/\b(?:copy-only|wording-only|cosmetic|reword|wording)\b/i.test(active) &&
+        !/\b(?:and|then)\s+(?:fix|change|replace|alter|repair|modify)\b/i.test(active)) return false;
+    // Test descriptions can name the failure they exercise without changing it.
+    if (/^\s*(?:[-*\d.)]+\s*)?(?:add|write|verify|assert|test|exercise|cover)\b[^,]*\b(?:tests?|fixtures?|assertions?|coverage)\b/i.test(active) &&
+        !/\b(?:and|then)\s+(?:fix|change|replace|alter|repair|modify)\b/i.test(active)) return false;
+    return /\b(?:fix(?:es|ed|ing)?|repair\w*|correct\w*|replac\w*|chang\w*|alter\w*|modif\w*|migrat\w*|remov\w*|prevent\w*|reject\w*|restor\w*|retr(?:y|ies|ied)|cancel\w*|releas\w*|persist\w*)\b.{0,180}\b(?:auth(?:orization|entication)?|permission|access|tenant|privacy|retention|secret|boundary|persist|data|record|validation|schema|atomic|idempotenc|lock|queue|worker|lifecycle|cleanup|cache|timeout|retry|memory|availability|contract|API|wire format|serializ|default|behavior|flow|error|failure|bug|crash|wrong|incorrect|stale|layer|sketch|export)\w*/i.test(active);
+  });
+}
+
 function classifyPlan(content) {
   const title = getTitle(content);
   const body = extractPlanBody(content);
   if (isDeletePlan(title)) return { qualifies: false, reason: "DELETE-prefixed plan" };
-  if (isPureHardening(title, body)) return { qualifies: false, reason: "self-satisfying hardening task" };
-  if (/\b(?:purely additive|pure-hardening|genuinely non-material|non-material internal refactor)\b/i.test(body)) {
-    return { qualifies: false, reason: "explicitly excluded scope" };
+  if (hasMaterialMutation(title, body)) return { qualifies: true, reason: "material-change signal found" };
+  let exclusion = null;
+  if (isPureHardening(title, body)) exclusion = "self-satisfying hardening task";
+  if (body.split(/\n|[.!;]/).some(clause =>
+    !/\b(?:not|never|isn't|is not|no longer)\b/i.test(clause) &&
+    /\b(?:purely additive|pure-hardening|genuinely non-material|non-material internal refactor)\b/i.test(clause))) {
+    exclusion ??= "explicitly excluded scope";
   }
-  if (isExplicitlyAdditive(title, body)) return { qualifies: false, reason: "purely additive feature" };
-  if (isCosmeticErrorCopy(title, body)) return { qualifies: false, reason: "cosmetic error-copy change" };
+  if (isExplicitlyAdditive(title, body)) exclusion ??= "purely additive feature";
+  if (isCosmeticErrorCopy(title, body)) exclusion ??= "cosmetic error-copy change";
 
   const strongSignals = [
     /\b(?:fix|bug[- ]fix|broken|wrong|incorrect|regression|crash|silently|stale|doesn['’]t work|fails? to|should have but didn['’]t)\b/i,
@@ -205,7 +229,13 @@ function classifyPlan(content) {
     /\b(?:unresponsive|cannot accept input|stops responding|takes minutes to)\b/i,
     /\b(?:older|earlier|previously saved)\s+(?:sketch(?:es)?|files?|records?|documents?)\b[\s\S]{0,120}\b(?:cannot|won't|will not|stop opening|stop loading|refuse to open)\b/i,
   ];
-  return [...strongSignals, ...semanticRiskSignals].some((pattern) => pattern.test(body))
+  const activeRisk = body.split(/\n|[.!;]/).filter(clause =>
+    !/^\s*(?:[-*\d.)]+\s*)?(?:add|write|assert|verify|test|cover)\b.*\b(?:tests?|fixtures?|assertions?)\b/i.test(clause)).join("\n");
+  if (semanticRiskSignals.some(pattern => pattern.test(activeRisk))) {
+    return { qualifies: true, reason: "material-change signal found" };
+  }
+  if (exclusion) return { qualifies: false, reason: exclusion };
+  return strongSignals.some((pattern) => pattern.test(body))
     ? { qualifies: true, reason: "material-change signal found" }
     : { qualifies: false, reason: "no qualifying material-change signal found" };
 }
@@ -269,8 +299,10 @@ function isPlaceholder(value) {
 function hasValidNaReason(reason) {
   const concreteLength = reason.replace(/[*_`]/g, "").trim().length >= 35;
   const validCategory =
-    /\b(?:race condition|race)\b[\s\S]{0,100}\b(?:real[- ]clock|wall[- ]clock|timing|concurrency)\b/i.test(reason) ||
-    /\b(?:unmockable|live|third[- ]party|external)\b[\s\S]{0,100}\b(?:API|service|endpoint|behavior)\b/i.test(reason) ||
+    (/\b(?:race condition|race)\b[\s\S]{0,100}\b(?:real[- ]clock|wall[- ]clock|timing|concurrency)\b/i.test(reason) &&
+      /\b(?:cannot|can't|no deterministic|unreproducible)\b/i.test(reason)) ||
+    (/\b(?:unmockable|live|third[- ]party|external)\b[\s\S]{0,100}\b(?:API|service|endpoint|behavior)\b/i.test(reason) &&
+      /\b(?:unmockable|cannot|can't|not faithfully)\b/i.test(reason)) ||
     (/\b(?:purely visual|visual regression|pixel[- ]diff|screenshot)\b[\s\S]{0,160}\b(?:no|without|lacks?|does not have|has no|unavailable|not available)\b[\s\S]{0,80}\b(?:screenshot|pixel[- ]diff|visual)\b/i.test(reason) ||
       /\b(?:no|without|lacks?|does not have|has no|unavailable|not available)\b[\s\S]{0,80}\b(?:screenshot|pixel[- ]diff|visual)\b[\s\S]{0,160}\b(?:purely visual|visual regression|pixel[- ]diff)\b/i.test(reason)) ||
     /\b(?:fix|change|task)\b[\s\S]{0,80}\b(?:removes?|deletes?|eliminates?)\b[\s\S]{0,80}\b(?:feature|behavior|code path)\b/i.test(reason) ||
@@ -280,7 +312,7 @@ function hasValidNaReason(reason) {
 
 function checkSection(section, planPath, sectionIndex, mode, classification) {
   const problems = [];
-  if (sectionIndex > 0) problems.push("contains more than one ## Regression Guard section");
+  if (sectionIndex > 0 && mode === "strict") problems.push("contains more than one ## Regression Guard section");
   const text = activeDeclarationText(section.text).trim();
   const naLines = declarationLines(text, "N/A");
   const selfLines = declarationLines(text, "Self-satisfying");
@@ -347,6 +379,14 @@ function checkSection(section, planPath, sectionIndex, mode, classification) {
         }
       } else if (isPlaceholder(values[0])) {
         problem(`**${label}:** is empty or contains an unfilled placeholder`, true);
+      } else if (mode === "strict") {
+        if (label === "Test location" &&
+            !/(?:[\w@.-]+\/)*[\w.-]+\.(?:[cm]?[jt]sx?|py|sh|rb|go|rs|java|cs)\b|^Deferred to task #\d+ \(accepted\) — .{20,}/.test(values[0])) {
+          problem("**Test location:** must name a concrete test file or accepted task deferral");
+        }
+        if (label !== "Test location" && values[0].length < 25) {
+          problem(`**${label}:** needs a specific scenario or assertion`);
+        }
       }
     }
     const knownLabels = new Set(normalFields);
@@ -430,7 +470,7 @@ function readPlans(files) {
   return files.map((file) => ({ file, content: fs.readFileSync(file, "utf8") }));
 }
 
-function strictCheck(plans) {
+export function strictCheck(plans) {
   const violations = [];
   for (const plan of plans) {
     const sections = findSections(plan.content);
@@ -463,7 +503,7 @@ function printViolations(violations) {
   for (const violation of violations) console.error(`- ${violation}`);
 }
 
-function main() {
+export function main() {
   let mode;
   let selectedPath;
   try {
@@ -503,6 +543,9 @@ function main() {
     try {
       for (const plan of plans) {
         if (!findSections(plan.content).length && classifyPlan(plan.content).qualifies) {
+          if (/^\*\*Unified task ID:\*\*/m.test(plan.content) || /^FGU-.*\.md$/.test(path.basename(plan.file))) {
+            throw new Error("Sealed Unified plans require a supported amendment, not --fix-stub");
+          }
           fs.writeFileSync(plan.file, insertStub(plan.content), "utf8");
           inserted += 1;
         }
@@ -528,4 +571,4 @@ function main() {
   console.log(`Regression Guard checker: ${mode} check passed (${plans.length} plan${plans.length === 1 ? "" : "s"}).`);
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

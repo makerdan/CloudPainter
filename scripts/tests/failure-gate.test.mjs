@@ -21,6 +21,10 @@ const spec = (tier = "test-fast", extra = {}) => ({
   title: "Private fixture task", tier, why: "Exercise the fixture's bounded command",
   coverageEvidence: "docs/validation/unified-tiers.json fixture work; node scripts/run-validation.mjs ID " + tier,
   what: "Verify local gate invariants using disposable files only.",
+  done: ["A mismatched binding cannot launch work."],
+  outOfScope: ["Application behavior and live data."],
+  steps: ["Exercise disposable gate fixtures and retain maintenance evidence."],
+  relevantFiles: ["scripts/tests/failure-gate.test.mjs"],
   regression: { covers: "Wrong-tier execution and lost task identity", testLocation: "scripts/tests/failure-gate.test.mjs", checks: "Rejects mismatched tiers before child launch and retains allocated identities." },
   baselines: [], ...extra,
 });
@@ -38,7 +42,7 @@ function fixture(t, work = 'console.log("ok")', adapter = "exit") {
   json(root, "docs/validation/unified-policy.json", {
     schemaVersion: 1, mode: "active", projectId: process.env.REPL_ID,
     allocatorAuthorityVerified: true, canonicalSource: ".agents/skills/failure-gate-unified/SKILL.md",
-    canonicalSha256: sha(canonical), planTemplates: { [sha(canonical)]: "unified-v2" },
+    canonicalSha256: sha(canonical), planTemplates: { [sha(canonical)]: "unified-v2" }, newPlanTemplate: "unified-v3",
     capabilities: [], legacyNativeTasks: [{ ref: "#2" }]
   });
   json(root, "docs/validation/unified-task-registry.json", { schemaVersion: 1, projectId: process.env.REPL_ID, revision: 0, records: {} });
@@ -99,6 +103,175 @@ test("private CLI provisions a unique plan with required sections", t => {
   assert.match(fs.readFileSync(path.join(root, record.planPath), "utf8"), /Flaky-test rule/);
   assert.match(record.planPath, /^\.local\/tasks\//);
   assert.equal(cli(root, "check-failure-gate", [id], { TASK_PLAN_FILE: record.planPath }).status, 0);
+});
+
+test("versioned authoring and amendments support normal, N/A, self and excluded declarations", t => {
+  const root = fixture(t);
+  const variants = [
+    spec(),
+    spec("test-fast", { title: "Fix a visual defect", what: "Fix the purely visual placement defect.",
+      regression: { mode: "na", why: "This is a purely visual regression and the project has no screenshot or pixel-diff infrastructure to assert the affected pixels." } }),
+    spec("test-fast", { title: "Add a checker", what: "Add a standalone guard script with disposable checker fixtures.",
+      regression: { mode: "self", deliverable: "the primary deliverable is scripts/tests/failure-gate.test.mjs and the guard checker itself." } }),
+    spec("test-fast", { title: "Add an independent panel", what: "Add a purely additive optional panel without changing existing behavior.",
+      regression: { mode: "excluded", reason: "Only adds a new independent panel; prior behavior remains unchanged." } }),
+  ];
+  for (const input of variants) {
+    json(root, "spec.json", input);
+    const created = cli(root, "new-plan", ["spec.json"]);
+    assert.equal(created.status, 0, created.stderr);
+    const id = created.stdout.trim();
+    const record = registry(root).records[id];
+    assert.equal(record.planTemplate, "unified-v3");
+    const text = fs.readFileSync(path.join(root, record.planPath), "utf8");
+    for (const name of ["What & Why", "Done looks like", "Out of scope", "Steps", "Pre-existing failures to ignore", "Validation", "Relevant files"]) {
+      assert.ok(text.includes("## " + name));
+    }
+    assert.equal(cli(root, "validate-task-plans", [], { TASK_PLAN_FILE: record.planPath, UNIFIED_TASK_ID: id }).status, 0);
+    for (const replacement of variants) {
+      json(root, "replacement.json", replacement);
+      const changed = cli(root, "amend-plan", [id, "test-fast", "Same-tier declaration amendment with unchanged fixture coverage", "replacement.json"]);
+      assert.equal(changed.status, 0, changed.stderr);
+      checkPlan(root, id, "test-fast", context(root, id));
+      assert.equal(registry(root).records[id].tier, "test-fast");
+    }
+  }
+});
+
+test("invalid new declarations cannot publish; failed amendments preserve every sealed byte and identity", t => {
+  const root = fixture(t);
+  const sibling = provision(root, spec());
+  const siblingText = fs.readFileSync(path.join(root, context(root, sibling)), "utf8");
+  const bad = [
+    { mode: "na", why: "It is hard to test authorization in this project." },
+    { mode: "self", deliverable: "the deliverable is scripts/tests/auth.test.mjs alongside an authorization fix." },
+    { mode: "excluded", reason: "This is not purely additive." },
+    { mode: "normal", covers: "Authorization", testLocation: "unnamed coverage", checks: "It works" },
+  ];
+  for (const regression of bad) {
+    const input = spec("test-fast", { title: "Fix authorization", what: "Fix authorization so another tenant cannot read protected records.", regression });
+    json(root, "bad.json", input);
+    const failed = cli(root, "new-plan", ["bad.json"]);
+    assert.notEqual(failed.status, 0);
+    const before = fs.readFileSync(path.join(root, context(root, sibling)), "utf8");
+    const ledger = fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8");
+    const amendment = cli(root, "amend-plan", [sibling, "test-fast", "Attempt an invalid declaration", "bad.json"]);
+    assert.notEqual(amendment.status, 0);
+    assert.equal(fs.readFileSync(path.join(root, context(root, sibling)), "utf8"), before);
+    assert.equal(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8"), ledger);
+  }
+  const records = Object.values(registry(root).records);
+  assert.equal(records.filter(record => record.status === "incomplete").length, bad.length);
+  for (const record of records.filter(record => record.status === "incomplete")) {
+    assert.equal(fs.existsSync(path.join(root, record.planPath)), false);
+  }
+  assert.equal(fs.readFileSync(path.join(root, context(root, sibling)), "utf8"), siblingText);
+  const deferred = spec("test-fast", { regression: { ...spec().regression,
+    testLocation: "Deferred to task #999 (accepted) — requires a new fixture harness for tenant access." } });
+  assert.throws(() => provision(root, deferred), /authoritative accepted host-task evidence/);
+});
+
+test("current strict check blocks sealed invalid declarations at all execution routes without launch or repair", async t => {
+  const root = fixture(t, 'import fs from "node:fs"; fs.writeFileSync("launched", "yes");');
+  const id = provision(root, spec());
+  const plan = context(root, id);
+  // Simulate an earlier linter admitting a syntactically sealed but invalid plan.
+  // This is a disposable, uncommitted registry, never a live record mutation.
+  const ledger = registry(root);
+  const record = ledger.records[id];
+  record.spec = spec("test-fast", { title: "Fix authorization", what: "Fix authorization for protected tenant records.",
+    regression: { mode: "excluded", reason: "This is not purely additive." } });
+  const invalid = render(id, record.contract, record.spec, record.planTemplate);
+  fs.writeFileSync(path.join(root, plan), invalid);
+  record.planHash = sha(invalid);
+  json(root, "docs/validation/unified-task-registry.json", ledger);
+  fs.writeFileSync(path.join(root, ".local/tasks/archive.md"), "# Fix historical crash\n");
+  const before = fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8");
+  const env = { TASK_PLAN_FILE: plan, UNIFIED_TASK_ID: id };
+  for (const [name, args] of [
+    ["check-failure-gate", [id]], ["validate-task-plans", []],
+    ["run-validation", [id, "test-fast"]], ["validation-tier", ["test-fast", id]],
+  ]) {
+    const result = cli(root, name, args, env);
+    assert.notEqual(result.status, 0, name);
+    assert.match(result.stderr, /Regression Guard strict check failed/);
+  }
+  await assert.rejects(run(root, id, "test-fast", plan), /Regression Guard strict check failed/);
+  assert.equal(fs.existsSync(path.join(root, "launched")), false);
+  assert.equal(fs.existsSync(path.join(root, ".local/failure-gate/runs")), false);
+  assert.equal(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8"), before);
+  assert.equal(fs.readFileSync(path.join(root, plan), "utf8"), invalid);
+  assert.equal(fs.readFileSync(path.join(root, ".local/tasks/archive.md"), "utf8"), "# Fix historical crash\n");
+  // A supported amendment is the recovery route, not in-place stub repair.
+  amend(root, id, "test-fast", "Supply the missing tenant-access regression assertion", spec());
+  assert.equal(checkPlan(root, id, "test-fast", plan).record.id, id);
+});
+
+test("both plan guards reject empty, directory, missing and non-md targets without touching siblings", t => {
+  const root = fixture(t);
+  const id = provision(root, spec());
+  const plan = context(root, id);
+  const sealed = fs.readFileSync(path.join(root, plan), "utf8");
+  fs.mkdirSync(path.join(root, "directory.md"));
+  for (const target of ["", "missing.md", "not-markdown.txt", "directory.md"]) {
+    for (const [name, args] of [["check-regression-guard", []], ["check-failure-gate", [id]], ["validate-task-plans", []]]) {
+      const result = cli(root, name, args, { TASK_PLAN_FILE: target, UNIFIED_TASK_ID: id });
+      assert.notEqual(result.status, 0, `${name}: ${target}`);
+      assert.match(result.stderr, /TASK_PLAN_FILE/);
+    }
+    assert.equal(fs.readFileSync(path.join(root, plan), "utf8"), sealed);
+    const noId = cli(root, "check-failure-gate", [], { TASK_PLAN_FILE: target });
+    assert.notEqual(noId.status, 0);
+    assert.match(noId.stderr, /TASK_PLAN_FILE/);
+  }
+  assert.match(cli(root, "check-failure-gate", [], { TASK_PLAN_FILE: plan }).stderr, /requires the bound task ID/);
+});
+
+test("new representation does not reinterpret historical renderer or contract mappings", t => {
+  const root = fixture(t);
+  const p = policy(root);
+  delete p.newPlanTemplate;
+  json(root, "docs/validation/unified-policy.json", p);
+  const id = provision(root, spec());
+  const sealed = fs.readFileSync(path.join(root, context(root, id)), "utf8");
+  const old = registry(root).records[id];
+  p.newPlanTemplate = "unified-v3";
+  json(root, "docs/validation/unified-policy.json", p);
+  checkPlan(root, id, "test-fast", context(root, id));
+  assert.equal(fs.readFileSync(path.join(root, context(root, id)), "utf8"), sealed);
+  assert.deepEqual(registry(root).records[id], old);
+  const next = provision(root, spec());
+  assert.equal(registry(root).records[next].planTemplate, "unified-v3");
+  assert.equal(p.planTemplates[p.canonicalSha256], "unified-v2");
+  amend(root, id, "test-fast", "Adopt complete plan sections without changing the bound workload", spec());
+  assert.equal(registry(root).records[id].planTemplate, "unified-v3");
+  assert.equal(registry(root).records[id].contract, old.contract);
+});
+
+test("deferrals require authoritative project/ref/non-draft evidence at each plan write", t => {
+  const root = fixture(t);
+  const input = spec("test-fast", { regression: { ...spec().regression,
+    testLocation: "Deferred to task #999 (accepted) — a separate fixture harness is required for tenant access." } });
+  const evidence = { verified: true, projectId: policy(root).projectId, taskRef: "999",
+    state: "IN_PROGRESS", reference: "host-task-service:fixture/999/revision-1" };
+  for (const change of [{ verified: false }, { projectId: "elsewhere" }, { taskRef: "123" }, { state: "PROPOSED" },
+    { state: "CANCELLED" }, { reference: "" }]) {
+    assert.throws(() => provision(root, input, { resolveTask: () => ({ ...evidence, ...change }) }), /authoritatively accepted/);
+  }
+  assert.deepEqual(Object.keys(registry(root).records), []);
+  const id = provision(root, input, { resolveTask: () => evidence });
+  checkPlan(root, id, "test-fast", context(root, id));
+  assert.equal(registry(root).records[id].regressionDeferral.reference, evidence.reference);
+  const before = registry(root);
+  assert.throws(() => amend(root, id, "test-fast", "Renew the deferred guard", input), /authoritative accepted host-task evidence/);
+  assert.deepEqual(registry(root), before);
+  amend(root, id, "test-fast", "Renew the accepted deferral from authoritative host data", input, { resolveTask: () => evidence });
+  checkPlan(root, id, "test-fast", context(root, id));
+  amend(root, id, "test-fast", "Deliver the regression guard in this plan instead", spec());
+  assert.equal(registry(root).records[id].regressionDeferral, undefined);
+  // The real CLI has no host adapter. JSON claiming acceptance must not enable it.
+  json(root, "deferred.json", { ...input, resolveTask: evidence, regressionDeferral: evidence });
+  assert.match(cli(root, "new-plan", ["deferred.json"]).stderr, /authoritative accepted host-task evidence/);
 });
 test("package forwarded argument separator preserves exactly one task context", t => {
   const root = fixture(t);
@@ -236,6 +409,7 @@ test("older sealed contract verifies unchanged after pin update; amendment expli
   const p = policy(root);
   const oldContract = p.canonicalSha256;
   p.planTemplates[oldContract] = "legacy-v1";
+  delete p.newPlanTemplate;
   json(root, "docs/validation/unified-policy.json", p);
   const oldSpec = spec(); delete oldSpec.coverageEvidence;
   const id = provision(root, oldSpec);
