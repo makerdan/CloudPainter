@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
-  "revision": 12,
+  "revision": 20,
   "records": {
     "FGU-81af9606-cc13-465c-99a0-820e95ec1e03": {
       "id": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
@@ -160,6 +160,94 @@
         "state": "PASS",
         "runId": "44fca6b3-2e21-4584-a5e1-01752370bda6",
         "at": "2026-10-16T20:56:53.324Z"
+      }
+    },
+    "FGU-ff97b68f-69f8-4660-a77c-86cf08d72048": {
+      "id": "FGU-ff97b68f-69f8-4660-a77c-86cf08d72048",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "f2718cf9f0ec3351b14ebfeecfb3181a930bc1dffed813b0ffafb6415dfd3478",
+      "contract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-ff97b68f-69f8-4660-a77c-86cf08d72048.md",
+      "spec": {
+        "title": "Confirm Port Authority and remove missing-document references",
+        "nativeTaskRef": "#13",
+        "tier": "test-fast",
+        "why": "Owner requests removal of missing document references; preserve safety requirements and report approved archive deviation.",
+        "coverageEvidence": "docs/validation/unified-tiers.json test-fast runs gate-unit and regression-guard under finite supervision; supported invocation is pnpm run test-fast -- FGU-ff97b68f-69f8-4660-a77c-86cf08d72048 with its recorded UNIFIED_TASK_ID and TASK_PLAN_FILE.",
+        "what": "Preserve the canonical Port Authority entry point restored from owner-approved attached_assets/port-authority-unified-compatible_1792279619075.zip (archive SHA-256 d17fec4280ac00940eb3e58a5a15b92eae1a4704d5b57da1aaa470f9c18a2a77, original member SHA-256 669b3eda957903b0dbba2ae1dd21ba3206682051618382bd1fa9526f126228a4). The owner now explicitly requests: remove all missing reference documents. The three named reference documents do not exist canonically, so remove their broken Markdown links and mandatory reading instructions from .agents/skills/port-authority/SKILL.md; remove the associated unavailable reference-closure prerequisite. Retain canonical-source authority and explicit host ownership, authorization, finite execution, cleanup and acceptance requirements, blocking only controls whose requirements remain unknown. List the exact gap and edit before applying it. Do not delete existing documents, install support files, edit mirrors, adjacent package material or app/runtime/workflow/CI code, or activate controls. Keep the six sections, identity and all other supplied instructions unchanged. Original checks retained subject to this explicit owner amendment: canonical entry point and port-authority YAML identity; every supplied section and instruction preserved except the approved missing-document removal; any correction is separately listed and is NOT represented as unchanged archive parity; no section vague, self-referential or deferred; future Planner can follow the explicit host-dependent safety boundaries without broken local document links. Verify exact expected diff from the approved archive, count materially changed nonblank body lines against the canonical confirmation escalation threshold, verify no remaining local Markdown links to absent documents, and report final hash separately from original member hash. Preserve all existing Unified IDs, histories, bindings and incoming main-branch records. Rebase conflict resolution retained the four exact immutable records from both branches, checked by merge guards. Use the existing Unified identity and supported same-tier amendment, not a replacement task ID. Run only its full bound test-fast tier; no packaged Port Authority behavior tests or live acceptance. Report definition confirmation separately from package or app readiness; removing links does not supply runtime modules or prove readiness.",
+        "baselines": [],
+        "regression": {
+          "covers": "Owner-requested removal of broken document dependencies must preserve all six Port Authority sections and explicit safety boundaries; current file becomes an approved wording deviation, not false archive parity.",
+          "testLocation": "Direct source-only exact diff and missing-link checks against the approved archive member; scripts/tests/failure-gate.test.mjs and scripts/tests/check-regression-guard.test.mjs through assigned test-fast.",
+          "checks": "Exactly the three missing document links and their reading/closure prerequisite are replaced by explicit host-contract verification; YAML identity and all remaining source lines remain unchanged. Count changed nonblank body lines below the greater-than-half rewrite threshold; preserve all registry records and run the bound guarded tier."
+        }
+      },
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-17T23:28:51.576Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-17T23:28:51.602Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "9679c188-558c-4520-8ebf-9ad06913562f",
+          "state": "PASS",
+          "at": "2026-10-17T23:30:09.131Z"
+        },
+        {
+          "kind": "amendment-start",
+          "from": "test-fast",
+          "to": "test-fast",
+          "fromDefinition": "f2718cf9f0ec3351b14ebfeecfb3181a930bc1dffed813b0ffafb6415dfd3478",
+          "toDefinition": "f2718cf9f0ec3351b14ebfeecfb3181a930bc1dffed813b0ffafb6415dfd3478",
+          "fromContract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+          "toContract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+          "coverageEvidence": "docs/validation/unified-tiers.json test-fast runs gate-unit and regression-guard under finite supervision; supported invocation is pnpm run test-fast -- FGU-ff97b68f-69f8-4660-a77c-86cf08d72048 with its recorded UNIFIED_TASK_ID and TASK_PLAN_FILE.",
+          "why": "Owner requests removal of missing document references; preserve safety requirements and report approved archive deviation.",
+          "at": "2026-10-17T23:33:36.404Z"
+        },
+        {
+          "kind": "amended",
+          "from": "test-fast",
+          "to": "test-fast",
+          "fromContract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+          "toContract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+          "coverageEvidence": "docs/validation/unified-tiers.json test-fast runs gate-unit and regression-guard under finite supervision; supported invocation is pnpm run test-fast -- FGU-ff97b68f-69f8-4660-a77c-86cf08d72048 with its recorded UNIFIED_TASK_ID and TASK_PLAN_FILE.",
+          "why": "Owner requests removal of missing document references; preserve safety requirements and report approved archive deviation.",
+          "at": "2026-10-17T23:33:36.430Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "b7f249f0-5de2-4857-bb14-05ffc81b4e69",
+          "state": "PASS",
+          "at": "2026-10-17T23:34:13.642Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "9679c188-558c-4520-8ebf-9ad06913562f",
+          "reportPath": ".local/failure-gate/runs/FGU-ff97b68f-69f8-4660-a77c-86cf08d72048/9679c188-558c-4520-8ebf-9ad06913562f/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-17T23:29:55.606Z"
+        },
+        {
+          "runId": "b7f249f0-5de2-4857-bb14-05ffc81b4e69",
+          "reportPath": ".local/failure-gate/runs/FGU-ff97b68f-69f8-4660-a77c-86cf08d72048/b7f249f0-5de2-4857-bb14-05ffc81b4e69/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-17T23:34:00.017Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "cdef552afdb45cdfcac020e6da94977a75985db21400c4d3d05471ad34768715",
+      "assessment": {
+        "state": "PASS",
+        "runId": "b7f249f0-5de2-4857-bb14-05ffc81b4e69",
+        "at": "2026-10-17T23:34:13.642Z"
       }
     }
   }
