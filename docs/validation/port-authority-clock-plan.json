@@ -1,0 +1,37 @@
+{
+  "title": "Determine and repair Port Authority clock fixture timing",
+  "nativeTaskRef": "#41",
+  "what": "Diagnose the approved archive's clock-reversal failure using private phase-specific fixtures and repair only its ambiguous test, without installing supporting runtime controls.",
+  "tier": "test-fast",
+  "why": "The owner-approved added focused workload exercises the packaged runtime in private fixtures alongside existing gate and regression checks.",
+  "coverageEvidence": "docs/validation/unified-tiers.json test-fast: gate-unit, regression-guard, port-authority-clock; pnpm run test-fast -- GENERATED_ID; 60000ms step, 120000ms total, 5000ms cleanup.",
+  "done": [
+    "Recorded archive evidence is distinguished from fresh focused proof and full-package acceptance.",
+    "Forced startup expiry reproduces exit 4, rejects the old exit-1 assertion, confirms stopped owned work and retained exclusion.",
+    "Dispatched reversal requires exit 1 and quiescent release; independent queue reversal requires exit 3 and no dispatch.",
+    "The original archive and canonical supporting package remain untouched; repaired private test snapshot is retained."
+  ],
+  "outOfScope": [
+    "Installing canonical supporting package files, enabling live controls, app process changes, deployment and production access.",
+    "Full 75-test package acceptance, host activation and repeated runs until passing."
+  ],
+  "steps": [
+    "Add the explicitly approved focused gate workload as gate maintenance, without editing existing ledger bindings.",
+    "Provision a sealed task using the revised workload and validate its plan through the supported route.",
+    "Run the bounded tier once, preserve raw case evidence and repair only a diagnosed fixture defect.",
+    "Document observed cause, phase-specific assertions, budgets, retained evidence and remaining acceptance limits."
+  ],
+  "regression": {
+    "mode": "normal",
+    "covers": "The clock-reversal fixture incorrectly requires a post-dispatch exit when its startup budget expires before dispatch, preventing the later queue assertion.",
+    "testLocation": "scripts/fixtures/port-authority-clock-cases.mjs.txt via scripts/port-authority-clock-proof.mjs",
+    "checks": "Forces the startup failure and rejects the old exit-1 assertion; independently requires exit 1 after dispatch with stopped owned work, exit 3 for queue timeout, and retained uncertain exclusion."
+  },
+  "baselines": [],
+  "relevantFiles": [
+    "attached_assets/port-authority-unified-compatible_1792279619075.zip",
+    "scripts/port-authority-clock-proof.mjs",
+    "scripts/fixtures/port-authority-clock-cases.mjs.txt",
+    "docs/validation/unified-tiers.json"
+  ]
+}

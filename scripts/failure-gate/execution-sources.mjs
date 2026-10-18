@@ -18,6 +18,8 @@ export function executionSources(root) {
     "scripts/amend-plan.mjs",
     "scripts/tests/failure-gate.test.mjs",
     "scripts/tests/check-regression-guard.test.mjs",
+    "scripts/port-authority-clock-proof.mjs",
+    "scripts/fixtures/port-authority-clock-cases.mjs.txt",
     "scripts/configure-local-gate.mjs"
   ];
   return files.map(file => ({ file, hash: fs.existsSync(safePath(root, file)) ? sha(readText(root, file)) : null }));

@@ -103,6 +103,15 @@ or dispatch remote CI for this migration.
 `test-standard-plus` and `test-heavy` retain unavailable resource requirements
 and fail closed. No capability strings are added to pretend they work.
 `test-standard` is registered but is not verified operational by a fast-tier run.
+The owner-approved focused Port Authority clock workload now runs within
+`test-fast` alongside its existing checks, without changing its 60-second step,
+120-second total or 5-second cleanup bounds. See
+[the investigation record](port-authority-clock-investigation.md) for admission,
+source fingerprints, exact fixture outcomes and limitations. Its script is a
+supervised workload step, not a standalone authorization route. Historical
+bindings were preserved; changed tier definitions require the supported
+amendment before an older task can run. This is private package proof, not
+installed controls or full-package/host acceptance.
 The automated owner-closure CLI stays denied without authentic direction
 integration. Visible owner instructions may be reported administratively under
 the canonical contract, never as test PASS or forged CLI authority.

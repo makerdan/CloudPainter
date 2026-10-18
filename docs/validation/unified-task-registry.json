@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
-  "revision": 20,
+  "revision": 28,
   "records": {
     "FGU-81af9606-cc13-465c-99a0-820e95ec1e03": {
       "id": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
@@ -248,6 +248,153 @@
         "state": "PASS",
         "runId": "b7f249f0-5de2-4857-bb14-05ffc81b4e69",
         "at": "2026-10-17T23:34:13.642Z"
+      }
+    },
+    "FGU-881d0f95-e85a-4aec-a3f5-5ab30d8b213a": {
+      "id": "FGU-881d0f95-e85a-4aec-a3f5-5ab30d8b213a",
+      "status": "incomplete",
+      "tier": "test-fast",
+      "tierHash": "3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc",
+      "contract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-881d0f95-e85a-4aec-a3f5-5ab30d8b213a.md",
+      "spec": {
+        "title": "Determine and repair Port Authority clock fixture timing",
+        "nativeTaskRef": "#41",
+        "what": "Diagnose the approved archive's clock-reversal failure using private phase-specific fixtures and repair only its ambiguous test, without installing supporting runtime controls.",
+        "tier": "test-fast",
+        "why": "The owner-approved added focused workload exercises the packaged runtime in private fixtures alongside existing gate and regression checks.",
+        "coverageEvidence": "docs/validation/unified-tiers.json test-fast: gate-unit, regression-guard, port-authority-clock; pnpm run test-fast -- GENERATED_ID; 60000ms step, 120000ms total, 5000ms cleanup.",
+        "done": [
+          "Recorded archive evidence is distinguished from fresh focused proof and full-package acceptance.",
+          "Forced startup expiry reproduces exit 4, rejects the old exit-1 assertion, confirms stopped owned work and retained exclusion.",
+          "Dispatched reversal requires exit 1 and quiescent release; independent queue reversal requires exit 3 and no dispatch.",
+          "The original archive and canonical supporting package remain untouched; repaired private test snapshot is retained."
+        ],
+        "outOfScope": [
+          "Installing canonical supporting package files, enabling live controls, app process changes, deployment and production access.",
+          "Full 75-test package acceptance, host activation and repeated runs until passing."
+        ],
+        "steps": [
+          "Add the explicitly approved focused gate workload as gate maintenance, without editing existing ledger bindings.",
+          "Provision a sealed task using the revised workload and validate its plan through the supported route.",
+          "Run the bounded tier once, preserve raw case evidence and repair only a diagnosed fixture defect.",
+          "Document observed cause, phase-specific assertions, budgets, retained evidence and remaining acceptance limits."
+        ],
+        "regression": {
+          "mode": "self",
+          "deliverable": "scripts/fixtures/port-authority-clock-cases.mjs.txt executed by scripts/port-authority-clock-proof.mjs: startup exit 4 and retained exclusion, dispatched exit 1 and quiescence, independent queue exit 3; the old unconditional assertion is explicitly rejected."
+        },
+        "baselines": [],
+        "relevantFiles": [
+          "attached_assets/port-authority-unified-compatible_1792279619075.zip",
+          "scripts/port-authority-clock-proof.mjs",
+          "scripts/fixtures/port-authority-clock-cases.mjs.txt",
+          "docs/validation/unified-tiers.json"
+        ]
+      },
+      "planTemplate": "unified-v3",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-18T00:04:22.368Z"
+        },
+        {
+          "kind": "generation-failed",
+          "at": "2026-10-18T00:04:22.485Z"
+        }
+      ],
+      "runs": [],
+      "preexistingNotes": []
+    },
+    "FGU-cc015bab-422b-40f8-83af-fdff4c07c58e": {
+      "id": "FGU-cc015bab-422b-40f8-83af-fdff4c07c58e",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc",
+      "contract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-cc015bab-422b-40f8-83af-fdff4c07c58e.md",
+      "spec": {
+        "title": "Determine and repair Port Authority clock fixture timing",
+        "nativeTaskRef": "#41",
+        "what": "Diagnose the approved archive's clock-reversal failure using private phase-specific fixtures and repair only its ambiguous test, without installing supporting runtime controls.",
+        "tier": "test-fast",
+        "why": "The owner-approved added focused workload exercises the packaged runtime in private fixtures alongside existing gate and regression checks.",
+        "coverageEvidence": "docs/validation/unified-tiers.json test-fast: gate-unit, regression-guard, port-authority-clock; pnpm run test-fast -- GENERATED_ID; 60000ms step, 120000ms total, 5000ms cleanup.",
+        "done": [
+          "Recorded archive evidence is distinguished from fresh focused proof and full-package acceptance.",
+          "Forced startup expiry reproduces exit 4, rejects the old exit-1 assertion, confirms stopped owned work and retained exclusion.",
+          "Dispatched reversal requires exit 1 and quiescent release; independent queue reversal requires exit 3 and no dispatch.",
+          "The original archive and canonical supporting package remain untouched; repaired private test snapshot is retained."
+        ],
+        "outOfScope": [
+          "Installing canonical supporting package files, enabling live controls, app process changes, deployment and production access.",
+          "Full 75-test package acceptance, host activation and repeated runs until passing."
+        ],
+        "steps": [
+          "Add the explicitly approved focused gate workload as gate maintenance, without editing existing ledger bindings.",
+          "Provision a sealed task using the revised workload and validate its plan through the supported route.",
+          "Run the bounded tier once, preserve raw case evidence and repair only a diagnosed fixture defect.",
+          "Document observed cause, phase-specific assertions, budgets, retained evidence and remaining acceptance limits."
+        ],
+        "regression": {
+          "mode": "normal",
+          "covers": "The clock-reversal fixture incorrectly requires a post-dispatch exit when its startup budget expires before dispatch, preventing the later queue assertion.",
+          "testLocation": "scripts/fixtures/port-authority-clock-cases.mjs.txt via scripts/port-authority-clock-proof.mjs",
+          "checks": "Forces the startup failure and rejects the old exit-1 assertion; independently requires exit 1 after dispatch with stopped owned work, exit 3 for queue timeout, and retained uncertain exclusion."
+        },
+        "baselines": [],
+        "relevantFiles": [
+          "attached_assets/port-authority-unified-compatible_1792279619075.zip",
+          "scripts/port-authority-clock-proof.mjs",
+          "scripts/fixtures/port-authority-clock-cases.mjs.txt",
+          "docs/validation/unified-tiers.json"
+        ]
+      },
+      "planTemplate": "unified-v3",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-18T00:04:48.760Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-18T00:04:48.890Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "7af491c3-2509-4c4a-91e8-50bc508bc4c6",
+          "state": "FAIL",
+          "at": "2026-10-18T00:05:25.891Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "bbd09dda-b2bd-422a-ab2c-d69c84a0709e",
+          "state": "PASS",
+          "at": "2026-10-18T00:07:10.183Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "7af491c3-2509-4c4a-91e8-50bc508bc4c6",
+          "reportPath": ".local/failure-gate/runs/FGU-cc015bab-422b-40f8-83af-fdff4c07c58e/7af491c3-2509-4c4a-91e8-50bc508bc4c6/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-18T00:04:55.203Z"
+        },
+        {
+          "runId": "bbd09dda-b2bd-422a-ab2c-d69c84a0709e",
+          "reportPath": ".local/failure-gate/runs/FGU-cc015bab-422b-40f8-83af-fdff4c07c58e/bbd09dda-b2bd-422a-ab2c-d69c84a0709e/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-18T00:06:39.571Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "d601a799d1b0d67a12620f0fac7269e927df152883354535e0a6b3f1da0d0fbe",
+      "assessment": {
+        "state": "PASS",
+        "runId": "bbd09dda-b2bd-422a-ab2c-d69c84a0709e",
+        "at": "2026-10-18T00:07:10.183Z"
       }
     }
   }

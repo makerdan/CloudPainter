@@ -1,0 +1,110 @@
+// Replaces the single ambiguous clock case in the approved archive.
+// These are private fixture budgets, not changes to host/runtime policy limits.
+// Exact phase-specific exits remain mandatory; 4 is never accepted for dispatch.
+function clockInjection(s, body, before = "") {
+  return `const fs=require('node:fs');
+    const realNow=Date.now;let calls=0;
+    Date.now=()=>realNow()-(++calls>3?3600000:0);
+    ${before}
+    process.argv=[process.execPath,${JSON.stringify(join(s.scripts, "validation-lock.mjs"))},
+      '--',process.execPath,'-e',${JSON.stringify(body)}];
+    import(${JSON.stringify(join(s.scripts, "validation-lock.mjs"))});`;
+}
+function clockEvidence(name, result, s) {
+  console.log(JSON.stringify({ case: name, exit: result.code, raw: result.text,
+    leaseRetained: existsSync(s.env.VALIDATION_LOCK_FILE), stateDirectory: s.dir }));
+}
+
+test("clock: startup expiry reproduces old exit assertion and retains exclusion", async t => {
+  const s = setup(t), marker = join(s.dir, "must-not-dispatch");
+  // Force the documented failure window once: after watchdog registration,
+  // before dispatch, spend more than the unchanged 200ms execution budget.
+  const before = `const original=fs.fsyncSync;let delayed=false;
+    fs.fsyncSync=function(...args){const result=original.apply(this,args);
+      if(!delayed&&fs.existsSync(${JSON.stringify(s.env.VALIDATION_LOCK_FILE)})){
+        const lease=JSON.parse(fs.readFileSync(${JSON.stringify(s.env.VALIDATION_LOCK_FILE)},'utf8'));
+        if(lease.watchdog){delayed=true;
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,250);}}
+      return result;};
+    require('node:module').syncBuiltinESMExports();`;
+  const result = await s.run("-e", [clockInjection(s,
+    `require('node:fs').writeFileSync(${JSON.stringify(marker)},'ILLEGAL_START');setInterval(()=>{},1000);`,
+    before)], { VALIDATION_LOCK_MAX_HOLD_MS: "200" });
+  clockEvidence("startup", result, s);
+  assert.equal(result.code, 4, result.text);
+  assert.match(result.text, /dispatch cancelled, watchdog unavailable, or execution budget expired/);
+  assert.match(result.text, /"reason":"execution-budget"/);
+  assert.match(result.text, /"workloadStopped":true/);
+  assert.match(result.text, /"leaseRetained":true/);
+  assert(!existsSync(marker), "User command must never dispatch after startup budget expiry");
+  assert(existsSync(s.env.VALIDATION_LOCK_FILE));
+  const retained = JSON.parse(readFileSync(s.env.VALIDATION_LOCK_FILE, "utf8"));
+  assert.equal(retained.recoveryRequired, true);
+  for (const p of retained.observed) assert(!isAlive(p), "Owned work must be quiescent");
+  // Negative proof: the old unconditional exit-1 assertion fails on this result.
+  assert.throws(() => assert.equal(result.code, 1), { code: "ERR_ASSERTION" });
+  const next = await s.wrapped(`require('node:fs').writeFileSync(${JSON.stringify(marker)},'ILLEGAL_START');`,
+    { VALIDATION_LOCK_TIMEOUT_MS: "150" }).done;
+  assert.equal(next.code, 4, next.text);
+  assert.match(next.text, /retained\/error or unfinalized lease/);
+  assert(!existsSync(marker), "Retained uncertain lease must block replacement");
+  assert.equal(readFileSync(s.env.VALIDATION_LOCK_FILE, "utf8"), JSON.stringify(retained));
+});
+
+test("clock: reversed wall time cannot extend a dispatched execution deadline", async t => {
+  const s = setup(t), ready = join(s.dir, "command-ready"), reversed = join(s.dir, "clock-reversed");
+  // Startup has real finite headroom. Also force reversal *after* command
+  // readiness, rather than merely counting startup's Date.now calls.
+  const before = `Date.now=()=>{const now=realNow();
+    if(fs.existsSync(${JSON.stringify(ready)})){
+      fs.writeFileSync(${JSON.stringify(reversed)},'reversed');
+      return now-3600000;}return now;};`;
+  const begin = performance.now();
+  const result = await s.run("-e", [clockInjection(s,
+    `const fs=require('node:fs'),stat=fs.readFileSync('/proc/self/stat','utf8');
+      fs.writeFileSync(${JSON.stringify(ready)},JSON.stringify({
+        pid:process.pid,startTime:stat.slice(stat.lastIndexOf(')')+2).trim().split(/\\s+/)[19]}));
+      setInterval(()=>{},1000);`,
+    before)], { VALIDATION_LOCK_MAX_HOLD_MS: "2000" });
+  const elapsed = performance.now() - begin;
+  clockEvidence("dispatched", result, s);
+  assert(existsSync(ready), "This proof requires actual command dispatch");
+  const child = JSON.parse(readFileSync(ready, "utf8"));
+  s.extras.push(child);
+  assert(existsSync(reversed), "Wall-clock reversal must occur while command is running");
+  assert.equal(result.code, 1, result.text);
+  assert.match(result.text, /"reason":"execution-budget"/);
+  assert.match(result.text, /"workloadStopped":true/);
+  assert(!isAlive(child), "The exact dispatched process incarnation must be stopped");
+  assert(elapsed < 7000, "An hour of wall-clock reversal must not extend a finite execution");
+  assert(!existsSync(s.env.VALIDATION_LOCK_FILE), "Release requires confirmed quiescence");
+});
+
+test("clock: reversed wall time cannot extend the queue deadline", async t => {
+  const s = setup(t), marker = join(s.dir, "must-not-dispatch"), reversed = join(s.dir, "queue-reversed");
+  const retained = seedLease(s, identity(process.pid));
+  const bytes = readFileSync(s.env.VALIDATION_LOCK_FILE, "utf8");
+  // The original call-count injection did not prove Date.now was called again
+  // during queue waiting. Reverse it explicitly after the waiter is published.
+  const before = `let backward=false,armed=false;Date.now=()=>realNow()-(backward?3600000:0);
+    const write=fs.writeFileSync;fs.writeFileSync=function(path,...args){
+      const result=write.call(this,path,...args);
+      if(!armed&&String(path).startsWith(${JSON.stringify(s.env.VALIDATION_LOCK_WAITERS_DIR + "/")})){
+        armed=true;setTimeout(()=>{const previous=Date.now();backward=true;
+          write.call(fs,${JSON.stringify(reversed)},String(Date.now()-previous));},30);}
+      return result;};
+    require('node:module').syncBuiltinESMExports();`;
+  const begin = performance.now();
+  const result = await s.run("-e", [clockInjection(s,
+    `require('node:fs').writeFileSync(${JSON.stringify(marker)},'ILLEGAL_START');` +
+    "setInterval(()=>{},1000);", before)], { VALIDATION_LOCK_TIMEOUT_MS: "150" });
+  const elapsed = performance.now() - begin;
+  clockEvidence("queued", result, s);
+  assert.equal(result.code, 3, result.text);
+  assert.match(result.text, /queue timeout/);
+  assert(Number(readFileSync(reversed, "utf8")) < -3500000, "Wall time must reverse while queued");
+  assert(elapsed < 3000, "An hour of wall-clock reversal must not extend a finite queue");
+  assert(!existsSync(marker));
+  assert.equal(readFileSync(s.env.VALIDATION_LOCK_FILE, "utf8"), bytes);
+  assert.equal(retained.owner.pid, process.pid);
+});
