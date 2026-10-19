@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { provision, checkPlan, amend, cancel, render, regressionPreflight } from "../failure-gate/plans.mjs";
-import { run, parseFailures, evaluateFailures, selfClassify, closeOwnerDirection } from "../failure-gate/runner.mjs";
+import { run, supervise, parseFailures, evaluateFailures, selfClassify, closeOwnerDirection } from "../failure-gate/runner.mjs";
 import { registry, readJson, atomicJson, lease, sha, TIERS, baseline, warnings, safePath, policy, tier } from "../failure-gate/store.mjs";
 import { transaction } from "../failure-gate/store.mjs";
 import { recoveryPreview } from "../failure-gate/recovery.mjs";
@@ -1174,6 +1174,223 @@ function ciBefore() {
   assert.equal(sha(JSON.stringify(table)), "58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea");
   return table;
 }
+function ciDelivered() {
+  const table = readJson(SOURCE, "docs/validation/evidence/poe-tiers-before.json");
+  assert.equal(sha(JSON.stringify(table)), "86ca97c23def205fd22d5d1bd182145ffaa3658a0cb5fd903a89aa2f9e654cd6");
+  return table;
+}
+const poeSteps = [
+  {
+    name: "poe-image-contract", cwd: "lib/integrations-openai-ai-server", adapter: "node-tap",
+    argv: ["node", "--import", "tsx", "--test", "--test-reporter=tap", "--test-timeout=30000", "tests/poe-image.test.ts"],
+    retryPrefix: ["node", "--import", "tsx", "--test", "--test-reporter=tap", "--test-timeout=30000", "--test-name-pattern"],
+    retrySuffix: ["tests/poe-image.test.ts"],
+  },
+  ...[
+    ["api-poe-upscale", "tests/image-upscale.test.ts"],
+    ["api-poe-logo", "tests/logo-images.test.ts"],
+  ].map(([name, file]) => ({
+    name, cwd: "artifacts/api-server", adapter: "node-tap",
+    argv: ["node", "--import", "../../scripts/failure-gate/poe-fixture-env.mjs", "--import", "tsx",
+      "--test", "--test-reporter=tap", "--test-timeout=15000", file],
+    retryPrefix: ["node", "--import", "../../scripts/failure-gate/poe-fixture-env.mjs", "--import", "tsx",
+      "--test", "--test-reporter=tap", "--test-timeout=15000", "--test-name-pattern"],
+    retrySuffix: [file],
+  })),
+];
+const poeFiles = [
+  ["tests/poe-image.test.ts", "lib/integrations-openai-ai-server"],
+  ["tests/image-upscale.test.ts", "artifacts/api-server"],
+  ["tests/logo-images.test.ts", "artifacts/api-server"],
+  ["src/routes/outline.test.ts", "artifacts/api-server"],
+];
+function assertPoeDelta(root, table) {
+  const prior = ciDelivered();
+  const unchanged = structuredClone(table);
+  assert.deepEqual(unchanged.tiers["test-standard"].steps.splice(-3), poeSteps,
+    "The exact three approved checks are appended after the delivered CI checks");
+  const expectedOutline = structuredClone(prior.tiers["test-standard"].steps.find(s => s.name === "api-outline"));
+  expectedOutline.argv.splice(1, 0, "--import", "../../scripts/failure-gate/poe-fixture-env.mjs");
+  expectedOutline.retryPrefix.splice(1, 0, "--import", "../../scripts/failure-gate/poe-fixture-env.mjs");
+  const outline = unchanged.tiers["test-standard"].steps.find(s => s.name === "api-outline");
+  assert.deepEqual(outline, expectedOutline, "Only the outline preload may change");
+  unchanged.tiers["test-standard"].steps = unchanged.tiers["test-standard"].steps.map(step =>
+    step.name === "api-outline" ? prior.tiers["test-standard"].steps.find(s => s.name === "api-outline") : step);
+  assert.deepEqual(unchanged, prior, "No unrelated tier workload or policy changed");
+  json(root, "docs/validation/unified-tiers.json", table);
+  for (const name of TIERS) {
+    const effective = tier(root, name);
+    assert.equal(effective.hash, sha(JSON.stringify(table)));
+    const expected = name === "test-fast" ? [] : poeSteps;
+    assert.deepEqual(effective.steps.filter(s => poeSteps.some(p => p.name === s.name)), expected);
+    for (const [file, cwd] of poeFiles) {
+      const count = effective.steps.filter(s => s.cwd === cwd && s.argv.at(-1) === file).length;
+      assert.equal(count, name === "test-fast" ? 0 : 1, `${name} contains ${cwd}/${file} exactly once`);
+    }
+    assert.equal(effective.steps.filter(s => s.name === "api-outline").length, name === "test-fast" ? 0 : 1);
+    if (name !== "test-fast") {
+      const step = effective.steps.find(s => s.name === "api-outline");
+      assert.ok(step.argv.includes("../../scripts/failure-gate/poe-fixture-env.mjs"));
+      assert.ok(step.retryPrefix.includes("../../scripts/failure-gate/poe-fixture-env.mjs"));
+    }
+  }
+}
+let poeNativeRef = 910;
+function poeSpec(file, cwd, nativeTaskRef = "#" + poeNativeRef++, tierName = "test-standard") {
+  const input = governedSpec({ tier: tierName, nativeTaskRef });
+  input.regression.testLocation = cwd + "/" + file;
+  input.regressionAssessment.coverage[0].testLocation = cwd + "/" + file;
+  return input;
+}
+test("Poe checks are the exact mocked suites in standard and inherited tiers", async t => {
+  const root = governed(t);
+  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  assertPoeDelta(root, after);
+  for (const name of TIERS) for (const [file, cwd] of poeFiles) {
+    const id = provision(root, poeSpec(file, cwd, undefined, name));
+    const ctx = observed(root, id);
+    if (name === "test-fast") {
+      assert.throws(() => preflight(root, id, context(root, id), ctx), /not in the bound workload/);
+      await assert.rejects(dispatch(root, id, context(root, id), ctx,
+        () => fs.writeFileSync(path.join(root, "sentinel"), "unsafe")), /not in the bound workload/);
+    } else {
+      const result = preflight(root, id, context(root, id), ctx);
+      assert.equal(result.assessment, "LOCAL_PLAN_VALID_HOST_CHECKS_REQUIRED");
+      assert.equal(result.executionAvailability, name === "test-standard" ? "LOCAL_PREREQUISITES_AVAILABLE" : "BLOCKED");
+      assert.equal(regressionPreflight(root, id, context(root, id), ctx.planHash,
+        { context: ctx }).assessment, "PLAN_VALID_NOT_DELIVERY_OR_HOST_AUTHORIZATION");
+    }
+  }
+  assert.equal(fs.existsSync(path.join(root, "sentinel")), false);
+  for (const step of poeSteps) for (const mutation of ["missing", "duplicate", "duplicate-file", "substituted", "retry", "cwd", "adapter", "timeout"]) {
+    const changed = structuredClone(after);
+    const steps = changed.tiers["test-standard"].steps;
+    const index = steps.findIndex(s => s.name === step.name);
+    if (mutation === "missing") steps.splice(index, 1);
+    if (mutation === "duplicate") steps.push(structuredClone(step));
+    if (mutation === "duplicate-file") steps.push({ ...structuredClone(step), name: step.name + "-alias" });
+    if (mutation === "substituted") steps[index].argv = ["node", "-e", "process.exit(0)"];
+    if (mutation === "retry") steps[index].retrySuffix = ["different.test.mjs"];
+    if (mutation === "cwd") steps[index].cwd = ".";
+    if (mutation === "adapter") steps[index].adapter = "exit";
+    if (mutation === "timeout") steps[index].argv[step.name === "poe-image-contract" ? 5 : 7] = "--test-timeout=16000";
+    assert.throws(() => assertPoeDelta(root, changed), assert.AssertionError, `${step.name}: ${mutation}`);
+  }
+  for (const mutation of ["missing-outline-preload", "wrong-outline-retry"]) {
+    const changed = structuredClone(after);
+    const outline = changed.tiers["test-standard"].steps.find(s => s.name === "api-outline");
+    if (mutation === "missing-outline-preload") outline.argv.splice(1, 2);
+    else outline.retryPrefix.splice(1, 2);
+    assert.throws(() => assertPoeDelta(root, changed), assert.AssertionError, mutation);
+  }
+});
+
+test("Poe workload changes preserve prior checks, limits, prerequisites and the fast definition", t => {
+  const root = fixture(t);
+  const before = ciDelivered();
+  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  assertPoeDelta(root, after);
+  assert.deepEqual(after.tiers["test-fast"], before.tiers["test-fast"]);
+  for (const name of TIERS) {
+    json(root, "docs/validation/unified-tiers.json", before);
+    const prior = tier(root, name);
+    json(root, "docs/validation/unified-tiers.json", after);
+    const next = tier(root, name);
+    assert.deepEqual(next.requires, prior.requires);
+    const normalized = next.steps.filter(s => !poeSteps.some(p => p.name === s.name)).map(step =>
+      step.name === "api-outline" ? prior.steps.find(old => old.name === "api-outline") : step);
+    assert.deepEqual(normalized, prior.steps,
+      "The outline preload is the only existing command change");
+  }
+  assert.deepEqual(
+    ["timeoutMs", "stepTimeoutMs", "cleanupMs"].map(k => after.tiers["test-standard"][k]),
+    [900000, 300000, 10000]);
+  assert.deepEqual(policy(root).capabilities, []);
+});
+
+test("Poe stale and wrong-tier workloads deny dispatch and leave all historical bytes unchanged", async t => {
+  const root = governed(t);
+  const before = ciDelivered();
+  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  json(root, "docs/validation/unified-tiers.json", before);
+  const historical = provision(root, governedSpec());
+  const tombstone = provision(root, governedSpec({ nativeTaskRef: "#990" }));
+  cancel(root, tombstone, "Disposable historical Poe fixture");
+  const id = provision(root, poeSpec(poeFiles[0][0], poeFiles[0][1]));
+  const ctx = observed(root, id);
+  const ledgerFile = path.join(root, "docs/validation/unified-task-registry.json");
+  const ledger = fs.readFileSync(ledgerFile);
+  const history = JSON.stringify(registry(root).records[historical]);
+  const tombstoneRecord = JSON.stringify(registry(root).records[tombstone]);
+  const plans = Object.values(registry(root).records).map(r => [r.planPath, fs.readFileSync(path.join(root, r.planPath))]);
+  json(root, "docs/validation/unified-tiers.json", after);
+  const sentinel = path.join(root, "sentinel");
+  assert.throws(() => preflight(root, id, context(root, id), ctx), /definition changed/);
+  await assert.rejects(dispatch(root, id, context(root, id), ctx,
+    () => fs.writeFileSync(sentinel, "unsafe")), /definition changed/);
+  await assert.rejects(run(root, id, "test-standard", context(root, id), null, { context: ctx }), /definition changed/);
+  await assert.rejects(run(root, id, "test-fast", context(root, id), null, { context: ctx }), /Wrong contract/);
+  assert.equal(fs.existsSync(sentinel), false);
+  assert.deepEqual(fs.readFileSync(ledgerFile), ledger);
+  assert.equal(JSON.stringify(registry(root).records[historical]), history);
+  assert.equal(JSON.stringify(registry(root).records[tombstone]), tombstoneRecord);
+  for (const [file, bytes] of plans) assert.deepEqual(fs.readFileSync(path.join(root, file)), bytes);
+});
+
+test("Poe fixture preload replaces fake database config, blocks pg before transport and permits ephemeral HTTP", async t => {
+  const before = {
+    database: Object.hasOwn(process.env, "DATABASE_URL"),
+    provider: Object.hasOwn(process.env, "POE_API_KEY"),
+  };
+  const fixtureConfig = "process.env.DATABASE_URL='postgresql://credential-fixture:synthetic@unsafe.invalid/database'";
+  const initial = "data:text/javascript," + encodeURIComponent(fixtureConfig);
+  const check = `
+    import assert from 'node:assert/strict';
+    import http from 'node:http';
+    import pg from 'pg';
+    const db = await import('@workspace/db');
+    assert.equal(process.env.DATABASE_URL, 'postgresql://fixture:fixture@poe-fixture.invalid:1/fixture');
+    assert.equal(Object.hasOwn(process.env, 'POE_API_KEY'), false);
+    let transport = 0;
+    const original = (await import('node:net')).default.Socket.prototype.connect;
+    (await import('node:net')).default.Socket.prototype.connect = function(...args) {
+      transport++;
+      throw new Error('transport sentinel: PostgreSQL must never connect');
+    };
+    assert.throws(() => db.pool.query('SELECT 1'), { code: 'POE_FIXTURE_DATABASE_DENIED' });
+    assert.throws(() => new pg.Pool().query('SELECT 1'), { code: 'POE_FIXTURE_DATABASE_DENIED' });
+    assert.throws(() => new pg.Client().connect(), { code: 'POE_FIXTURE_DATABASE_DENIED' });
+    assert.throws(() => new pg.Pool().connect(), { code: 'POE_FIXTURE_DATABASE_DENIED' });
+    assert.equal(transport, 0);
+    (await import('node:net')).default.Socket.prototype.connect = original;
+    const server = http.createServer((req, res) => res.end('fixture-http-ok'));
+    server.listen(0, '127.0.0.1');
+    await new Promise(resolve => server.once('listening', resolve));
+    const response = await fetch('http://127.0.0.1:' + server.address().port);
+    assert.equal(await response.text(), 'fixture-http-ok');
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+    console.log('fixture-http-ok');
+  `;
+  const step = { cwd: "artifacts/api-server", argv: [process.execPath, "--import", initial,
+    "--import", "../../scripts/failure-gate/poe-fixture-env.mjs", "--import", "tsx", "--input-type=module", "-e", check] };
+  const log = ".local/failure-gate/runs/poe-fixture-preload-" + process.pid + ".log";
+  const absoluteLog = path.join(SOURCE, log);
+  fs.mkdirSync(path.dirname(absoluteLog), { recursive: true });
+  t.after(() => fs.rmSync(absoluteLog, { force: true }));
+  const result = await supervise(SOURCE, step, 5000, 1000, log);
+  assert.equal(result.exit, 0, fs.readFileSync(absoluteLog, "utf8"));
+  assert.equal(result.blocked, null);
+  assert.equal(result.quiescent, true);
+  assert.ok(result.bytes > 0);
+  assert.equal(fs.existsSync(path.join(SOURCE, "transport-sentinel")), false);
+  assert.deepEqual({
+    database: Object.hasOwn(process.env, "DATABASE_URL"),
+    provider: Object.hasOwn(process.env, "POE_API_KEY"),
+  }, before);
+  const output = fs.readFileSync(absoluteLog, "utf8");
+  assert.match(output, /fixture-http-ok/);
+});
 function assertCiDelta(root, table) {
   const prior = ciBefore();
   const unchanged = structuredClone(table);
@@ -1206,7 +1423,7 @@ function ciSpec(name = "test-standard", file = ciSteps[0].argv.at(-1), nativeTas
 
 test("CI workload additions are explicit and inherited once", async t => {
   const root = governed(t);
-  const table = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  const table = ciDelivered();
   assertCiDelta(root, table);
   // Reach real current-contract RG preflight for every file and inherited tier.
   // Higher tiers validate inclusion but remain execution-BLOCKED by capabilities.
@@ -1250,7 +1467,7 @@ test("CI workload additions are explicit and inherited once", async t => {
 test("CI workload additions preserve tier limits and prerequisites", t => {
   const root = fixture(t);
   const before = ciBefore();
-  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  const after = ciDelivered();
   assertCiDelta(root, after);
   assert.deepEqual(after.tiers["test-fast"], before.tiers["test-fast"]);
   for (const name of TIERS) {
@@ -1270,7 +1487,7 @@ test("CI workload additions preserve tier limits and prerequisites", t => {
 test("CI definition changes reject stale context without rewriting history", async t => {
   const root = governed(t);
   const before = ciBefore();
-  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  const after = ciDelivered();
   json(root, "docs/validation/unified-tiers.json", before);
   const historical = provision(root, governedSpec());
   // An immutable tombstone is also part of the history, never recycled.
