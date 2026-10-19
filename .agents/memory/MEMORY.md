@@ -33,3 +33,4 @@
 - [Rendered plan classification](rendered-plan-classification.md) — test full rendered exclusions; generated metadata can contaminate scope signals.
 - [Exact pnpm protocol output](pnpm-protocol-output.md) — lifecycle banners follow the reporter setting, not loglevel; test the documented root command.
 - [Validation scan ordering](validation-scan-order.md) — keep out-of-scope source findings from hiding substantive checks in fail-fast validation.
+- [Workload delta fixtures](workload-delta-fixtures.md) — chain full-table preservation through pinned delivery snapshots when later authorized coverage is added.

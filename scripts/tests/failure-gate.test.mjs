@@ -75,7 +75,10 @@ const failureWork = `import test from "node:test"; import assert from "node:asse
 test("Runtime Safety registration preserves the entire prior table and inherits exact commands once", t => {
   const before = readJson(SOURCE, "docs/validation/evidence/runtime-tiers-before.json");
   assert.equal(sha(JSON.stringify(before)), "96320bc7e7cfbb05ac37418bdbb3f90f4c4e8ce8dccf31da859ab089437ea644");
-  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  // Pin the delivered Runtime Safety boundary; later authorized tier additions
+  // are checked against this complete snapshot by their own delta fixtures.
+  const after = readJson(SOURCE, "docs/validation/evidence/ci-tiers-before.json");
+  assert.equal(sha(JSON.stringify(after)), "58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea");
   const expected = [
     ["runtime-port-policy", "scripts/tests/runtime-port-policy.test.mjs", 15000],
     ["runtime-lifecycle", "scripts/tests/runtime-lifecycle.test.mjs", 60000],
@@ -107,7 +110,8 @@ test("Runtime Safety registration preserves the entire prior table and inherits 
 test("Runtime Safety changed whole-table context refuses old work until supported amendment without rewriting history", async t => {
   const root = fixture(t);
   const before = readJson(SOURCE, "docs/validation/evidence/runtime-tiers-before.json");
-  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  const after = readJson(SOURCE, "docs/validation/evidence/ci-tiers-before.json");
+  assert.equal(sha(JSON.stringify(after)), "58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea");
   json(root, "docs/validation/unified-tiers.json", before);
   const historical = provision(root, spec());
   const id = provision(root, spec("test-standard"));
@@ -1151,6 +1155,183 @@ test("Unified preflight is read-only, exact-context scoped and never announces h
   assert.equal(fs.readFileSync(path.join(root, "implementation-sentinel"), "utf8"), "done");
 });
 function cryptoFixtureId() { return "00000000-0000-4000-8000-000000000000"; }
+
+// Independent exact commands: never derive the expected argv from the table
+// being tested. These fixtures load real policy/plan/preflight/runner entry
+// points on private roots but never execute any registered application step.
+const ciSteps = [
+  ["ci-required-results", "scripts/ci/check-required-results.test.mjs"],
+  ["ci-api-coverage", "scripts/ci/api-test-coverage.test.mjs"],
+  ["ci-browser-safety", "scripts/tests/browser-safety-lanes.test.mjs"],
+].map(([name, file]) => ({
+  name, cwd: ".", adapter: "node-tap",
+  argv: ["node", "--test", "--test-reporter=tap", "--test-timeout=15000", file],
+  retryPrefix: ["node", "--test", "--test-reporter=tap", "--test-timeout=15000", "--test-name-pattern"],
+  retrySuffix: [file],
+}));
+function ciBefore() {
+  const table = readJson(SOURCE, "docs/validation/evidence/ci-tiers-before.json");
+  assert.equal(sha(JSON.stringify(table)), "58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea");
+  return table;
+}
+function assertCiDelta(root, table) {
+  const prior = ciBefore();
+  const unchanged = structuredClone(table);
+  assert.deepEqual(unchanged.tiers["test-standard"].steps.splice(-3), ciSteps);
+  assert.deepEqual(unchanged, prior, "Only the exact three standard steps may be appended");
+  json(root, "docs/validation/unified-tiers.json", table);
+  for (const name of TIERS) {
+    const effective = tier(root, name);
+    const expected = name === "test-fast" ? [] : ciSteps;
+    assert.deepEqual(effective.steps.filter(s => ciSteps.some(c => c.name === s.name)), expected);
+    for (const step of ciSteps) {
+      assert.equal(effective.steps.filter(s => s.argv.includes(step.argv.at(-1))).length,
+        name === "test-fast" ? 0 : 1, "Exact file must execute once, not via an alias or duplicate");
+    }
+    const old = prior.tiers[name];
+    for (const field of ["target", "extends", "timeoutMs", "stepTimeoutMs", "cleanupMs"]) {
+      assert.deepEqual(effective[field], old[field]);
+    }
+    assert.equal(effective.hash, sha(JSON.stringify(table)));
+    assert.notEqual(effective.hash, sha(JSON.stringify(prior)), "Whole-table hashing changes fast too");
+  }
+}
+let ciNativeRef = 700; // Synthetic linkage, confined to disposable registries.
+function ciSpec(name = "test-standard", file = ciSteps[0].argv.at(-1), nativeTaskRef = "#" + ciNativeRef++) {
+  const input = governedSpec({ tier: name, nativeTaskRef });
+  input.regression.testLocation = file;
+  input.regressionAssessment.coverage[0].testLocation = file;
+  return input;
+}
+
+test("CI workload additions are explicit and inherited once", async t => {
+  const root = governed(t);
+  const table = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  assertCiDelta(root, table);
+  // Reach real current-contract RG preflight for every file and inherited tier.
+  // Higher tiers validate inclusion but remain execution-BLOCKED by capabilities.
+  for (const name of TIERS) for (const step of ciSteps) {
+    const id = provision(root, ciSpec(name, step.argv.at(-1)));
+    const ctx = observed(root, id);
+    if (name === "test-fast") {
+      assert.throws(() => preflight(root, id, context(root, id), ctx), /not in the bound workload/);
+      await assert.rejects(dispatch(root, id, context(root, id), ctx,
+        () => fs.writeFileSync(path.join(root, "sentinel"), "unsafe")), /not in the bound workload/);
+    } else {
+      const result = preflight(root, id, context(root, id), ctx);
+      assert.equal(result.assessment, "LOCAL_PLAN_VALID_HOST_CHECKS_REQUIRED");
+      assert.equal(result.executionAvailability,
+        name === "test-standard" ? "LOCAL_PREREQUISITES_AVAILABLE" : "BLOCKED");
+      assert.equal(regressionPreflight(root, id, context(root, id), ctx.planHash,
+        { context: ctx }).assessment, "PLAN_VALID_NOT_DELIVERY_OR_HOST_AUTHORIZATION");
+    }
+  }
+  assert.equal(fs.existsSync(path.join(root, "sentinel")), false);
+  // Safe negative controls cover each command independently, including alternate
+  // names for duplicate files and changes only to retry/cwd/adapter/timeout.
+  for (const step of ciSteps) for (const mutation of [
+    "missing", "duplicate", "duplicate-file", "substituted", "retry", "cwd", "adapter", "timeout",
+  ]) {
+    const changed = structuredClone(table);
+    const steps = changed.tiers["test-standard"].steps;
+    const index = steps.findIndex(s => s.name === step.name);
+    if (mutation === "missing") steps.splice(index, 1);
+    if (mutation === "duplicate") steps.push(structuredClone(step));
+    if (mutation === "duplicate-file") steps.push({ ...structuredClone(step), name: step.name + "-alias" });
+    if (mutation === "substituted") steps[index].argv = ["node", "-e", "process.exit(0)"];
+    if (mutation === "retry") steps[index].retrySuffix = ["different.test.mjs"];
+    if (mutation === "cwd") steps[index].cwd = "scripts";
+    if (mutation === "adapter") steps[index].adapter = "exit";
+    if (mutation === "timeout") steps[index].argv[3] = "--test-timeout=16000";
+    assert.throws(() => assertCiDelta(root, changed), assert.AssertionError, `${step.name}: ${mutation}`);
+  }
+});
+
+test("CI workload additions preserve tier limits and prerequisites", t => {
+  const root = fixture(t);
+  const before = ciBefore();
+  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  assertCiDelta(root, after);
+  assert.deepEqual(after.tiers["test-fast"], before.tiers["test-fast"]);
+  for (const name of TIERS) {
+    json(root, "docs/validation/unified-tiers.json", before);
+    const prior = tier(root, name);
+    json(root, "docs/validation/unified-tiers.json", after);
+    const next = tier(root, name);
+    assert.deepEqual(next.requires, prior.requires);
+    assert.deepEqual(next.steps.filter(s => !ciSteps.some(c => c.name === s.name)), prior.steps);
+  }
+  assert.deepEqual(
+    ["timeoutMs", "stepTimeoutMs", "cleanupMs"].map(k => after.tiers["test-standard"][k]),
+    [900000, 300000, 10000]);
+  assert.deepEqual(policy(root).capabilities, []);
+});
+
+test("CI definition changes reject stale context without rewriting history", async t => {
+  const root = governed(t);
+  const before = ciBefore();
+  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  json(root, "docs/validation/unified-tiers.json", before);
+  const historical = provision(root, governedSpec());
+  // An immutable tombstone is also part of the history, never recycled.
+  const tombstone = provision(root, governedSpec({ nativeTaskRef: "#401" }));
+  cancel(root, tombstone, "Disposable historical cancellation");
+  const ids = TIERS.map(name => provision(root, ciSpec(name)));
+  const snapshots = ids.map(id => observed(root, id));
+  const registryFile = path.join(root, "docs/validation/unified-task-registry.json");
+  const originalLedger = fs.readFileSync(registryFile);
+  const plans = Object.values(registry(root).records).map(r =>
+    [r.planPath, fs.readFileSync(path.join(root, r.planPath))]);
+  json(root, "docs/validation/unified-tiers.json", after);
+  const sentinel = path.join(root, "sentinel");
+  for (const [i, id] of ids.entries()) {
+    const ctx = snapshots[i];
+    assert.throws(() => preflight(root, id, context(root, id), ctx), /definition changed/);
+    await assert.rejects(dispatch(root, id, context(root, id), ctx,
+      () => fs.writeFileSync(sentinel, "unsafe")), /definition changed/);
+    await assert.rejects(run(root, id, TIERS[i], context(root, id), null, { context: ctx }), /definition changed/);
+    for (const wrong of TIERS.filter(name => name !== TIERS[i])) {
+      await assert.rejects(run(root, id, wrong, context(root, id), null, { context: ctx }), /Wrong contract/);
+    }
+  }
+  assert.deepEqual(fs.readFileSync(registryFile), originalLedger);
+  for (const [file, bytes] of plans) assert.deepEqual(fs.readFileSync(path.join(root, file)), bytes);
+  const historicRecord = JSON.stringify(registry(root).records[historical]);
+  const tombstoneRecord = JSON.stringify(registry(root).records[tombstone]);
+  const id = ids[1];
+  amend(root, id, "test-standard", "Fixture-only covered CI workload amendment",
+    ciSpec("test-standard", ciSteps[0].argv.at(-1), snapshots[1].nativeTaskRef),
+    { context: snapshots[1], coordination });
+  const ctx = observed(root, id);
+  assert.equal(preflight(root, id, context(root, id), ctx).executionAvailability, "LOCAL_PREREQUISITES_AVAILABLE");
+  await assert.rejects(dispatch(root, id, context(root, id), snapshots[1],
+    () => fs.writeFileSync(sentinel, "unsafe")), /context|revision|mismatch/i);
+  const amendedLedger = fs.readFileSync(registryFile);
+  // Mutate every CI command against a valid current seal: neither a subset nor
+  // a successful alias nor a duplicate can run against that bound definition.
+  for (const step of ciSteps) for (const mutation of ["missing", "substituted", "duplicate", "duplicate-file"]) {
+    const changed = structuredClone(after);
+    const steps = changed.tiers["test-standard"].steps;
+    const index = steps.findIndex(s => s.name === step.name);
+    if (mutation === "missing") steps.splice(index, 1);
+    if (mutation === "substituted") steps[index].argv = ["node", "-e", "process.exit(0)"];
+    if (mutation === "duplicate") steps.push(structuredClone(step));
+    if (mutation === "duplicate-file") steps.push({ ...structuredClone(step), name: step.name + "-alias" });
+    json(root, "docs/validation/unified-tiers.json", changed);
+    await assert.rejects(run(root, id, "test-standard", context(root, id), null, { context: ctx }),
+      /definition changed|duplicate command/);
+    await assert.rejects(dispatch(root, id, context(root, id), ctx,
+      () => fs.writeFileSync(sentinel, "unsafe")), /definition changed|duplicate command/);
+  }
+  assert.equal(fs.existsSync(sentinel), false);
+  assert.equal(fs.existsSync(path.join(root, ".local/failure-gate/runs")), false);
+  assert.deepEqual(fs.readFileSync(registryFile), amendedLedger);
+  assert.equal(JSON.stringify(registry(root).records[historical]), historicRecord);
+  assert.equal(JSON.stringify(registry(root).records[tombstone]), tombstoneRecord);
+  for (const [file, bytes] of plans) {
+    if (file !== context(root, id)) assert.deepEqual(fs.readFileSync(path.join(root, file)), bytes);
+  }
+});
 
 test("Unified preparation fills concrete inspected gaps, selects adequate workload and reuses unchanged seals", t => {
   const root = governed(t);

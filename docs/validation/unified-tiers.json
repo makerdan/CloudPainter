@@ -27,7 +27,10 @@
         {"name":"workspace-typecheck","cwd":".","adapter":"exit","argv":["pnpm","run","typecheck"]},
         {"name":"drawing-tools","cwd":"artifacts/cloudpainter","adapter":"node-tap","argv":["node","--experimental-strip-types","--test","--test-reporter=tap","--test-timeout=10000","src/lib/drawingTools.test.ts"],"retryPrefix":["node","--experimental-strip-types","--test","--test-reporter=tap","--test-timeout=10000","--test-name-pattern"],"retrySuffix":["src/lib/drawingTools.test.ts"]},
         {"name":"api-outline","cwd":"artifacts/api-server","adapter":"node-tap","argv":["node","--import","tsx","--test","--test-reporter=tap","--test-timeout=10000","src/routes/outline.test.ts"],"retryPrefix":["node","--import","tsx","--test","--test-reporter=tap","--test-timeout=10000","--test-name-pattern"],"retrySuffix":["src/routes/outline.test.ts"]},
-        {"name":"runtime-port-scan","cwd":".","adapter":"exit","argv":["node","scripts/check-runtime-ports.mjs"]}
+        {"name":"runtime-port-scan","cwd":".","adapter":"exit","argv":["node","scripts/check-runtime-ports.mjs"]},
+        {"name":"ci-required-results","cwd":".","adapter":"node-tap","argv":["node","--test","--test-reporter=tap","--test-timeout=15000","scripts/ci/check-required-results.test.mjs"],"retryPrefix":["node","--test","--test-reporter=tap","--test-timeout=15000","--test-name-pattern"],"retrySuffix":["scripts/ci/check-required-results.test.mjs"]},
+        {"name":"ci-api-coverage","cwd":".","adapter":"node-tap","argv":["node","--test","--test-reporter=tap","--test-timeout=15000","scripts/ci/api-test-coverage.test.mjs"],"retryPrefix":["node","--test","--test-reporter=tap","--test-timeout=15000","--test-name-pattern"],"retrySuffix":["scripts/ci/api-test-coverage.test.mjs"]},
+        {"name":"ci-browser-safety","cwd":".","adapter":"node-tap","argv":["node","--test","--test-reporter=tap","--test-timeout=15000","scripts/tests/browser-safety-lanes.test.mjs"],"retryPrefix":["node","--test","--test-reporter=tap","--test-timeout=15000","--test-name-pattern"],"retrySuffix":["scripts/tests/browser-safety-lanes.test.mjs"]}
       ]
     },
     "test-standard-plus": {
