@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
-  "revision": 68,
+  "revision": 91,
   "records": {
     "FGU-81af9606-cc13-465c-99a0-820e95ec1e03": {
       "id": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
@@ -879,6 +879,314 @@
         "state": "PASS",
         "runId": "b4efb63f-9985-4a3a-89d1-bc6672dfdcec",
         "at": "2026-10-19T02:24:51.951Z"
+      }
+    },
+    "FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90": {
+      "id": "FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90",
+      "status": "provisioned",
+      "tier": "test-standard",
+      "tierHash": "58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea",
+      "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90.md",
+      "spec": {
+        "title": "Implement Runtime Safety validation utilities",
+        "nativeTaskRef": "#56",
+        "tier": "test-standard",
+        "what": "Deliver the authorized Runtime Safety repository scanner and isolated owned-process regression suites after the completed gate-only registration phase. Product behavior and live runtime controls remain unchanged.",
+        "why": "Retain every required command while observing runtime scan last under the existing fail-fast runner",
+        "coverageEvidence": "docs/validation/unified-tiers.json definition hash 58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea explicitly runs scripts/tests/runtime-port-policy.test.mjs and scripts/tests/runtime-lifecycle.test.mjs before the prior standard checks, runs scripts/check-runtime-ports.mjs last so real findings cannot hide remaining tests, and inherits scripts/tests/failure-gate.test.mjs. All prior checks retain their relative order. Invoke pnpm run test-standard -- the provisioned ID with TASK_PLAN_FILE and observed UNIFIED_CONTEXT_FILE.",
+        "done": [
+          "The repository scan reports hardcoded binds, executable/test URLs and executable documentation across service, Vite/config, workflow and script boundaries, with explicit narrow fixture/example/platform-owned exceptions and a separate real repository result.",
+          "Scanner fixtures reject synthetic hardcoded binds and URLs while accepting environment-driven equivalents and actual live ephemeral reservations.",
+          "Owned lifecycle fixtures prove distinct simultaneous reservations, observed readiness, collision denial without takeover, confirmed close/release, failed/timed-out/cancelled descendant cleanup, unrelated-process preservation and conservative uncertainty.",
+          "Two sequential complete authorized bound-tier runs preserve raw results and cleanup evidence without manual listener, process or lease intervention; required failures are reported honestly with owning files.",
+          "The tracked handoff maps requirements, exact table delta, authorization, historical disposition, seal, snapshots, assertions and observed results without claiming live control readiness."
+        ],
+        "outOfScope": [
+          "No application fixes for scanner findings, product UI, authentication/data changes, outage/restart surface or live runtime control activation.",
+          "No skill definition changes, live service restart, pre-existing listener takeover, uncertain live lease deletion, deployment, paid provider, production or remote-CI operation.",
+          "No tier switching, fifth tier, removed checks, raised limits, database/browser capability provisioning or historical binding retrofit.",
+          "No separate independent reviewer; gate maintenance results are not an implementation tier PASS."
+        ],
+        "steps": [
+          "Inspect current native scope and authorization, recheck quiescence and baseline, provision one fresh standard-tier identity, reconcile exact sealed native payload and run supported pre-implementation preflight.",
+          "Implement a repository-aware scanner and narrow documented exclusions with synthetic failure/acceptance cases at the scanner boundary.",
+          "Implement live ephemeral socket and owned-child lifecycle tests using actual existing local supervision and isolated fixtures with finite cleanup and readiness evidence.",
+          "Execute the full bound standard tier twice sequentially, preserve results, classify failures using actual provenance and report source findings without out-of-scope application repair.",
+          "Complete the revision-bound handoff and report maintenance, admission, delivered tests, assigned-tier outcomes and control readiness separately."
+        ],
+        "relevantFiles": [
+          "scripts/check-runtime-ports.mjs",
+          "scripts/runtime-port-policy.mjs",
+          "scripts/tests/runtime-port-policy.test.mjs",
+          "scripts/tests/runtime-lifecycle.test.mjs",
+          "scripts/tests/fixtures/runtime-child.mjs",
+          "docs/validation/app-support-runtime-workload-handoff.md"
+        ],
+        "baselines": [],
+        "regression": {
+          "mode": "normal",
+          "covers": "RG-RUNTIME-01: Synthetic hardcoded service binds or executable/test URLs are offered to the scanner; environment-driven ports and live ephemeral reservations are compared. RG-RUNTIME-02: Concurrent owned listeners and a colliding bind attempt exercise reservation and release. RG-RUNTIME-03: Failed, execution-expired and cancelled owned child trees and incomplete discovery exercise actual supervision. RG-RUNTIME-04: Changed workloads, alias/subset replacement or wrong tiers are offered to gate admission.",
+          "testLocation": "scripts/tests/runtime-port-policy.test.mjs; scripts/tests/runtime-lifecycle.test.mjs; scripts/tests/failure-gate.test.mjs",
+          "checks": "Assert scanner findings with file/line and reject hardcoded binds/URLs, accepting environment equivalents and actual listen(0). Assert distinct ready live sockets, EADDRINUSE without takeover and release only after confirmed close. Assert positive dispatch/readiness then bounded termination of owned descendants, closed listeners and unrelated fixture survival; actual discovery failure retains the target lease and denies reuse. Assert the complete prior table is unchanged after removing exactly the three commands, inherited additions occur once and stale/wrong/alias/subset context refuses before dispatch until supported amendment, preserving historical bytes."
+        },
+        "regressionAssessment": {
+          "classification": "material",
+          "rationale": "The combined authorized task changes the existing required validation execution contract and introduces a required repository policy check. Normal coverage is required even though implementation deliverables are checks and tests.",
+          "scopeReview": "Reviewed all eight Regression Guard categories against scanner inputs, socket ownership, actual supervisor lifecycle, whole-table hashing and supported gate admission. No product, auth, persistence or provider boundary changes are included.",
+          "coverageReview": "Every material risk has an affected-layer assertion explicitly included by the standard workload; gate cases are already delivered maintenance fixtures and the runtime cases are future concrete deliverables, not claimed executed tests.",
+          "risks": [
+            {
+              "id": "RG-RUNTIME-01",
+              "category": "compatibility-contract",
+              "change": "A required repository policy check must distinguish hardcoded runtime ports from legitimate environment, ephemeral, fixture, example and platform-owned cases without concealing real findings.",
+              "layer": "repository scanner boundary"
+            },
+            {
+              "id": "RG-RUNTIME-02",
+              "category": "concurrency-lifecycle",
+              "change": "Parallel owned listeners must reserve distinct live ports and collision handling must not take over unrelated work or report a free observation as a reservation.",
+              "layer": "local socket reservation boundary"
+            },
+            {
+              "id": "RG-RUNTIME-03",
+              "category": "performance-reliability",
+              "change": "Owned failed, expired and cancelled process trees must stop within finite limits; uncertain discovery must not release protection.",
+              "layer": "existing local supervisor and target lease boundary"
+            },
+            {
+              "id": "RG-RUNTIME-04",
+              "category": "compatibility-contract",
+              "change": "Required Runtime Safety commands must not be bypassed by stale workload context, aliases, subsets or wrong tiers; historical bindings must remain intact.",
+              "layer": "gate tier loader and admission boundary"
+            }
+          ],
+          "coverage": [
+            {
+              "risk": "RG-RUNTIME-01",
+              "scenario": "RG-RUNTIME-01: Synthetic hardcoded service binds or executable/test URLs are offered to the scanner; environment-driven ports and live ephemeral reservations are compared.",
+              "testLocation": "scripts/tests/runtime-port-policy.test.mjs",
+              "assertion": "Assert scanner findings with file/line and reject hardcoded binds/URLs, accepting environment equivalents and actual listen(0).",
+              "layer": "repository scanner boundary"
+            },
+            {
+              "risk": "RG-RUNTIME-02",
+              "scenario": "RG-RUNTIME-02: Concurrent owned listeners and a colliding bind attempt exercise reservation and release.",
+              "testLocation": "scripts/tests/runtime-lifecycle.test.mjs",
+              "assertion": "Assert distinct ready live sockets, EADDRINUSE without takeover and release only after confirmed close.",
+              "layer": "local socket reservation boundary"
+            },
+            {
+              "risk": "RG-RUNTIME-03",
+              "scenario": "RG-RUNTIME-03: Failed, execution-expired and cancelled owned child trees and incomplete discovery exercise actual supervision.",
+              "testLocation": "scripts/tests/runtime-lifecycle.test.mjs",
+              "assertion": "Assert positive dispatch/readiness then bounded termination of owned descendants, closed listeners and unrelated fixture survival; actual discovery failure retains the target lease and denies reuse.",
+              "layer": "existing local supervisor and target lease boundary"
+            },
+            {
+              "risk": "RG-RUNTIME-04",
+              "scenario": "RG-RUNTIME-04: Changed workloads, alias/subset replacement or wrong tiers are offered to gate admission.",
+              "testLocation": "scripts/tests/failure-gate.test.mjs",
+              "assertion": "Assert the complete prior table is unchanged after removing exactly the three commands, inherited additions occur once and stale/wrong/alias/subset context refuses before dispatch until supported amendment, preserving historical bytes.",
+              "layer": "gate tier loader and admission boundary"
+            }
+          ]
+        }
+      },
+      "planTemplate": "unified-v4",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-19T02:52:41.460Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-19T02:52:41.496Z"
+        },
+        {
+          "kind": "amendment-start",
+          "from": "test-standard",
+          "to": "test-standard",
+          "fromDefinition": "46dce8b728ade9f59c0c9a1c09180dab0e2fe2bc8f7e43d20e6d91d2b0521476",
+          "toDefinition": "58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea",
+          "fromContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "toContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "coverageEvidence": "docs/validation/unified-tiers.json definition hash 58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea explicitly runs scripts/tests/runtime-port-policy.test.mjs and scripts/tests/runtime-lifecycle.test.mjs before the prior standard checks, runs scripts/check-runtime-ports.mjs last so real findings cannot hide remaining tests, and inherits scripts/tests/failure-gate.test.mjs. All prior checks retain their relative order. Invoke pnpm run test-standard -- the provisioned ID with TASK_PLAN_FILE and observed UNIFIED_CONTEXT_FILE.",
+          "why": "Retain every required command while observing runtime scan last under the existing fail-fast runner",
+          "at": "2026-10-19T02:59:24.355Z",
+          "coordination": {
+            "authorizationApplicability": "The owner-authorized exact three commands and unchanged checks, inheritance, prerequisites and limits still apply. Moving only runtime-port-scan to the last position does not broaden scope; the same identity and standard tier are preserved. Native task #56 remains eligible and the exact approved original scope is retained.",
+            "evidenceImpact": "Gate-only ordering reconciliation passed both Runtime Safety maintenance fixtures with confirmed quiescence. No application workload has run. Scanner and lifecycle sources already authored remain within the unchanged approved scope; no earlier test evidence is claimed for them. The old table context is stale and must be amended and reconciled before any application workload. All full-tier evidence will be obtained on the amended workload."
+          },
+          "hostAuthorization": "AGENT_CHECK_NOT_MACHINE_VERIFIED"
+        },
+        {
+          "kind": "amended",
+          "from": "test-standard",
+          "to": "test-standard",
+          "fromContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "toContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "coverageEvidence": "docs/validation/unified-tiers.json definition hash 58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea explicitly runs scripts/tests/runtime-port-policy.test.mjs and scripts/tests/runtime-lifecycle.test.mjs before the prior standard checks, runs scripts/check-runtime-ports.mjs last so real findings cannot hide remaining tests, and inherits scripts/tests/failure-gate.test.mjs. All prior checks retain their relative order. Invoke pnpm run test-standard -- the provisioned ID with TASK_PLAN_FILE and observed UNIFIED_CONTEXT_FILE.",
+          "why": "Retain every required command while observing runtime scan last under the existing fail-fast runner",
+          "at": "2026-10-19T02:59:24.379Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "560169c7-7595-4973-a726-6c49bf5a2f65",
+          "state": "FAIL",
+          "at": "2026-10-19T03:01:15.577Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "36c28b59-2640-48df-8192-c8f79f1d5771",
+          "state": "FAIL",
+          "at": "2026-10-19T03:01:29.398Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "e4eba4c7-eb34-42dd-acd4-168a466c1d70",
+          "state": "FAIL",
+          "at": "2026-10-19T03:03:44.556Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "5ac96ed4-2fe2-4f00-87b9-2fef35ab7189",
+          "state": "FAIL",
+          "at": "2026-10-19T03:04:09.601Z"
+        },
+        {
+          "kind": "self-classified-pre-existing",
+          "note": {
+            "suite": "api-outline",
+            "test": "src/routes/outline.test.ts",
+            "signature": "'test failed'",
+            "inference": true,
+            "sources": [
+              {
+                "type": "documented-pattern",
+                "file": "docs/validation/evidence/runtime-api-import-observation.md",
+                "quote": "the unchanged api-outline test exits during module initialization because\nDATABASE_URL is absent from the unchanged credential-free supervisor environment.",
+                "hash": "7fcee5ae3bc4fe9d20d05e6e1050edc3ec3fd146d0ff171658b690b9fa3b278d"
+              }
+            ],
+            "planHash": "d2b714ffacfc0d74a43abf190f7703dd207e32b61af1165640343b01bb63f8df",
+            "observedRun": "e4eba4c7-eb34-42dd-acd4-168a466c1d70",
+            "at": "2026-10-19T03:06:10.506Z"
+          },
+          "at": "2026-10-19T03:06:10.515Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "fa2587f9-3ae4-48d9-80ad-be22aedeb22e",
+          "state": "FAIL",
+          "at": "2026-10-19T03:08:02.722Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "b06e72cb-50e4-43bf-ac25-f3bf14aba4da",
+          "state": "FAIL",
+          "at": "2026-10-19T03:11:31.823Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "ba477bb6-2443-48eb-9e09-058ccea1210b",
+          "state": "FAIL",
+          "at": "2026-10-19T03:13:21.839Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "894a8c48-cab9-4d4e-b074-ac7d0aa47788",
+          "state": "FAIL",
+          "at": "2026-10-19T03:20:23.118Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "e2a5a0ce-d27d-42f9-9819-725409eb9100",
+          "state": "FAIL",
+          "at": "2026-10-19T03:22:22.291Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "560169c7-7595-4973-a726-6c49bf5a2f65",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/560169c7-7595-4973-a726-6c49bf5a2f65/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T02:59:49.649Z"
+        },
+        {
+          "runId": "36c28b59-2640-48df-8192-c8f79f1d5771",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/36c28b59-2640-48df-8192-c8f79f1d5771/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T03:01:28.912Z"
+        },
+        {
+          "runId": "e4eba4c7-eb34-42dd-acd4-168a466c1d70",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/e4eba4c7-eb34-42dd-acd4-168a466c1d70/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T03:01:54.048Z"
+        },
+        {
+          "runId": "5ac96ed4-2fe2-4f00-87b9-2fef35ab7189",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/5ac96ed4-2fe2-4f00-87b9-2fef35ab7189/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T03:04:08.049Z"
+        },
+        {
+          "runId": "fa2587f9-3ae4-48d9-80ad-be22aedeb22e",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/fa2587f9-3ae4-48d9-80ad-be22aedeb22e/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T03:06:24.765Z"
+        },
+        {
+          "runId": "b06e72cb-50e4-43bf-ac25-f3bf14aba4da",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/b06e72cb-50e4-43bf-ac25-f3bf14aba4da/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T03:09:48.374Z"
+        },
+        {
+          "runId": "ba477bb6-2443-48eb-9e09-058ccea1210b",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/ba477bb6-2443-48eb-9e09-058ccea1210b/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T03:11:44.465Z"
+        },
+        {
+          "runId": "894a8c48-cab9-4d4e-b074-ac7d0aa47788",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/894a8c48-cab9-4d4e-b074-ac7d0aa47788/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T03:18:38.287Z"
+        },
+        {
+          "runId": "e2a5a0ce-d27d-42f9-9819-725409eb9100",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/e2a5a0ce-d27d-42f9-9819-725409eb9100/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T03:20:44.933Z"
+        }
+      ],
+      "preexistingNotes": [
+        {
+          "suite": "api-outline",
+          "test": "src/routes/outline.test.ts",
+          "signature": "'test failed'",
+          "inference": true,
+          "sources": [
+            {
+              "type": "documented-pattern",
+              "file": "docs/validation/evidence/runtime-api-import-observation.md",
+              "quote": "the unchanged api-outline test exits during module initialization because\nDATABASE_URL is absent from the unchanged credential-free supervisor environment.",
+              "hash": "7fcee5ae3bc4fe9d20d05e6e1050edc3ec3fd146d0ff171658b690b9fa3b278d"
+            }
+          ],
+          "planHash": "d2b714ffacfc0d74a43abf190f7703dd207e32b61af1165640343b01bb63f8df",
+          "observedRun": "e4eba4c7-eb34-42dd-acd4-168a466c1d70",
+          "at": "2026-10-19T03:06:10.506Z"
+        }
+      ],
+      "planHash": "d2b714ffacfc0d74a43abf190f7703dd207e32b61af1165640343b01bb63f8df",
+      "assessment": {
+        "state": "FAIL",
+        "runId": "e2a5a0ce-d27d-42f9-9819-725409eb9100",
+        "at": "2026-10-19T03:22:22.291Z"
       }
     }
   }

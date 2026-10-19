@@ -32,3 +32,4 @@
 - [Clock deadline fixtures](clock-deadline-fixtures.md) — prove startup expiry and dispatched timeout separately; require actual clock reversal during each tested phase.
 - [Rendered plan classification](rendered-plan-classification.md) — test full rendered exclusions; generated metadata can contaminate scope signals.
 - [Exact pnpm protocol output](pnpm-protocol-output.md) — lifecycle banners follow the reporter setting, not loglevel; test the documented root command.
+- [Validation scan ordering](validation-scan-order.md) — keep out-of-scope source findings from hiding substantive checks in fail-fast validation.

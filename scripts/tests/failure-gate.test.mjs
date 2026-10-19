@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { provision, checkPlan, amend, cancel, render, regressionPreflight } from "../failure-gate/plans.mjs";
 import { run, parseFailures, evaluateFailures, selfClassify, closeOwnerDirection } from "../failure-gate/runner.mjs";
-import { registry, readJson, atomicJson, lease, sha, TIERS, baseline, warnings, safePath, policy } from "../failure-gate/store.mjs";
+import { registry, readJson, atomicJson, lease, sha, TIERS, baseline, warnings, safePath, policy, tier } from "../failure-gate/store.mjs";
 import { transaction } from "../failure-gate/store.mjs";
 import { recoveryPreview } from "../failure-gate/recovery.mjs";
 import { assertRegistryEvolution } from "../failure-gate/merge-guard.mjs";
@@ -72,6 +72,71 @@ function cli(root, name, args, extra = {}) {
   });
 }
 const failureWork = `import test from "node:test"; import assert from "node:assert/strict"; test("known failure", () => { assert.fail("stable fixture failure"); });`;
+test("Runtime Safety registration preserves the entire prior table and inherits exact commands once", t => {
+  const before = readJson(SOURCE, "docs/validation/evidence/runtime-tiers-before.json");
+  assert.equal(sha(JSON.stringify(before)), "96320bc7e7cfbb05ac37418bdbb3f90f4c4e8ce8dccf31da859ab089437ea644");
+  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  const expected = [
+    ["runtime-port-policy", "scripts/tests/runtime-port-policy.test.mjs", 15000],
+    ["runtime-lifecycle", "scripts/tests/runtime-lifecycle.test.mjs", 60000],
+    ["runtime-port-scan", "scripts/check-runtime-ports.mjs", null],
+  ].map(([name, file, timeout]) => timeout ? {
+    name, cwd: ".", adapter: "node-tap",
+    argv: ["node", "--test", "--test-reporter=tap", `--test-timeout=${timeout}`, file],
+    retryPrefix: ["node", "--test", "--test-reporter=tap", `--test-timeout=${timeout}`, "--test-name-pattern"],
+    retrySuffix: [file],
+  } : { name, cwd: ".", adapter: "exit", argv: ["node", file] });
+  const names = expected.map(s => s.name);
+  const delta = after.tiers["test-standard"].steps.filter(s => names.includes(s.name));
+  assert.deepEqual(delta, expected);
+  const unchanged = structuredClone(after);
+  unchanged.tiers["test-standard"].steps = unchanged.tiers["test-standard"].steps.filter(s => !names.includes(s.name));
+  assert.deepEqual(unchanged, before);
+  const root = fixture(t);
+  json(root, "docs/validation/unified-tiers.json", after);
+  for (const name of TIERS) {
+    const effective = tier(root, name);
+    for (const required of expected) {
+      assert.deepEqual(effective.steps.filter(s => s.name === required.name), name === "test-fast" ? [] : [required]);
+    }
+    assert.equal(effective.hash, sha(JSON.stringify(after)));
+    assert.notEqual(effective.hash, sha(JSON.stringify(before)));
+  }
+});
+
+test("Runtime Safety changed whole-table context refuses old work until supported amendment without rewriting history", async t => {
+  const root = fixture(t);
+  const before = readJson(SOURCE, "docs/validation/evidence/runtime-tiers-before.json");
+  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  json(root, "docs/validation/unified-tiers.json", before);
+  const historical = provision(root, spec());
+  const id = provision(root, spec("test-standard"));
+  const sealedBefore = fs.readFileSync(path.join(root, context(root, id)), "utf8");
+  const history = JSON.stringify(registry(root).records[historical]);
+  const ledgerBefore = fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8");
+  json(root, "docs/validation/unified-tiers.json", after);
+  for (const wrong of ["test-fast", "test-standard-plus", "test-heavy"]) {
+    await assert.rejects(run(root, id, wrong, context(root, id)), /Wrong contract/);
+  }
+  await assert.rejects(run(root, id, "test-standard", context(root, id)), /definition changed/);
+  assert.equal(fs.readFileSync(path.join(root, context(root, id)), "utf8"), sealedBefore);
+  assert.equal(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8"), ledgerBefore);
+  amend(root, id, "test-standard", "Owner-covered exact Runtime Safety workload addition", spec("test-standard"));
+  checkPlan(root, id, "test-standard", context(root, id));
+  assert.equal(JSON.stringify(registry(root).records[historical]), history);
+  assert.notEqual(registry(root).records[id].tierHash, registry(root).records[historical].tierHash);
+  // Removing even one command or replacing it with a successful alias/subset changes
+  // the entire definition and cannot use the amended context.
+  for (const mutation of ["omit", "alias"]) {
+    const changed = structuredClone(after);
+    if (mutation === "omit") changed.tiers["test-standard"].steps.shift();
+    else changed.tiers["test-standard"].steps[0].argv = ["node", "-e", "process.exit(0)"];
+    json(root, "docs/validation/unified-tiers.json", changed);
+    await assert.rejects(run(root, id, "test-standard", context(root, id)), /definition changed/);
+  }
+  assert.equal(JSON.stringify(registry(root).records[historical]), history);
+  assert.equal(fs.existsSync(path.join(root, ".local/failure-gate/runs")), false);
+});
 async function waitFor(check, limit = 4000) {
   const end = Date.now() + limit;
   while (!check()) {
