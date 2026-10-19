@@ -54,3 +54,6 @@ Thumbs.db
 .cache/
 .local/
 /generated-artifacts/
+/.agents/skills/.workspace-projections/
+/.agents/skills/.workspace-projection-control/
+__pycache__/
