@@ -1,6 +1,7 @@
 import { strictCheck, currentClassification } from "../check-regression-guard.mjs";
 import { readText, sha } from "./store.mjs";
 import path from "node:path";
+import { validateVerification, assertNoChangeVerificationScope } from "./verification.mjs";
 
 export const RG_REVISION = "6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1";
 export const RG_REFERENCES = {
@@ -42,6 +43,12 @@ export function assessRegression(spec, text) {
   need(Array.isArray(a.risks) && Array.isArray(a.coverage), "risks and coverage arrays required");
   const mode = spec.regression?.mode ?? "normal";
   const classification = currentClassification(text);
+  if (a.verification !== undefined) {
+    need(mode === "self" && a.classification === "self", "verification method contradicts declaration");
+    validateVerification(a.verification);
+    assertNoChangeVerificationScope(spec);
+    need(!classification.qualifies, "verification scope includes material work: " + classification.reason);
+  }
   const violations = strictCheck([{ file: "current candidate", content: text }], { current: true });
   need(!violations.length, violations.join("\n"));
   if (a.classification !== "material") {
@@ -53,7 +60,7 @@ export function assessRegression(spec, text) {
       if (a.exclusion === "deletion-marked") {
         need(/\btask (?:is )?marked for deletion\b/i.test(a.rationale), "deletion means a non-executing task, not a DELETE title");
       }
-    } else need(file(spec.regression.deliverable.replace(/^.*?((?:[\w@.-]+\/)+[\w.-]+\.(?:mjs|js|ts|tsx|py|sh)).*$/, "$1")),
+    } else if (!a.verification) need(file(spec.regression.deliverable.replace(/^.*?((?:[\w@.-]+\/)+[\w.-]+\.(?:mjs|js|ts|tsx|py|sh)).*$/, "$1")),
       "self-satisfaction must name the actual check file");
     return;
   }

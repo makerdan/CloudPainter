@@ -7,6 +7,7 @@ import { checkPlan } from "./plans.mjs";
 import { policy, registry, tier, baseline, warnings, lease, transaction, atomicJson, readJson, readText, safePath, stamp, sha } from "./store.mjs";
 import { executionSources, implementationSources } from "./execution-sources.mjs";
 import { assertRegressionWorkload } from "./regression-contract.mjs";
+import { checkVerificationDelivery } from "./verification.mjs";
 
 export function parseFailures(step, text) {
   if (step.adapter !== "node-tap") return null;
@@ -77,6 +78,7 @@ export async function supervise(root, step, timeoutMs, cleanupMs, log) {
 }
 export async function run(root, id, selectedTier, planPath, retryRequest = null, regressionOptions = {}) {
   let admission = checkPlan(root, id, selectedTier, planPath, false, regressionOptions);
+  checkVerificationDelivery(root, admission.record);
   if (admission.record.planTemplate === "unified-v4") assertRegressionWorkload(admission.record.spec, admission.t);
   const release = lease(root, "target-" + admission.t.target);
   let quiescent = true;
@@ -88,6 +90,7 @@ export async function run(root, id, selectedTier, planPath, retryRequest = null,
   const reportPath = directory + "/report.json";
   try {
     admission = checkPlan(root, id, selectedTier, planPath, false, regressionOptions);
+    checkVerificationDelivery(root, admission.record);
     if (admission.record.planHash !== report.planHash || admission.t.hash !== report.tierHash) {
       throw new Error("Stale validation dispatch revision");
     }
@@ -149,6 +152,10 @@ export async function run(root, id, selectedTier, planPath, retryRequest = null,
       if (raw.blocked || !raw.quiescent || raw.exit === null) { report.state = raw.blocked === "supervisor-unavailable" ? "BLOCKED" : "INCOMPLETE"; break; }
       if (raw.exit !== 0 && !assessment.acceptable) { report.state = "FAIL"; break; }
       if (index === steps.length - 1) report.state = "PASS";
+    }
+    if (report.state === "PASS") {
+      try { report.verification = checkVerificationDelivery(root, admission.record); }
+      catch (error) { report.state = "INCOMPLETE"; report.reason = error.message; }
     }
     report.finishedAt = stamp();
     report.changedGateSources = executionSources(root).filter(source =>

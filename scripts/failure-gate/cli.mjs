@@ -5,6 +5,7 @@ import { provision, checkPlan, amend, cancel, regressionPreflight, completeProvi
 import { run, selfClassify, closeOwnerDirection } from "./runner.mjs";
 import { validateSelectedPlan } from "../check-regression-guard.mjs";
 import { preflight, prepare, dispatchCommand } from "./preflight.mjs";
+import { checkVerificationDelivery } from "./verification.mjs";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 export async function main(action, args = process.argv.slice(2)) {
@@ -45,6 +46,14 @@ export async function main(action, args = process.argv.slice(2)) {
         validateSelectedPlan();
         console.log(JSON.stringify(preflight(ROOT, id, process.env.TASK_PLAN_FILE, observedContext())));
         break;
+      case "verification-delivery": {
+        if (args.length !== 1) throw new Error("Usage: check-verification-delivery.mjs ID with exact plan/context");
+        preflight(ROOT, id, process.env.TASK_PLAN_FILE, observedContext());
+        const result = checkVerificationDelivery(ROOT, registry(ROOT).records[id]);
+        if (!result) throw new Error("No structured verification method in this plan");
+        console.log(JSON.stringify({ id, assessment: "SOURCE_OBSERVATIONS_MATCH_NOT_TIER_PASS", ...result }));
+        break;
+      }
       case "prepare": {
         if (args.length !== 1) throw new Error("Usage: prepare-plan.mjs <candidate-and-inspection.json>");
         const input = readJson(ROOT, id);

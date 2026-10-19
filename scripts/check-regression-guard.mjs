@@ -230,6 +230,7 @@ function requestedScope(body) {
     const existingProcedureWords = new Set(("recheck inspect read compare reverify establish verify adopted owner instruction " +
       "current existing all task eligibility canonical governing sources baseline catalog actual workload archive identity crc unique safe " +
       "regular member paths manifest listed bytes definition approved exact delivered source parity preservation independently " +
+      "pinned target using reproducible byte content assertions record observations limitations " +
       "bound tier result then run full admitted through its supported supervised route reconcile sealed payload into this native " +
       "it back satisfy preflight approval before edits use normal provisioning specification for exactly one adequate " +
       "amendments covered changes never hand edit seals records publish handoff pre identities checks authorization limits " +

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
-  "revision": 99,
+  "revision": 103,
   "records": {
     "FGU-81af9606-cc13-465c-99a0-820e95ec1e03": {
       "id": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
@@ -1306,6 +1306,191 @@
         "state": "PASS",
         "runId": "6040857a-9b72-4aab-a027-9048de0d7b93",
         "at": "2026-10-19T20:03:22.743Z"
+      }
+    },
+    "FGU-16fa022a-87e7-42f3-ae3d-17d6b09aeb07": {
+      "id": "FGU-16fa022a-87e7-42f3-ae3d-17d6b09aeb07",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "6c00f6acd84534a2e81f0dbaf268594f22c864d66a827b3582da8e5fa0c21cb3",
+      "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-16fa022a-87e7-42f3-ae3d-17d6b09aeb07.md",
+      "spec": {
+        "title": "Confirm & Harden: App Support Ops",
+        "nativeTaskRef": "#59",
+        "what": "The entire scope is verification-only checks of unchanged behavior through read-only comparison of the delivered App Support Ops definition against the approved archive and complete installer specification.",
+        "why": "Compare the exact delivered definition with its approved source using reproducible byte and content assertions.",
+        "tier": "test-fast",
+        "coverageEvidence": "docs/validation/unified-tiers.json SHA-256 6ccd5a5300f75e7bc0bb4a26ba3e80adfe8d7d8478c8319c1f20a264a76ba2de: test-fast includes workspace-skill-sync, gate-unit, regression-guard and port-authority-clock; no inheritance or prerequisites; 60000 ms per step, 120000 ms whole run and 5000 ms cleanup. pnpm run test-fast -- generated-ID with exact TASK_PLAN_FILE and observed UNIFIED_CONTEXT_FILE. Read-only archive/native/canonical byte and content comparisons are separate source evidence. Upper-tier runtime/CI/Poe changes do not affect this workload; no workload changes.",
+        "done": [
+          "`.agents/skills/app-support-ops/SKILL.md` matches the approved archive's root `SKILL.md` byte-for-byte, with SHA-256 `571805eb3a9bcbce80200d283d59ccf47eba017cb6cd2967b59d9c4aaa82e774`.",
+          "The file retains the App Support Ops identity and all Help, Admin Analytics, Runtime Safety and Combined requirements, and includes the new existing-tier coverage/amendment subsection and canonical Port Authority guidance without a separate Heavy companion prerequisite.",
+          "The file explicitly distinguishes definition installation, gate maintenance, application admission, assigned-tier validation and runtime activation, and does not grant implicit workload, listener-takeover, live-restart or deployment permission.",
+          "No section is vague, self-referential, or deferred to future work.",
+          "A future Planner reading the skill file cold could follow it without ambiguity."
+        ],
+        "outOfScope": [
+          "App Support Ops feature implementation, active runtime acceptance, workload registration, package resources or eval changes, mirrors/projection refresh, adjacent skills, CI, services, production, deployment, or a separate application reviewer. Only the canonical instructional file may be patched. Source inspection is not proof of runtime safety.",
+          "Make any changes outside `.agents/skills/app-support-ops/SKILL.md` as confirmation deliverables; ordinary supported provisioning/runner records remain host-governance bookkeeping, never manually edited or repurposed for this scope.",
+          "Refactor or modify adjacent skills.",
+          "Add speculative content beyond what the original spec called for.",
+          "Expand scope to include feature-code changes inspired by the skill's topic.",
+          "Silently fix gaps without first listing them."
+        ],
+        "steps": [
+          "Compare pinned source and target bytes and record the actual observations and limitations.",
+          "Verify approved exact delivered source parity independently through the full admitted tier result."
+        ],
+        "relevantFiles": [
+          "`.agents/skills/app-support-ops/SKILL.md`",
+          "`.agents/skills/skill-install-confirmation/SKILL.md`",
+          "`.agents/skills/failure-gate-unified/SKILL.md`",
+          "`.agents/skills/regression-guard/SKILL.md`",
+          "`attached_assets/app-support-ops-skill_(10.18.2026)_1792375255347.zip`",
+          "`AGENTS.md`",
+          "`docs/validation/unified-tiers.json`",
+          "`docs/validation/unified-policy.json`",
+          "`docs/validation/failure-baseline.json`",
+          "`docs/validation/unified-preflight-execution.md`",
+          "`scripts/new-plan.mjs`",
+          "`scripts/amend-plan.mjs`",
+          "`scripts/validate-task-plans.mjs`"
+        ],
+        "baselines": [],
+        "regression": {
+          "mode": "self",
+          "deliverable": "Read-only source comparison check of .agents/skills/app-support-ops/SKILL.md against the pinned approved archive root and complete installer specification; require exact byte equality, all concrete content assertions and recorded snapshot observations."
+        },
+        "regressionAssessment": {
+          "classification": "self",
+          "rationale": "Verification-only instructional file confirmation; exact source/content assertions are the entire check, with no executable repair or application change.",
+          "scopeReview": "Reviewed all eight material categories against the actual current no-change comparison. No skill correction is needed. Original conditional repair authority remains in the native task, but this seal authorizes no repair: stop and reassess through the supported amendment if any correction becomes necessary. The distinct owner-directed gate maintenance is not part of this self-satisfying comparison.",
+          "coverageReview": "Source comparison checks exact pinned archive and complete committed installer specification, identity and four modes, coverage/amendment mapping, canonical specialist reference and no implicit activation or takeover permission. Full unchanged fast tier remains required separately.",
+          "risks": [],
+          "coverage": [],
+          "verification": {
+            "target": {
+              "path": ".agents/skills/app-support-ops/SKILL.md",
+              "sha256": "571805eb3a9bcbce80200d283d59ccf47eba017cb6cd2967b59d9c4aaa82e774"
+            },
+            "source": {
+              "path": "attached_assets/app-support-ops-skill_(10.18.2026)_1792375255347.zip",
+              "sha256": "90e32389a8f8038824507c3e87cab81525efa2557da37e90c903ff171adbad66",
+              "member": "SKILL.md",
+              "memberSha256": "571805eb3a9bcbce80200d283d59ccf47eba017cb6cd2967b59d9c4aaa82e774"
+            },
+            "method": "Read the bounded approved ZIP root SKILL.md without extraction; verify archive, member and target SHA-256, compare every byte including the terminal newline and compare the full definition read from the completed native installer plan. Inspect each required mode, coverage/amendment instruction and safety boundary. Record actual observations and limits in the task conversation and the local revision-bound observation record.",
+            "assertions": [
+              {
+                "id": "exact-parity",
+                "kind": "bytes-equal",
+                "assertion": "The entire installed definition equals the pinned approved archive root, including all formatting and terminal newline.",
+                "expected": "equal"
+              },
+              {
+                "id": "content-1",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: name: App Support Ops",
+                "expected": "name: App Support Ops"
+              },
+              {
+                "id": "content-2",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: ## 3. Help mode",
+                "expected": "## 3. Help mode"
+              },
+              {
+                "id": "content-3",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: ## 4. Admin Analytics mode",
+                "expected": "## 4. Admin Analytics mode"
+              },
+              {
+                "id": "content-4",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: ## 5. Runtime Safety mode",
+                "expected": "## 5. Runtime Safety mode"
+              },
+              {
+                "id": "content-5",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: ## 6. Combined mode and delivery",
+                "expected": "## 6. Combined mode and delivery"
+              },
+              {
+                "id": "content-6",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: ### Validation coverage and existing-tier amendments",
+                "expected": "### Validation coverage and existing-tier amendments"
+              },
+              {
+                "id": "content-7",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: .agents/skills/port-authority/SKILL.md",
+                "expected": ".agents/skills/port-authority/SKILL.md"
+              },
+              {
+                "id": "content-8",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: No separate companion skill is an ordinary prerequisite.",
+                "expected": "No separate companion skill is an ordinary prerequisite."
+              },
+              {
+                "id": "content-9",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: Cleanup requirements do not grant takeover permission.",
+                "expected": "Cleanup requirements do not grant takeover permission."
+              },
+              {
+                "id": "content-10",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: Keep definition installation, gate maintenance, plan admission,",
+                "expected": "Keep definition installation, gate maintenance, plan admission,"
+              },
+              {
+                "id": "content-11",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: assigned-tier validation, runtime activation and deployment",
+                "expected": "assigned-tier validation, runtime activation and deployment"
+              }
+            ],
+            "observationsLocation": ".local/tasks/confirm-app-support-ops-observations.json",
+            "repairPolicy": "stop-and-amend-before-correction"
+          }
+        }
+      },
+      "planTemplate": "unified-v4",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-19T20:29:30.475Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-19T20:29:30.522Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "caacd2c4-133f-4631-8aed-aadad8d227f9",
+          "state": "PASS",
+          "at": "2026-10-19T20:32:12.024Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "caacd2c4-133f-4631-8aed-aadad8d227f9",
+          "reportPath": ".local/failure-gate/runs/FGU-16fa022a-87e7-42f3-ae3d-17d6b09aeb07/caacd2c4-133f-4631-8aed-aadad8d227f9/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T20:30:22.616Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "d759987c96a144250ec0fd35c0df4cc7dc4e66e56e64f9a19745599bf816ce2a",
+      "assessment": {
+        "state": "PASS",
+        "runId": "caacd2c4-133f-4631-8aed-aadad8d227f9",
+        "at": "2026-10-19T20:32:12.024Z"
       }
     }
   }

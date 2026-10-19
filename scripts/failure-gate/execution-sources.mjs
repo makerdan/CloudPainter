@@ -23,6 +23,7 @@ export function executionSources(root) {
     "scripts/check-failure-gate.mjs",
     "scripts/check-regression-preflight.mjs",
     "scripts/check-unified-preflight.mjs",
+    "scripts/check-verification-delivery.mjs",
     "scripts/prepare-plan.mjs",
     "scripts/dispatch-implementation.mjs",
     "scripts/amend-plan.mjs",

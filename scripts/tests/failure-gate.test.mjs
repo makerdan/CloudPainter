@@ -13,6 +13,7 @@ import { recoveryPreview } from "../failure-gate/recovery.mjs";
 import { assertRegistryEvolution } from "../failure-gate/merge-guard.mjs";
 import { RG_REVISION, assessRegression, assertRegressionWorkload, CATEGORIES } from "../failure-gate/regression-contract.mjs";
 import { preflight, prepare, dispatch, sealedInputs } from "../failure-gate/preflight.mjs";
+import { verificationSnapshot, checkVerificationDelivery } from "../failure-gate/verification.mjs";
 
 const SOURCE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 process.env.REPL_ID ??= "private-fixture";
@@ -35,7 +36,7 @@ function fixture(t, work = 'console.log("ok")', adapter = "exit") {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
   fs.cpSync(path.join(SOURCE, "scripts/failure-gate"), path.join(root, "scripts/failure-gate"), { recursive: true });
-  for (const entry of ["new-plan", "complete-provisioning", "run-validation", "check-failure-gate", "check-regression-preflight", "check-unified-preflight", "prepare-plan", "dispatch-implementation", "amend-plan", "validation-tier", "validate-task-plans", "check-regression-guard"]) {
+  for (const entry of ["new-plan", "complete-provisioning", "run-validation", "check-failure-gate", "check-regression-preflight", "check-unified-preflight", "check-verification-delivery", "prepare-plan", "dispatch-implementation", "amend-plan", "validation-tier", "validate-task-plans", "check-regression-guard"]) {
     fs.copyFileSync(path.join(SOURCE, "scripts/" + entry + ".mjs"), path.join(root, "scripts/" + entry + ".mjs"));
   }
   fs.mkdirSync(path.join(root, ".agents/skills/failure-gate-unified"), { recursive: true });
@@ -72,6 +73,165 @@ function cli(root, name, args, extra = {}) {
   });
 }
 const failureWork = `import test from "node:test"; import assert from "node:assert/strict"; test("known failure", () => { assert.fail("stable fixture failure"); });`;
+
+function fileVerificationSpec(root) {
+  const content = "# Approved support definition\nConcrete unchanged comparison fixture.\n";
+  fs.writeFileSync(path.join(root, "target.md"), content);
+  fs.writeFileSync(path.join(root, "approved.md"), content);
+  return governedSpec({
+    title: "Confirm the delivered support definition",
+    what: "The entire scope is verification-only checks of unchanged behavior through read-only source comparison.",
+    why: "Compare the exact delivered definition with its approved source using reproducible byte and content assertions.",
+    done: ["The delivered target matches the approved source byte-for-byte."],
+    steps: ["Compare pinned source and target bytes and record the actual observations and limitations."],
+    regression: { mode: "self", deliverable: "Read-only comparison check of target.md against approved.md; require exact byte parity and the approved heading." },
+    regressionAssessment: {
+      classification: "self", rationale: "The entire task is source comparison with no material behavior change.",
+      scopeReview: "Actual requested scope contains only inspection and reporting, not conditional correction or executable changes.",
+      coverageReview: "Byte equality and the concrete heading are reproducible source assertions, separate from assigned-tier execution.",
+      risks: [], coverage: [],
+      verification: {
+        target: { path: "target.md", sha256: sha(content) },
+        source: { path: "approved.md", sha256: sha(content) },
+        method: "Read both regular files, compute SHA-256, compare every byte and inspect the exact approved heading.",
+        assertions: [
+          { id: "parity", kind: "bytes-equal", assertion: "The complete target bytes match the approved source bytes.", expected: "equal" },
+          { id: "heading", kind: "contains", assertion: "The approved support definition heading remains present.", expected: "# Approved support definition" },
+        ],
+        observationsLocation: ".local/verification-observations.json",
+        repairPolicy: "stop-and-amend-before-correction",
+      },
+    },
+  });
+}
+function fileVerificationObservations(root, id) {
+  const record = registry(root).records[id], v = record.spec.regressionAssessment.verification;
+  const report = { id, planHash: record.planHash, verificationHash: sha(JSON.stringify(v)),
+    snapshot: verificationSnapshot(root, v),
+    observations: [
+      { id: "parity", actual: "Observed identical complete approved and target byte sequences, including the final newline; SHA-256 " + v.target.sha256 },
+      { id: "heading", actual: "Observed the exact literal heading in the inspected target: # Approved support definition" },
+    ],
+    limitations: ["This comparison observes instructional bytes only, not installed runtime behavior or host authorization."],
+    observedAt: new Date().toISOString() };
+  json(root, v.observationsLocation, report);
+  return report;
+}
+
+test("file-only verification admits a planned method without results or an executable deliverable across supported routes", async t => {
+  const root = governed(t, 'import fs from "node:fs"; fs.writeFileSync("launched", "yes");');
+  const input = fileVerificationSpec(root);
+  assert.equal(prepare(root, input, { requiredSteps: ["work"] }).operation, "provision-required");
+  json(root, "verification-spec.json", input);
+  const created = cli(root, "new-plan", ["verification-spec.json"]);
+  assert.equal(created.status, 0, created.stderr);
+  const id = created.stdout.trim(), plan = context(root, id), ctx = observed(root, id);
+  checkPlan(root, id, "test-fast", plan, false, { context: ctx });
+  assert.equal(preflight(root, id, plan, ctx).executionAvailability, "LOCAL_PREREQUISITES_AVAILABLE");
+  regressionPreflight(root, id, plan, ctx.planHash, { context: ctx });
+  json(root, "observed.json", ctx);
+  const guarded = cli(root, "validate-task-plans", [], {
+    UNIFIED_TASK_ID: id, TASK_PLAN_FILE: plan, UNIFIED_CONTEXT_FILE: "observed.json",
+  });
+  assert.equal(guarded.status, 0, guarded.stderr);
+  await assert.rejects(run(root, id, "test-fast", plan, null, { context: ctx }), /ENOENT/);
+  assert.equal(fs.existsSync(path.join(root, "launched")), false);
+  fileVerificationObservations(root, id);
+  assert.ok(checkVerificationDelivery(root, registry(root).records[id]));
+  const checkedDelivery = cli(root, "check-verification-delivery", [id], {
+    UNIFIED_TASK_ID: id, TASK_PLAN_FILE: plan, UNIFIED_CONTEXT_FILE: "observed.json",
+  });
+  assert.equal(checkedDelivery.status, 0, checkedDelivery.stderr);
+  assert.match(checkedDelivery.stdout, /SOURCE_OBSERVATIONS_MATCH_NOT_TIER_PASS/);
+  const report = await run(root, id, "test-fast", plan, null, { context: ctx });
+  assert.equal(report.state, "PASS", JSON.stringify(report));
+  assert.ok(report.verification.reportHash);
+});
+
+test("file-only verification rejects inadequate sources, assertions, contradictory forms and disguised material scope before reservation", t => {
+  const root = governed(t), good = fileVerificationSpec(root);
+  const invalid = [
+    s => { delete s.regressionAssessment.verification.source; },
+    s => { s.regressionAssessment.verification.source.path = "../outside.md"; },
+    s => { s.regressionAssessment.verification.source = { path: "archive.zip", sha256: "0".repeat(64), member: "*", memberSha256: "0".repeat(64) }; },
+    s => { s.regressionAssessment.verification.target.path = "/arbitrary"; },
+    s => { s.regressionAssessment.verification.assertions[0].assertion = "verified"; },
+    s => { s.regressionAssessment.verification.assertions = []; },
+    s => { s.regressionAssessment.verification.repairPolicy = "repair-if-needed"; },
+    s => { s.regression.mode = "excluded"; s.regression = { mode: "excluded", reason: "Claims to be a harmless instructional comparison only." }; },
+    s => { s.steps.push("After verification, remove server authorization checks."); },
+    s => { s.steps.push("Also rewrite the supported admission policy to allow unbound execution."); },
+    s => { s.steps.push("If necessary, patch the target definition."); },
+    s => { s.regressionAssessment.verification.method += " Then disable the server authorization check."; },
+    s => { s.done.push("Verification-only: disable login checks and retain the inspected heading."); },
+    s => { delete s.regressionAssessment.verification; },
+    s => { s.regressionAssessment.verification = { method: "verification-only check of approved bytes" }; },
+  ];
+  const before = fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8");
+  for (const mutate of invalid) {
+    const bad = structuredClone(good); mutate(bad);
+    assert.throws(() => prepare(root, bad, { requiredSteps: ["work"] }));
+    assert.throws(() => provision(root, bad));
+    assert.equal(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8"), before);
+  }
+});
+
+test("verification delivery checks bounded archive members and refuses changed snapshots during a run", async t => {
+  const root = governed(t, 'import fs from "node:fs"; fs.appendFileSync("target.md", "changed during run");');
+  const input = fileVerificationSpec(root), v = input.regressionAssessment.verification;
+  const zipped = spawnSync("zip", ["-q", "approved.zip", "approved.md"], { cwd: root, timeout: 5000 });
+  assert.equal(zipped.status, 0, zipped.stderr?.toString());
+  v.source = { path: "approved.zip", sha256: sha(fs.readFileSync(path.join(root, "approved.zip"))),
+    member: "approved.md", memberSha256: v.target.sha256 };
+  const id = provision(root, input);
+  fileVerificationObservations(root, id);
+  const report = await run(root, id, "test-fast", context(root, id), null, { context: observed(root, id) });
+  assert.equal(report.state, "INCOMPLETE");
+  assert.match(report.reason, /snapshot changed/);
+  assert.equal(report.steps[0].exit, 0);
+  assert.equal(report.steps[0].quiescent, true);
+});
+
+test("verification amendments preserve the last admitted revision on denial and invalidate stale observations on success", t => {
+  const root = governed(t), good = fileVerificationSpec(root), id = provision(root, good);
+  fileVerificationObservations(root, id);
+  const before = fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8");
+  const plan = fs.readFileSync(path.join(root, context(root, id)), "utf8");
+  const bad = structuredClone(good); bad.steps.push("Repair the target when comparison fails.");
+  assert.throws(() => amend(root, id, "test-fast", "Attempt a contradictory conditional correction", bad,
+    { context: observed(root, id), coordination }));
+  assert.equal(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8"), before);
+  assert.equal(fs.readFileSync(path.join(root, context(root, id)), "utf8"), plan);
+  const next = structuredClone(good); next.regressionAssessment.verification.method += " Include the terminal newline in comparison.";
+  amend(root, id, "test-fast", "Clarify the same read-only comparison method", next, { context: observed(root, id), coordination });
+  assert.throws(() => checkVerificationDelivery(root, registry(root).records[id]), /sealed method and revision/);
+  fileVerificationObservations(root, id);
+  assert.ok(checkVerificationDelivery(root, registry(root).records[id]));
+});
+
+test("verification delivery denies generic, partial, stale and failed observations before any workload", async t => {
+  const root = governed(t, 'import fs from "node:fs"; fs.writeFileSync("launched", "yes");');
+  const good = fileVerificationSpec(root), id = provision(root, good), record = registry(root).records[id];
+  const report = fileVerificationObservations(root, id);
+  for (const mutate of [
+    r => { r.observations[0].actual = "verified"; },
+    r => { r.observations[0].actual = "Everything was verified and all expectations were satisfied."; },
+    r => { r.observations.pop(); },
+    r => { r.planHash = "0".repeat(64); },
+    r => { r.snapshot.outcomes[0].matched = false; },
+    r => { r.limitations = []; },
+  ]) {
+    const bad = structuredClone(report); mutate(bad);
+    json(root, record.spec.regressionAssessment.verification.observationsLocation, bad);
+    await assert.rejects(run(root, id, "test-fast", context(root, id), null, { context: observed(root, id) }));
+    assert.equal(fs.existsSync(path.join(root, "launched")), false);
+  }
+  fileVerificationObservations(root, id);
+  fs.appendFileSync(path.join(root, "target.md"), "changed");
+  assert.throws(() => checkVerificationDelivery(root, record), /snapshot changed/);
+  await assert.rejects(run(root, id, "test-fast", context(root, id), null, { context: observed(root, id) }), /snapshot changed/);
+  assert.equal(fs.existsSync(path.join(root, "launched")), false);
+});
 test("Runtime Safety registration preserves the entire prior table and inherits exact commands once", t => {
   const before = readJson(SOURCE, "docs/validation/evidence/runtime-tiers-before.json");
   assert.equal(sha(JSON.stringify(before)), "96320bc7e7cfbb05ac37418bdbb3f90f4c4e8ce8dccf31da859ab089437ea644");
