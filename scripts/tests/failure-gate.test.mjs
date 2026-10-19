@@ -5,12 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
-import { provision, checkPlan, amend, cancel, render } from "../failure-gate/plans.mjs";
+import { provision, checkPlan, amend, cancel, render, regressionPreflight } from "../failure-gate/plans.mjs";
 import { run, parseFailures, evaluateFailures, selfClassify, closeOwnerDirection } from "../failure-gate/runner.mjs";
 import { registry, readJson, atomicJson, lease, sha, TIERS, baseline, warnings, safePath, policy } from "../failure-gate/store.mjs";
 import { transaction } from "../failure-gate/store.mjs";
 import { recoveryPreview } from "../failure-gate/recovery.mjs";
 import { assertRegistryEvolution } from "../failure-gate/merge-guard.mjs";
+import { RG_REVISION, assessRegression, assertRegressionWorkload, CATEGORIES } from "../failure-gate/regression-contract.mjs";
 
 const SOURCE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 process.env.REPL_ID ??= "private-fixture";
@@ -33,7 +34,7 @@ function fixture(t, work = 'console.log("ok")', adapter = "exit") {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
   fs.cpSync(path.join(SOURCE, "scripts/failure-gate"), path.join(root, "scripts/failure-gate"), { recursive: true });
-  for (const entry of ["new-plan", "run-validation", "check-failure-gate", "amend-plan", "validation-tier", "validate-task-plans", "check-regression-guard"]) {
+  for (const entry of ["new-plan", "run-validation", "check-failure-gate", "check-regression-preflight", "amend-plan", "validation-tier", "validate-task-plans", "check-regression-guard"]) {
     fs.copyFileSync(path.join(SOURCE, "scripts/" + entry + ".mjs"), path.join(root, "scripts/" + entry + ".mjs"));
   }
   fs.mkdirSync(path.join(root, ".agents/skills/failure-gate-unified"), { recursive: true });
@@ -44,6 +45,12 @@ function fixture(t, work = 'console.log("ok")', adapter = "exit") {
     allocatorAuthorityVerified: true, canonicalSource: ".agents/skills/failure-gate-unified/SKILL.md",
     canonicalSha256: sha(canonical), planTemplates: { [sha(canonical)]: "unified-v2" }, newPlanTemplate: "unified-v3",
     capabilities: [], legacyNativeTasks: [{ ref: "#2" }]
+    , regressionGuard: { current: RG_REVISION, contracts: {
+      [sha(canonical) + "/legacy-v1"]: "legacy-v1",
+      [sha(canonical) + "/unified-v2"]: "legacy-v1",
+      [sha(canonical) + "/unified-v3"]: "legacy-v1",
+      [sha(canonical) + "/unified-v4"]: RG_REVISION,
+    } }
   });
   json(root, "docs/validation/unified-task-registry.json", { schemaVersion: 1, projectId: process.env.REPL_ID, revision: 0, records: {} });
   json(root, "docs/validation/failure-baseline.json", { schemaVersion: 1, entries: [] });
@@ -77,6 +84,329 @@ function alive(pid) {
     return state !== "Z";
   } catch { return false; }
 }
+
+function currentFixture(t, work = 'console.log("ok")') {
+  const root = fixture(t, work);
+  fs.cpSync(path.join(SOURCE, ".agents/skills/regression-guard"),
+    path.join(root, ".agents/skills/regression-guard"), { recursive: true });
+  const p = policy(root);
+  p.newPlanTemplate = "unified-v4";
+  json(root, "docs/validation/unified-policy.json", p);
+  return root;
+}
+function currentSpec(extra = {}) {
+  const scenario = "An invalid current declaration is offered for admission to the gate.";
+  const assertion = "Assert rejection before the workload sentinel exists and retain the prior sealed bytes.";
+  const layer = "backend gate admission and execution boundary";
+  const location = "work.mjs";
+  return spec("test-fast", {
+    title: "Repair current gate admission",
+    what: "Change existing admission behavior to reject invalid declarations before execution.",
+    regression: { mode: "normal", covers: scenario, testLocation: location, checks: assertion },
+    regressionAssessment: {
+      classification: "material",
+      rationale: "Existing admission and execution contracts materially change for current plans.",
+      scopeReview: "Reviewed requested scope, Steps and existing admission behavior for every material component.",
+      coverageReview: "The boundary fixture asserts refusal before child launch, rather than merely inspecting syntax.",
+      risks: [{ id: "admission", category: "compatibility-contract",
+        change: "Invalid current declarations must not publish or launch any validation workload.", layer }],
+      coverage: [{ risk: "admission", scenario, testLocation: location, assertion, layer }],
+    }, ...extra,
+  });
+}
+
+test("current RG maps all eight material categories and future/existing tests through CLI publication and amendment", t => {
+  const root = currentFixture(t);
+  for (const category of CATEGORIES) {
+    const input = currentSpec();
+    input.regressionAssessment.risks[0].category = category;
+    if (category === "bug-fix") {
+      input.regression.testLocation = "future/not-created.test.ts — rejects invalid admission";
+      input.regressionAssessment.coverage[0].testLocation = "future/not-created.test.ts";
+    }
+    json(root, "current.json", input);
+    const created = cli(root, "new-plan", ["current.json"]);
+    assert.equal(created.status, 0, created.stderr);
+    const id = created.stdout.trim();
+    const record = registry(root).records[id];
+    assert.equal(record.planTemplate, "unified-v4");
+    assert.equal(cli(root, "check-failure-gate", [id], { TASK_PLAN_FILE: record.planPath }).status, 0);
+    assert.equal(cli(root, "validate-task-plans", [], { TASK_PLAN_FILE: record.planPath, UNIFIED_TASK_ID: id }).status, 0);
+    assert.equal(cli(root, "check-regression-guard", [], { TASK_PLAN_FILE: record.planPath }).status, 0);
+    assert.equal(cli(root, "amend-plan", [id, "test-fast", "Preserve complete mapped recurrence coverage", "current.json"]).status, 0);
+  }
+});
+
+test("current RG admits factual N/A for all four categories and whole-scope self/exclusions without normal fields", t => {
+  const root = currentFixture(t);
+  const variants = [];
+  const reasons = {
+    "real-timing": "This race condition depends on real wall-clock concurrency which cannot be reproduced by deterministic ordering at the affected boundary.",
+    external: "This external service behavior is unmockable and cannot be faithfully reproduced at the affected boundary.",
+    visual: "This is a purely visual regression; no applicable screenshot or pixel-diff capability exists for the affected rendering.",
+    removed: "The affected feature is entirely removed with no surviving code path or material side effect to guard.",
+  };
+  for (const [category, why] of Object.entries(reasons)) {
+    const input = currentSpec({ regression: { mode: "na", why } });
+    input.regressionAssessment.coverage = [];
+    input.regressionAssessment.exception = { category, risks: ["admission"],
+      facts: "Disposable semantic fixture: the named boundary is absent from all available automation capabilities.",
+      alternatives: "Reviewed deterministic scheduling, dependency substitution and narrower boundary assertions; none faithfully represents this fixture.",
+      residualRisk: "Manual boundary inspection remains necessary; no automated recurrence guard result is asserted." };
+    variants.push(input);
+  }
+  for (const [exclusion, what, rationale] of [
+    ["additive", "Add a purely additive independent panel without changing existing behavior.", "Only an independent new panel is added; existing behavior and contracts stay unchanged."],
+    ["cosmetic", "Reword an error message without changing when or whether it fires.", "Copy-only rewording has no material accessibility, privacy or contract effect."],
+    ["internal", "A genuinely non-material internal refactor with no behavior change.", "Only equivalent local helper names change; no user or supported contract is affected."],
+    ["deletion-marked", "This task is marked for deletion.", "This task is marked for deletion and will not be implemented or executed."],
+    ["test-only", "Add tests for existing authorization failures without changing existing behavior.", "Only assertions for unchanged authorization are added; no material behavior is changed."],
+  ]) variants.push(currentSpec({ title: "Document scope disposition", what,
+    regression: { mode: "excluded", reason: rationale },
+    regressionAssessment: { classification: "excluded", exclusion, rationale,
+      scopeReview: "Reviewed the whole requested implementation scope, not the task title or file extension.",
+      coverageReview: "No existing material behavior changes; ordinary host test obligations remain unchanged.",
+      risks: [], coverage: [] } }));
+  variants.push(currentSpec({ title: "Verify existing coverage", what: "The entire scope is verification-only checks for unchanged behavior; no material change.",
+    regression: { mode: "self", deliverable: "scripts/tests/failure-gate.test.mjs — existing rejection case asserts the workload sentinel stays absent." },
+    regressionAssessment: { classification: "self",
+      rationale: "The entire scope verifies the existing check; no admission implementation changes are included.",
+      scopeReview: "Read all requested changes and confirmed implementation is limited to the check itself.",
+      coverageReview: "The existing rejection case is the deliverable, not a promise of an unimplemented check.",
+      risks: [], coverage: [] } }));
+  const id = provision(root, currentSpec());
+  for (const input of variants) {
+    let created;
+    try { created = provision(root, input); } catch (error) {
+      throw new Error(`Declaration variant ${input.regression.mode}/${input.regressionAssessment.exclusion ?? input.regressionAssessment.exception?.category}: ${error.message}`);
+    }
+    checkPlan(root, created, "test-fast", context(root, created));
+    amend(root, id, "test-fast", "Adopt a factual whole-scope declaration disposition", input);
+    const record = checkPlan(root, id, "test-fast", context(root, id)).record;
+    assert.deepEqual(record.spec.regression, input.regression);
+  }
+});
+
+test("current RG rejects title/metadata escapes, unmatched layers, missing risks and non-detecting declarations transactionally", t => {
+  const root = currentFixture(t);
+  const id = provision(root, currentSpec());
+  const sibling = provision(root, currentSpec());
+  const before = fs.readFileSync(path.join(root, context(root, id)), "utf8");
+  const siblingText = fs.readFileSync(path.join(root, context(root, sibling)), "utf8");
+  const invalid = [];
+  for (const [title, what] of [
+    ["DELETE: remove old flow", "Remove existing authorization checks for protected tenant records."],
+    ["Add tests for admission", "Change existing admission so invalid declarations execute workloads."],
+    ["Add a checker", "The primary deliverable is a checker. Also change existing execution behavior."],
+    ["Add an independent panel", "This is not purely additive. Fix stale record overwrites."],
+    ["Update internal docs", "Fix existing authorization.\n\nThis string cannot enter the supported one-line inputs."],
+    ["Add an independent panel", "Add a purely additive panel. Also replace existing supported serialization."],
+    ["Reword error copy", "Cosmetic wording only. Also change retry logic for existing failures."],
+  ]) {
+    const input = currentSpec({ title, what, regression: { mode: "excluded", reason: "Claims no material changes despite actual executing scope." } });
+    Object.assign(input.regressionAssessment, { classification: "excluded", exclusion: "additive", risks: [], coverage: [] });
+    invalid.push(input);
+  }
+  for (const mutate of [
+    i => { i.regressionAssessment.coverage = []; },
+    i => { i.regressionAssessment.coverage[0].layer = "unrelated frontend store boundary"; },
+    i => { i.regressionAssessment.coverage[0].assertion = "It works"; },
+    i => { i.regressionAssessment.risks.push({ ...i.regressionAssessment.risks[0], id: "privacy", category: "security-privacy" }); },
+    i => { i.regressionAssessment.rationale = "TODO"; },
+    i => { i.regressionAssessment.risks[0].category = "arbitrary"; },
+    i => { i.regression.mode = "self"; delete i.regression.covers; delete i.regression.testLocation; delete i.regression.checks; i.regression.deliverable = "scripts/tests/failure-gate.test.mjs — test current rejection behavior."; },
+    i => { i.regression.checks = "Tests the fix using all available cases"; },
+    i => { i.regression.testLocation = "tests/"; },
+    i => { i.regression = { mode: "na", why: "The race is hard to test without a screenshot." }; },
+    i => { i.regression = { mode: "na", why: "This race condition uses real wall-clock timing which cannot be reproduced deterministically." }; },
+  ]) { const input = currentSpec(); mutate(input); invalid.push(input); }
+  for (const input of invalid) {
+    const ledger = fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8");
+    assert.throws(() => amend(root, id, "test-fast", "Invalid candidate must preserve prior admitted revision", input));
+    assert.equal(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8"), ledger);
+    assert.equal(fs.readFileSync(path.join(root, context(root, id)), "utf8"), before);
+    assert.throws(() => provision(root, input));
+    for (const r of Object.values(registry(root).records).filter(r => r.status === "incomplete")) {
+      assert.equal(fs.existsSync(path.join(root, r.planPath)), false);
+    }
+  }
+  assert.equal(fs.readFileSync(path.join(root, context(root, sibling)), "utf8"), siblingText);
+  const records = Object.keys(registry(root).records);
+  assert.equal(records.length, new Set(records).size);
+});
+
+test("current RG rejects all malformed sections before every execution caller without seal or ledger mutation", async t => {
+  const root = currentFixture(t, 'import fs from "node:fs"; fs.writeFileSync("launched", "yes");');
+  const id = provision(root, currentSpec());
+  const plan = context(root, id);
+  for (const modify of [
+    i => { i.regression.covers = ""; },
+    i => { i.regression.checks = "<specific assertion>"; },
+    i => { i.regression.testLocation = "tests/"; },
+    i => { i.regressionAssessment.coverage[0].layer = "unrelated frontend store boundary"; },
+  ]) {
+    const ledger = registry(root);
+    const input = currentSpec();
+    modify(input);
+    const r = ledger.records[id];
+    r.spec = input;
+    const text = render(id, r.contract, input, r.planTemplate);
+    r.planHash = sha(text);
+    fs.writeFileSync(path.join(root, plan), text);
+    json(root, "docs/validation/unified-task-registry.json", ledger);
+    const bytes = fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8");
+    for (const [name, args] of [["check-failure-gate", [id]], ["validate-task-plans", []],
+      ["check-regression-guard", []], ["run-validation", [id, "test-fast"]], ["validation-tier", ["test-fast", id]]]) {
+      assert.notEqual(cli(root, name, args, { TASK_PLAN_FILE: plan, UNIFIED_TASK_ID: id }).status, 0, name);
+    }
+    await assert.rejects(run(root, id, "test-fast", plan));
+    assert.equal(fs.existsSync(path.join(root, "launched")), false);
+    assert.equal(fs.existsSync(path.join(root, ".local/failure-gate/runs")), false);
+    assert.equal(fs.readFileSync(path.join(root, plan), "utf8"), text);
+    assert.equal(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8"), bytes);
+  }
+});
+
+test("current deferrals use stable host refs and fresh commitment/scope/ownership at publication execution and delivery", async t => {
+  const root = currentFixture(t, 'import fs from "node:fs"; fs.writeFileSync("launched", "yes");');
+  const input = currentSpec();
+  input.regression.deferral = { ref: "host:guard-coverage", owner: "fixture-maintainer",
+    reason: "The faithful boundary harness requires separately committed work.",
+    disposition: "Accepted follow-up owns this exact recurrence; affected release waits for its guard." };
+  input.regression.testLocation = "Deferred to host:guard-coverage — work.mjs";
+  const evidence = { verified: true, committed: true, eligible: true, projectId: policy(root).projectId,
+    taskRef: "host:guard-coverage", owner: "fixture-maintainer", reference: "trusted-host:revision/1", revision: "1",
+    commitment: "The committed follow-up will deliver the named gate-boundary assertion.",
+    authorization: "Owner-approved deferral covers this recurrence and its dependency disposition.",
+    recurrences: input.regressionAssessment.coverage.map(c => c.scenario) };
+  let observed = evidence;
+  const options = { resolveTask: () => observed };
+  for (const change of [{ committed: false }, { eligible: false }, { verified: false }, { projectId: "other" },
+    { owner: "other" }, { taskRef: "missing" }, { recurrences: [] }, { authorization: "" }, { revision: "" }, null]) {
+    observed = change === null ? null : { ...evidence, ...change };
+    assert.throws(() => provision(root, input, options), /deferral target/);
+  }
+  observed = evidence;
+  const id = provision(root, input, options);
+  const plan = context(root, id);
+  checkPlan(root, id, "test-fast", plan, false, options);
+  assert.throws(() => checkPlan(root, id, "test-fast", plan), /authentic host resolver/);
+  for (const change of [{ eligible: false }, { recurrences: [] }, { owner: "other" }, { revision: "2" }, null]) {
+    observed = change === null ? null : { ...evidence, ...change };
+    await assert.rejects(run(root, id, "test-fast", plan, null, options));
+    assert.throws(() => regressionPreflight(root, id, plan, registry(root).records[id].planHash, options));
+    assert.equal(fs.existsSync(path.join(root, "launched")), false);
+  }
+  observed = evidence;
+  // Delivery reuses read-only checkPlan with the real host resolver, not a receipt.
+  assert.equal(checkPlan(root, id, "test-fast", plan, false, options).record.id, id);
+  json(root, "receipt.json", { ...input, resolveTask: evidence });
+  assert.match(cli(root, "new-plan", ["receipt.json"]).stderr, /authentic host resolver/);
+});
+
+test("Agent-first RG preflight reuses valid plans and detects native mismatch/stale revision; amendments require quiescence", t => {
+  const root = currentFixture(t);
+  const id = provision(root, currentSpec());
+  const pathName = context(root, id);
+  const r = registry(root).records[id];
+  const text = fs.readFileSync(path.join(root, pathName), "utf8");
+  const ledger = fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8");
+  assert.equal(cli(root, "check-regression-preflight", [id, r.planHash], { TASK_PLAN_FILE: pathName }).status, 0);
+  assert.notEqual(cli(root, "check-regression-preflight", [id, "0".repeat(64)], { TASK_PLAN_FILE: pathName }).status, 0);
+  assert.equal(regressionPreflight(root, id, pathName, r.planHash, { nativeSealedText: text }).planHash, r.planHash);
+  assert.equal(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8"), ledger);
+  assert.throws(() => regressionPreflight(root, id, pathName, r.planHash, { nativeSealedText: "changed native description" }), /Native\/local/);
+  const release = lease(root, "target-fixture-repository");
+  assert.throws(() => amend(root, id, "test-fast", "Prepare coverage before resuming affected work", currentSpec()), /Single-flight/);
+  release();
+  const active = registry(root);
+  active.records[id].activeRun = { runId: "uncertain-fixture-run" };
+  json(root, "docs/validation/unified-task-registry.json", active);
+  assert.throws(() => amend(root, id, "test-fast", "Do not amend under an uncertain run", currentSpec()), /active or uncertain/);
+  assert.throws(() => regressionPreflight(root, id, pathName, r.planHash), /active or uncertain/);
+  delete active.records[id].activeRun;
+  json(root, "docs/validation/unified-task-registry.json", active);
+  fs.writeFileSync(path.join(root, "prior-observation.txt"), "Affected work paused; earlier observation is not new-revision validation.");
+  const next = currentSpec({ what: "Repair existing admission and preserve earlier affected-work observations." });
+  amend(root, id, "test-fast", "Add concrete coverage under already-covered maintenance scope", next);
+  assert.throws(() => regressionPreflight(root, id, pathName, r.planHash), /Stale/);
+  assert.ok(regressionPreflight(root, id, pathName, registry(root).records[id].planHash));
+  assert.match(fs.readFileSync(path.join(root, "prior-observation.txt"), "utf8"), /paused/);
+});
+
+test("RG adoption preserves historical rule bytes; unknown mapping is local and amendments adopt current rules", t => {
+  const root = currentFixture(t);
+  const p = policy(root);
+  p.newPlanTemplate = "unified-v3";
+  json(root, "docs/validation/unified-policy.json", p);
+  const historical = provision(root, spec());
+  const old = registry(root).records[historical];
+  const oldText = fs.readFileSync(path.join(root, old.planPath), "utf8");
+  p.newPlanTemplate = "unified-v4";
+  json(root, "docs/validation/unified-policy.json", p);
+  checkPlan(root, historical, old.tier, old.planPath);
+  assert.deepEqual(registry(root).records[historical], old);
+  delete p.regressionGuard.contracts[old.contract + "/unified-v3"];
+  json(root, "docs/validation/unified-policy.json", p);
+  assert.throws(() => checkPlan(root, historical, old.tier, old.planPath), /unknown adoption mapping/);
+  const current = provision(root, currentSpec());
+  checkPlan(root, current, "test-fast", context(root, current));
+  assert.equal(fs.readFileSync(path.join(root, old.planPath), "utf8"), oldText);
+  p.regressionGuard.contracts[old.contract + "/unified-v3"] = "legacy-v1";
+  json(root, "docs/validation/unified-policy.json", p);
+  const tiers = fs.readFileSync(path.join(root, "docs/validation/unified-tiers.json"), "utf8");
+  amend(root, historical, old.tier, "Adopt the current guard through an authorized supported amendment", currentSpec());
+  assert.equal(registry(root).records[historical].planTemplate, "unified-v4");
+  assert.equal(registry(root).records[historical].tierHash, old.tierHash);
+  assert.equal(fs.readFileSync(path.join(root, "docs/validation/unified-tiers.json"), "utf8"), tiers);
+});
+
+test("current workload inclusion is explicit; missing coverage blocks dispatch without tier mutation", async t => {
+  const root = currentFixture(t, 'import fs from "node:fs"; fs.writeFileSync("launched", "yes");');
+  const input = currentSpec();
+  input.regression.testLocation = "future/unlisted.test.mjs";
+  input.regressionAssessment.coverage[0].testLocation = "future/unlisted.test.mjs";
+  const id = provision(root, input);
+  const record = registry(root).records[id];
+  const tierBytes = fs.readFileSync(path.join(root, "docs/validation/unified-tiers.json"), "utf8");
+  await assert.rejects(run(root, id, "test-fast", record.planPath), /not in the bound workload/);
+  assert.throws(() => regressionPreflight(root, id, record.planPath, record.planHash), /not in the bound workload/);
+  assert.equal(fs.existsSync(path.join(root, "launched")), false);
+  assert.equal(fs.readFileSync(path.join(root, "docs/validation/unified-tiers.json"), "utf8"), tierBytes);
+  amend(root, id, "test-fast", "Use the actual bound fixture guard without changing tiers", currentSpec());
+  assert.equal((await run(root, id, "test-fast", record.planPath)).state, "PASS");
+  assert.equal(fs.existsSync(path.join(root, "launched")), true);
+  assert.equal(registry(root).records[id].activeRun, undefined);
+  const guard = currentSpec();
+  for (const argv of [
+    ["node", "unrelated.mjs", "--test", "work.mjs"],
+    ["node", "--import", "work.mjs", "unrelated.mjs"],
+    ["pnpm", "run", "test", "work.mjs"],
+  ]) assert.throws(() => assertRegressionWorkload(guard, { steps: [{ cwd: ".", argv }] }), /not in the bound workload/);
+});
+
+test("multiple risks need distinct mapped assertions and semantic review is not a delivered test", t => {
+  const root = currentFixture(t);
+  const input = currentSpec();
+  const risk = { ...input.regressionAssessment.risks[0], id: "privacy", category: "security-privacy",
+    change: "Private declaration data must remain isolated from unrelated task records." };
+  const coverage = { ...input.regressionAssessment.coverage[0], risk: risk.id,
+    scenario: "An unrelated task attempts to inspect private declaration data.",
+    assertion: "Assert the unrelated task receives a denial and never receives private declaration text." };
+  input.regressionAssessment.risks.push(risk);
+  input.regressionAssessment.coverage.push(coverage);
+  input.regression.covers += " " + coverage.scenario;
+  input.regression.checks += " " + coverage.assertion;
+  const id = provision(root, input);
+  assert.equal(checkPlan(root, id, "test-fast", context(root, id)).record.id, id);
+  input.regressionAssessment.coverage.pop();
+  assert.throws(() => amend(root, id, "test-fast", "Uncovered second risk must not be admitted", input), /map each material risk/);
+  // Equivalent negative control: the old shape validator ignores layer and risk
+  // metadata, whereas current semantic-assessment consistency rejects it.
+  const inadequate = currentSpec();
+  inadequate.regressionAssessment.coverage[0].layer = "unrelated frontend store boundary";
+  assert.throws(() => assessRegression(inadequate, render("fixture", policy(root).canonicalSha256, inadequate, "unified-v4")), /test layer/);
+});
 
 test("effective project policy and fake-ID refusal do not fabricate identities", () => {
   const p = readJson(SOURCE, "docs/validation/unified-policy.json");
@@ -419,6 +749,7 @@ test("older sealed contract verifies unchanged after pin update; amendment expli
   fs.appendFileSync(path.join(root, p.canonicalSource), "\nFixture next revision\n");
   p.canonicalSha256 = sha(fs.readFileSync(path.join(root, p.canonicalSource)));
   p.planTemplates[p.canonicalSha256] = "unified-v2";
+  p.regressionGuard.contracts[p.canonicalSha256 + "/unified-v2"] = "legacy-v1";
   json(root, "docs/validation/unified-policy.json", p);
   checkPlan(root, id, "test-fast", plan);
   assert.equal((await run(root, id, "test-fast", plan)).state, "PASS");

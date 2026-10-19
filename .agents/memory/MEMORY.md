@@ -30,3 +30,4 @@
 - [CloudPainter account data](cloudpainter-account-data.md) — users expect account-owned data on the server; preserve explicit consent before uploading sketches.
 - [Follow-up description limits](follow-up-description-limits.md) — proposals reject descriptions over 4,000 characters; measure before submitting evidence-heavy plans.
 - [Clock deadline fixtures](clock-deadline-fixtures.md) — prove startup expiry and dispatched timeout separately; require actual clock reversal during each tested phase.
+- [Rendered plan classification](rendered-plan-classification.md) — test full rendered exclusions; generated metadata can contaminate scope signals.

@@ -10,7 +10,19 @@
     "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0": "legacy-v1",
     "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc": "unified-v2"
   },
-  "newPlanTemplate": "unified-v3",
+  "newPlanTemplate": "unified-v4",
+  "regressionGuard": {
+    "source": ".agents/skills/regression-guard/SKILL.md",
+    "current": "6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1",
+    "record": "docs/validation/regression-guard-revision-application-handoff.md",
+    "contracts": {
+      "f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12/legacy-v1": "legacy-v1",
+      "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0/legacy-v1": "legacy-v1",
+      "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc/unified-v2": "legacy-v1",
+      "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc/unified-v3": "legacy-v1",
+      "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc/unified-v4": "6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1"
+    }
+  },
   "contractRevisions": [
     {
       "revision": 1,

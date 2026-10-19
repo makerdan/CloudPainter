@@ -6,6 +6,7 @@ import { performance } from "node:perf_hooks";
 import { checkPlan } from "./plans.mjs";
 import { policy, registry, tier, baseline, warnings, lease, transaction, atomicJson, readJson, readText, safePath, stamp, sha } from "./store.mjs";
 import { executionSources } from "./execution-sources.mjs";
+import { assertRegressionWorkload } from "./regression-contract.mjs";
 
 export function parseFailures(step, text) {
   if (step.adapter !== "node-tap") return null;
@@ -73,8 +74,9 @@ async function supervise(root, step, timeoutMs, cleanupMs, log) {
     });
   });
 }
-export async function run(root, id, selectedTier, planPath, retryRequest = null) {
-  let admission = checkPlan(root, id, selectedTier, planPath);
+export async function run(root, id, selectedTier, planPath, retryRequest = null, regressionOptions = {}) {
+  let admission = checkPlan(root, id, selectedTier, planPath, false, regressionOptions);
+  if (admission.record.planTemplate === "unified-v4") assertRegressionWorkload(admission.record.spec, admission.t);
   const release = lease(root, "target-" + admission.t.target);
   let quiescent = true;
   const runId = crypto.randomUUID();
@@ -83,7 +85,8 @@ export async function run(root, id, selectedTier, planPath, retryRequest = null)
     tierHash: admission.t.hash, sources: executionSources(root), startedAt: stamp(), state: "INCOMPLETE", required: 0, steps: [], retryOf: retryRequest, warnings: [] };
   const reportPath = directory + "/report.json";
   try {
-    admission = checkPlan(root, id, selectedTier, planPath);
+    admission = checkPlan(root, id, selectedTier, planPath, false, regressionOptions);
+    if (admission.record.planTemplate === "unified-v4") assertRegressionWorkload(admission.record.spec, admission.t);
     if (admission.record.activeRun) throw new Error("Owned run is active or uncertain; admission blocked");
     const catalog = baseline(root);
     report.warnings = warnings(catalog);

@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.dirname(SCRIPT_DIR);
@@ -111,6 +112,7 @@ function extractPlanBody(content) {
   const activeContent = maskMarkdownExamples(content);
   const ignoredSections = new Set([
     "regression guard",
+    "regression assessment",
     "out of scope",
     "relevant files",
     "pre-existing failures to ignore",
@@ -193,12 +195,28 @@ function hasMaterialMutation(title, body) {
   });
 }
 
-function classifyPlan(content) {
+function classifyPlan(content, current = false) {
   const title = getTitle(content);
   const body = extractPlanBody(content);
-  if (isDeletePlan(title)) return { qualifies: false, reason: "DELETE-prefixed plan" };
+  if (!current && isDeletePlan(title)) return { qualifies: false, reason: "DELETE-prefixed plan" };
+  if (current && /\b(?:this )?task is marked for deletion\b/i.test(body) &&
+      !/\b(?:implement|execute|change|remove|repair|fix)\b/i.test(body.replace(/\bthis task is marked for deletion\b/ig, ""))) {
+    return { qualifies: false, reason: "non-executing deletion-marked task" };
+  }
   if (hasMaterialMutation(title, body)) return { qualifies: true, reason: "material-change signal found" };
+  if (current && body.split(/\n|[.!;]/).some(clause =>
+    !/^\s*(?:[-*\d.)]+\s*)?(?:no|not|without|never|unchanged|does not)\b/i.test(clause) &&
+    /\b(?:change|alter|replace|remove|reject|permit|repair|fix|deny|admit)\w*\b.{0,180}\b(?:admission|execution|publication|dispatch|authorization|workload|binding)\b/i.test(clause))) {
+    return { qualifies: true, reason: "material admission/execution change" };
+  }
+  if (current && /\b(?:entire|whole|only|verification-only|test-only)\b.{0,100}\b(?:test|check|verif)/i.test(body) &&
+      /\bunchanged behavior\b|\bno (?:separate )?material (?:behavior )?change\b/i.test(body)) {
+    return { qualifies: false, reason: "self-satisfying hardening task" };
+  }
   let exclusion = null;
+  if (current && /\b(?:add|write|verify)\b[^\n.!;]*\btests?\b[^\n.!;]*\bwithout changing existing behavior\b/i.test(body)) {
+    exclusion = "self-satisfying hardening task";
+  }
   if (isPureHardening(title, body)) exclusion = "self-satisfying hardening task";
   if (body.split(/\n|[.!;]/).some(clause =>
     !/\b(?:not|never|isn't|is not|no longer)\b/i.test(clause) &&
@@ -239,6 +257,8 @@ function classifyPlan(content) {
     ? { qualifies: true, reason: "material-change signal found" }
     : { qualifies: false, reason: "no qualifying material-change signal found" };
 }
+
+export const currentClassification = content => classifyPlan(content, true);
 
 function findSections(content) {
   const activeContent = maskMarkdownExamples(content);
@@ -432,49 +452,15 @@ function checkPlacement(content, section, planPath) {
   return problems;
 }
 
-function insertStub(content) {
-  const stub = [
-    "## Regression Guard",
-    "**Covers:** <FILL IN: concrete scenario, boundary, invariant, lifecycle, reliability property, or contract>",
-    "**Test location:** <FILL IN: test file path>",
-    "**What it checks:** <FILL IN: specific assertion that catches recurrence>",
-  ].join("\n");
-  const lineEnding = content.includes("\r\n") ? "\r\n" : "\n";
-  const headings = secondLevelHeadings(content);
-  const relevant = headings.find((heading) => heading.name === "relevant files");
-  let insertionIndex;
-  if (relevant) {
-    insertionIndex = relevant.index;
-  } else {
-    const priorSectionNames = new Set(["validation", "pre-existing failures to ignore"]);
-    const priorSections = headings.filter((heading) => priorSectionNames.has(heading.name));
-    if (priorSections.length) {
-      const last = priorSections.reduce((a, b) => (a.index > b.index ? a : b));
-      const nextHeading = headings.find((heading) => heading.index > last.index);
-      insertionIndex = nextHeading?.index ?? content.length;
-    } else {
-      insertionIndex = content.length;
-    }
-  }
-  const before = content.slice(0, insertionIndex);
-  const after = content.slice(insertionIndex);
-  const leading = before.length === 0 || new RegExp(`(?:\\r?\\n){2}$`).test(before)
-    ? ""
-    : before.endsWith(lineEnding)
-      ? lineEnding
-      : lineEnding + lineEnding;
-  return `${before}${leading}${stub}${after ? `${lineEnding}${lineEnding}${after}` : lineEnding}`;
-}
-
 function readPlans(files) {
   return files.map((file) => ({ file, content: fs.readFileSync(file, "utf8") }));
 }
 
-export function strictCheck(plans) {
+export function strictCheck(plans, { current = false } = {}) {
   const violations = [];
   for (const plan of plans) {
     const sections = findSections(plan.content);
-    const classification = classifyPlan(plan.content);
+    const classification = classifyPlan(plan.content, current);
     if (!sections.length) {
       if (classification.qualifies) {
         violations.push(`${plan.file}: qualifying plan is missing ## Regression Guard`);
@@ -539,26 +525,21 @@ export function main() {
   }
 
   if (mode === "fix-stub") {
-    let inserted = 0;
-    try {
-      for (const plan of plans) {
-        if (!findSections(plan.content).length && classifyPlan(plan.content).qualifies) {
-          if (/^\*\*Unified task ID:\*\*/m.test(plan.content) || /^FGU-.*\.md$/.test(path.basename(plan.file))) {
-            throw new Error("Sealed Unified plans require a supported amendment, not --fix-stub");
-          }
-          fs.writeFileSync(plan.file, insertStub(plan.content), "utf8");
-          inserted += 1;
-        }
-      }
-    } catch (error) {
-      console.error(`Regression Guard checker: cannot write task plan: ${error.message}`);
-      process.exitCode = 1;
-      return;
-    }
-    console.log(`Regression Guard checker: inserted ${inserted} stub${inserted === 1 ? "" : "s"}.`);
+    console.error("Regression Guard checker: --fix-stub is disabled; use supported draft creation or a supported amendment. No plans were changed.");
+    process.exitCode = 1;
     return;
   }
 
+  // A sealed plan's recorded contract, not whichever linter is newest, owns
+  // admission. Never rescan siblings or normalize a historical seal.
+  if (selectedPath && /^\*\*Unified task ID:\*\*/m.test(plans[0].content)) {
+    const id = plans[0].content.match(/^\*\*Unified task ID:\*\* (.+)$/m)?.[1];
+    const result = spawnSync(process.execPath, [path.join(SCRIPT_DIR, "check-failure-gate.mjs"), id], {
+      cwd: PROJECT_ROOT, env: { ...process.env, TASK_PLAN_FILE: path.relative(PROJECT_ROOT, selectedPath) }, stdio: "inherit", timeout: 10000,
+    });
+    process.exitCode = result.status ?? 1;
+    return;
+  }
   const violations = mode === "stubs-only"
     ? stubsOnlyCheck(plans)
     : strictCheck(plans);

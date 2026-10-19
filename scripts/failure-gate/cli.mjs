@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readJson, registry, baseline, warnings, policy } from "./store.mjs";
-import { provision, checkPlan, amend, cancel } from "./plans.mjs";
+import { provision, checkPlan, amend, cancel, regressionPreflight } from "./plans.mjs";
 import { run, selfClassify, closeOwnerDirection } from "./runner.mjs";
 import { validateSelectedPlan } from "../check-regression-guard.mjs";
 
@@ -32,6 +32,11 @@ export async function main(action, args = process.argv.slice(2)) {
       case "amend":
         if (![3, 4].includes(args.length)) throw new Error("Usage: amend-plan.mjs <id> <tier> <rationale> [replacement-spec.json]");
         amend(ROOT, id, second, third, fourth ? readJson(ROOT, fourth) : null); console.log("Amendment recorded."); break;
+      case "regression-preflight":
+        if (args.length !== 2 || !/^[a-f0-9]{64}$/.test(second)) throw new Error("Usage: check-regression-preflight.mjs <id> <observed-plan-sha256>");
+        validateSelectedPlan();
+        console.log(JSON.stringify(regressionPreflight(ROOT, id, process.env.TASK_PLAN_FILE, second)));
+        break;
       case "cancel":
         if (args.length !== 2) throw new Error("Usage: cancel-plan.mjs <id> <rationale>");
         cancel(ROOT, id, second); console.log("Permanent tombstone retained."); break;

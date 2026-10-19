@@ -21,11 +21,12 @@ if (gateActive || unifiedContext) {
     cwd: PROJECT_ROOT, env: process.env, stdio: "inherit", timeout: 10000,
   });
   if (result.error || result.status !== 0) process.exit(result.status || 1);
+  process.exit(0);
 }
 
 // Legacy/native behavior is unchanged while staging. Sealed Unified plans are
 // strict and scoped; never insert stubs or mutate the environment-local archive.
-for (const mode of gateActive || unifiedContext ? [""] : ["--fix-stub", ""]) {
+for (const mode of [""]) {
   const args = [CHECKER];
   if (mode) args.push(mode);
   const result = spawnSync(process.execPath, args, {

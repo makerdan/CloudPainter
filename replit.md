@@ -145,9 +145,14 @@ Root commands:
 Regression Guard plan authoring and executor obligations are in `AGENTS.md`
 and `docs/validation/regression-guard-authoring.md`. The installer handoff and
 requirement/evidence matrix are in
-`docs/validation/regression-guard-application-handoff.md`. The current local
-route checks sealed declarations strictly before publication and workload
-launch; this does not control Replit platform task completion.
+`docs/validation/regression-guard-application-handoff.md` (historical) and
+`docs/validation/regression-guard-revision-application-handoff.md` (current).
+New unified-v4 plans use the explicitly mapped current Regression Guard contract;
+historical representations retain their recorded rules. The supported routes
+check declarations before publication and workload launch without rewriting
+sealed plans. Agent-first pre-implementation assessment is required; the local
+RG preflight component does not establish host approval, test delivery or control
+Replit's Start button/platform completion. Separate application review is not selected.
 
 `docs/validation/workspace-typecheck.md` records the declaration-mismatch diagnosis, bounded check outcomes, supported typecheck routes, and fixture coverage.
 

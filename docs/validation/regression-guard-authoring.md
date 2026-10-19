@@ -1,147 +1,181 @@
-# Regression Guard: authoring and execution
+# Regression Guard: current authoring and execution
 
-Authority is `.agents/skills/regression-guard/SKILL.md`, unchanged SHA-256
-`fcda16a9910a91e1ace9933651acdf69d252766948bd379ee1bc5ee6a72f2031`.
-Failure Gate owns the baseline and Validation sections, tier selection and
-bound execution. Regression Guard adds an assertion obligation, not a new tier.
+Authority: `.agents/skills/regression-guard/SKILL.md` and its two `reference/`
+files. Current source SHA-256:
+`6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1`.
+The requirement map, source manifest and maintenance observations are in
+`regression-guard-revision-application-handoff.md`. Older application reports are
+history, not current instructions or proof of this revision's delivery.
 
-## Before writing a plan
+## Adoption, not historical retrofit
 
-Inspect the real change for bug fix, behavior change, error handling, material
-security/privacy, data integrity, concurrency/lifecycle, performance/reliability
-and compatibility/contract effects. Announce the canonical classification line
-in chat before the first heading. Example:
+`unified-policy.json.regressionGuard.contracts` independently maps the sealed
+Unified contract/representation pair to RG rules. Known legacy-v1, unified-v2 and
+unified-v3 representations retain the existing legacy checker and byte-identical
+renderers. Newly provisioned plans and supported amendments use unified-v4 and
+the current RG source/reference fingerprints. Unknown mapping blocks only the
+dependent record; it is not grandfathering or an archive reconstruction demand.
+No live records or historical plans are migrated by this cutover.
 
-```text
-[REGRESSION-GUARD] Classification: bug-fix, security-privacy. Guard: covered — server/tenant-access.test.ts.
-```
+Unified still owns IDs, baseline declarations, approval, binding, lifecycle,
+target leases, supervised execution and results. Its canonical pin is unchanged.
+No new tier or authority exists. Gate maintenance is outside ordinary admission
+under authentic owner instruction and does not allocate a live identity.
 
-This announcement is an agent obligation; the file checker cannot observe chat.
-Do not infer materiality solely from a title or mechanical keyword matches.
-Scope and semantic review are required even when lint passes.
+## Scope assessment before publication
 
-## Complete new-plan specification
+Read actual requested scope, Done, Steps and affected existing behavior. Assess
+all eight categories: bug-fix, behavior-change, error-handling, security-privacy,
+data-integrity, concurrency-lifecycle, performance-reliability,
+compatibility-contract. Every material component needs coverage. Neither DELETE
+nor a test/check title exempts an executing change. A task marked for deletion is
+non-executing, unlike a change that removes behavior. Negated exclusions,
+unrelated examples/history, filenames and incidental risk words prove nothing.
 
-Create a repository-relative JSON input, then use `node scripts/new-plan.mjs
-path/to/spec.json`. The example is illustrative, not authorization for an
-application workload or a preselected tier:
+Emit the canonical `[REGRESSION-GUARD] Classification: … Guard: …` announcement
+before publication; do not impose an impossible first-input ordering.
+
+Supported inputs remain a complete single-line JSON specification passed to
+`node scripts/new-plan.mjs relative-spec.json`, or to
+`node scripts/amend-plan.mjs ID TIER "rationale" replacement-spec.json`.
+Required fields: title, what, why, tier, coverageEvidence; nonempty arrays done,
+outOfScope, steps, relevantFiles; baseline declarations as before.
+
+`regression` has exactly one shape:
+
+| mode | Fields beyond mode |
+|---|---|
+| normal (default) | covers, testLocation, checks; optional structured deferral |
+| na | why |
+| self | deliverable (actual file, case and assertion) |
+| excluded | reason |
+
+Normal fields are concrete scenario, project-relative test file/case and detecting
+assertion. Future files are permitted at planning. Existing tests count without
+duplication when the exact case/assertion detects the recurrence. Bare directories,
+placeholders, circular promises, duplicate and mixed fields fail admission.
+Present declarations are validated even if a title or classification claims exclusion.
+
+Current inputs also require `regressionAssessment`. It is rendered into the
+sealed plan, so later mutation fails the seal check; it is not a JSON approval
+receipt or proof that the statements are true:
 
 ```json
 {
-  "title": "Fix cross-tenant record access",
-  "what": "Fix authorization that lets one tenant read another tenant's records.",
-  "tier": "test-standard",
-  "why": "The inspected workload includes the affected server authorization assertions.",
-  "coverageEvidence": "docs/validation/unified-tiers.json; name the actual workload and supported invocation after inspection.",
-  "done": ["Foreign tenant reads are denied and own-tenant reads still succeed."],
-  "outOfScope": ["Provider calls, schema changes and unrelated permissions."],
-  "steps": ["Correct the tenant lookup boundary.", "Add the affected route assertion."],
-  "regression": {
-    "mode": "normal",
-    "covers": "A verified tenant A requests the identifier of tenant B's private record.",
-    "testLocation": "server/tenant-access.test.ts",
-    "checks": "Asserts tenant A receives 403 with no record payload; tenant B receives its own record."
-  },
-  "baselines": [],
-  "relevantFiles": ["server/tenant-access.ts", "server/tenant-access.test.ts"]
+  "classification": "material",
+  "rationale": "Changing existing admission affects supported execution contracts.",
+  "scopeReview": "Reviewed all requested behavior, affected consumers and material components.",
+  "coverageReview": "The assertion exercises gate admission and checks denial before child launch.",
+  "risks": [{
+    "id": "admission",
+    "category": "compatibility-contract",
+    "change": "An invalid current declaration must not be admitted for bound execution.",
+    "layer": "backend gate admission and execution boundary"
+  }],
+  "coverage": [{
+    "risk": "admission",
+    "scenario": "An invalid current declaration is offered to bound execution.",
+    "testLocation": "scripts/tests/failure-gate.test.mjs",
+    "assertion": "Assert refusal before the workload sentinel exists and preserve the sealed plan.",
+    "layer": "backend gate admission and execution boundary"
+  }]
 }
 ```
 
-`title`, `what`, `why`, `coverageEvidence` and list entries must be filled,
-single-line text, not placeholders. `done`, `outOfScope`, `steps`, `relevantFiles`
-are nonempty arrays. Name meaningful scope exclusions, including “None beyond
-the stated scope” when appropriate. `nativeTaskRef` is optional linkage, not
-permission to rebind historical native work. Baseline declarations retain
-their existing ignored/owned semantics; inspect the catalog first.
+Each risk has a unique local label, valid category, concrete change and layer.
+Normal coverage maps every risk exactly once to scenario, testLocation, assertion,
+and matching layer. The normal declaration must contain these mapped values.
+Several risks may share a real case/file, but each recurrence must be accounted
+for. The planner/executor reviews semantics: a matching layer string or long
+assertion alone does not prove the correct boundary or a detecting assertion.
 
-New plans render What & Why, Done looks like, Out of scope, Steps, baseline,
-Validation, Regression Guard (when applicable), Relevant files. Declarations
-are generated completely before sealing. No manually edited sealed Markdown.
+For excluded/self work, classification is `excluded`/`self`, risks and coverage
+are empty, with the same three concrete review/rationale fields. Exclusion names
+one of additive, cosmetic, internal, deletion-marked, test-only. These are
+whole-scope factual dispositions. Self-satisfaction requires the entire change
+to be the test/check or verification of unchanged behavior; production or
+material guard-admission changes plus tests use normal coverage.
 
-The `regression` object supports exactly one form:
+N/A uses material risks, empty coverage, and `exception` with category
+real-timing/external/visual/removed, all risk labels in `risks`, and concrete
+facts, alternatives, residualRisk. Inspect actual deterministic scheduling,
+mocking, narrower boundaries and visual capabilities. Removal must leave no
+surviving material side effects unguarded. Keyword claims and missing fixtures
+are not evidence; the executor must substantiate these facts in the handoff.
+Use a normal guard for surviving material effects; do not hide them behind N/A.
 
-| mode | Additional fields | Meaning |
-| --- | --- | --- |
-| `normal` (default) | `covers`, `testLocation`, `checks` | Concrete scenario, test file, specific assertion at the wrong-behavior layer. |
-| `na` | `why` | Specific canonical impossibility, rendered as exact N/A and Why N/A declarations. |
-| `self` | `deliverable` | Names the test/guard script that is the primary deliverable. |
-| `excluded` | `reason` | Records planner exclusion in the sealed spec; no guard heading is emitted. Material work still fails strict lint. |
+## Deferral: authentic resolver only
 
-No mixing variant fields. The exclusion reason is retained in the sealed
-spec/registry, not inserted into scope text to force a checker exemption.
+Normal declaration fields retain actual planned case/file/assertion and name
+the stable host follow-up. `regression.deferral` records ref, owner, reason and
+disposition. No numeric reference or universal lifecycle status is required.
+The trusted programmatic `{resolveTask}` adapter to provision/amend/checkPlan,
+regressionPreflight and run (sixth argument after retry context) resolves fresh
+host evidence, not user-authored JSON:
 
-N/A reasons are only: a real-timing race that deterministic harnesses cannot
-reproduce; unmockable third-party API behavior; purely visual regression with
-no screenshot/pixel-diff infrastructure; or complete feature removal. Verify
-those facts; mentioning an external API or saying “hard to test” is insufficient.
-Existing coverage belongs in normal mode, naming the exact file and assertion.
+- verified, committed and eligible are true under the host's real lifecycle;
+- projectId/taskRef/owner match; authoritative reference and revision exist;
+- concrete commitment/authorization cover the deferral;
+- recurrences includes each exact mapped scenario.
 
-Self-satisfying is for tests, guard scripts and verification-only work, not
-material application changes plus tests. Additive, copy-only, DELETE-prefixed
-and non-material internal work is excluded only when the *whole* work qualifies.
-A single material part of mixed work still needs its guard.
+Publication captures that evidence. Execution/preflight/delivery re-resolve it;
+loss of scope, commitment or eligibility, inaccessible evidence, changed
+revision or missing resolver fails closed. Changed evidence needs a supported
+amendment. At delivery call read-only checkPlan with the real resolver again
+and record deferred, not delivered. The CLI has no authentic host resolver:
+**CLI deferrals remain unavailable**, not simulated by receipt flags.
+Historical deferrals retain their recorded older contract.
 
-## Deferral and evidence
+## Pre-implementation, workload and amendments
 
-The canonical normal form permits:
+Follow the Agent-first procedure in AGENTS.md before any implementation and after
+each affected mid-task gap. `check-regression-preflight.mjs ID OBSERVED_PLAN_HASH`
+with TASK_PLAN_FILE checks current local admission, scope-assessment consistency,
+owning-run quiescence and explicit test-file inclusion. Reuse a valid declaration;
+prepare concrete missing coverage and use supported amendments only under actual
+scope authorization. Recheck the current revision immediately before resumption.
+Native text changes do not update the local seal or binding.
 
-```text
-**Test location:** Deferred to task #123 (accepted) — requires a new deterministic fixture harness.
-```
+The local workload check recognizes explicit Node script/test files in bound
+steps at their actual cwd; it does not infer coverage from a tier name or opaque
+package alias. Missing/opaque inclusion requires owning integration/resolution,
+not new tiers, arbitrary checks, silent escalation or a false PASS. Deferral and
+N/A do not waive other assigned-tier checks. Test presence is not execution;
+delivery still needs the actual assertion and observed result.
 
-The assertion and scenario must still be concrete. At plan-write time the
-planner must independently query available authoritative host task evidence,
-verify the exact project/ref and accepted/non-PROPOSED state, and name the
-reference. A draft suggestion, task title, local Markdown plan, an “accepted”
-string or user-supplied receipt is not proof.
+Invalid candidates never publish as admitted; post-reservation failures retain
+the consumed identity as incomplete. Invalid amendments preserve the last
+admitted revision, binding and history. Active/uncertain owning runs or retained
+target leases block amendment. Preserve earlier edits/observations, renew
+affected evidence and never claim retrospective authorization.
 
-The programmatic `provision` and `amend` entry points accept an optional trusted
-`{ resolveTask }` host-code adapter. It must return verified project/ref/state
-and an authoritative reference; evidence is captured at each plan write.
-Allowed adapter states are ACCEPTED, READY, IN_PROGRESS and COMPLETED; unknown,
-draft, cancelled or mismatched targets fail closed. This captures acceptance
-at plan-write time, not a promise of the follow-up's eventual completion.
-JSON/CLI flags cannot install the resolver. The CLI currently has no authentic
-host acceptance adapter, so **CLI deferrals are blocked**; implement the guard
-in the current task or obtain an authorized host integration. Fixtures test
-the adapter contract, not live host acceptance.
+## Actual enforcement and limits
 
-Standalone offline lint checks deferral syntax only, never acceptance.
-Historical representations stay byte-stable; current declaration lint is not
-proof of historical acceptance or permission to execute.
+Provision, amend, checkPlan, explicit wrapper validation, selected sealed-plan
+checker and bound run/validation-tier share the applicable decision.
+Validation never repairs plans. `--fix-stub` is disabled for all targets because
+there is no authentic native-draft discriminator. No draft helper is installed.
+The wrapper returns after the revision-aware bound check; it does not apply the
+newest offline linter to old seals. Unsealed offline text lint is advisory, not
+admission, authorization, semantic proof or deferral verification.
 
-## Amend, execute and deliver
+The helper is a cooperative RG component, not the generic Unified pre-dispatch
+system or a Replit Start hook. Agent host-scope/lifecycle/authorization assessment,
+native-text reconciliation, preparation, amendment selection and immediate
+revision recheck remain required. Arbitrary edits, direct unguarded commands,
+chat publication and platform completion cannot be intercepted here.
 
-Use `node scripts/amend-plan.mjs ID TIER "rationale" [replacement-spec.json]`.
-Same-tier declaration changes preserve ID, bound workload and baseline roles.
-Supply the complete spec when adopting v3 from an older representation.
-An invalid replacement leaves the old plan, binding and sibling/archive plans
-unchanged. Failed provisioning retains consumed identities as incomplete.
+## Delivery
 
-Set `TASK_PLAN_FILE` and `UNIFIED_TASK_ID` to the actual bound context and run
-the supported plan validator, then the already-authorized tier. Direct bound
-execution also checks declarations before launch. Do not switch tiers just to
-add a guard, repair sealed plans in place, or invoke application/provider checks
-as gate maintenance.
+Use the canonical delivery-handoff template. Bind the requirement map to
+approved scope, native plan and admitted revision, canonical source/adoption,
+tested implementation/workload/target and actual observations. For each risk
+record triggering input → actual file/case → detecting assertion at the right
+layer → observed execution or substantiated exception/deferral, residual gaps,
+and a safe negative control or equivalent detecting evidence.
+Do not equate valid plans, named files, syntax PASS or source-package tests with
+delivered behavior. Inadequate delivery remains unresolved.
 
-Before completion, record:
-
-| Scenario | Delivered file/test name | Assertion that catches recurrence | Observed result or valid exception |
-| --- | --- | --- | --- |
-| Concrete input/boundary | Actual test, not just a plan promise | What fails if the old implementation returns | Authorized check or verifiable N/A/accepted deferral |
-
-Review same-layer coverage: backend route → backend unit/integration assertion;
-frontend store → frontend store assertion; cross-layer-only failure → affected
-boundary or e2e assertion. A future file need not exist at planning time.
-At delivery it must exist and assert the promised behavior, or the documented
-exception must be verified. A syntax pass does not prove any of that.
-
-## Enforcement boundary
-
-These are cooperative repository routes, not tamper-proof controls. They do
-not intercept arbitrary shell edits, chat publication or Replit platform
-completion. They cannot prove test quality, materiality, acceptance status,
-same-layer semantics, N/A facts or actual test delivery merely by linting text.
-Agent instructions and separate semantic verification cover those obligations.
-No live remote CI, browser service, app resource or production operation is
-authorized by this gate maintenance.
+Separate read-only application review is **not selected**. It is optional unless
+the owner selects it or an identifiable approved requirement mandates it.
+No automatic reviewer, extra approval registry or review blocker is introduced.

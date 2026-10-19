@@ -182,6 +182,17 @@ evidence is in `unified-gate-repair.md`.
 
 ## Preservation and recovery
 
+### Current Regression Guard component
+
+Current RG adoption and Agent-first preflight are documented in
+`regression-guard-authoring.md` and `AGENTS.md`. The read-only
+`check-regression-preflight.mjs` checks a supplied observed plan hash against the
+current seal, declaration/assessment and explicit bound-workload inclusion.
+It is not a general Unified host authorization/lifecycle dispatcher or native
+Start hook. Perform those host checks before implementation; use supported
+amendments for gaps, wait for quiescence, and recheck revision before resumption.
+The older application handoff is history, not the current RG contract.
+
 The existing owner-confirmed Remix reference is
 `4b60cdc8-3fdb-439e-b554-21dd7e77a03e`, source anchor
 `817e478a886a46ff919d9ff1c681e3d78324406f`; exact copy provenance remains

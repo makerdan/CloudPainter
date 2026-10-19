@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { strictCheck, currentClassification } from "../check-regression-guard.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -240,6 +241,41 @@ The drawing tab becomes unresponsive for several minutes while opening panoramic
 Previously saved sketches will not open in the new viewer after its required drawing field changes.
 `,
 };
+
+test("current scope classification rejects executing DELETE and admission/test-title bypasses; old rules remain explicit", () => {
+  const removal = "# DELETE: Remove old access\n\n## What & Why\nRemove existing authorization checks on protected records.\n";
+  assert.deepEqual(strictCheck([{ file: "old.md", content: removal }]), []);
+  assert.match(strictCheck([{ file: "current.md", content: removal }], { current: true }).join("\n"), /missing/);
+  for (const [name, plan] of Object.entries(MATERIAL_RISK_PLANS)) {
+    assert.equal(currentClassification(plan).qualifies, true, name);
+  }
+  for (const plan of [
+    "# Add a checker\n\n## What & Why\nAlter admission so invalid current declarations execute workloads.",
+    "# Add tests\n\n## What & Why\nChange existing execution authorization. This is not purely additive.",
+    "# Rename helper\n\n## What & Why\nFix stale record overwrites.\n\n> This is purely additive.\n",
+    "# Add tests\n\n## What & Why\nFix stale record overwrites.\n\n```md\nThis is purely additive.\n```\n",
+  ]) assert.equal(currentClassification(plan).qualifies, true, plan);
+  const unchanged = "# Verify existing checks\n\n## What & Why\nThe entire scope is verification-only tests for unchanged behavior; no material change.\n";
+  assert.equal(currentClassification(unchanged).qualifies, false);
+  assert.equal(currentClassification(unchanged + "\n## Regression assessment\n```json\n{\"classification\":\"material\",\"risk\":\"regression\"}\n```\n").qualifies, false,
+    "recorded metadata must not contaminate actual scope");
+});
+
+test("Agent-first instructions require assessment and handoff, never unselected independent acceptance", () => {
+  const files = ["AGENTS.md", "docs/validation/regression-guard-authoring.md"];
+  function checkInstructions(content) {
+    assert.match(content, /(?:First action after Start|Agent-first)/);
+    assert.match(content, /(?:handoff|delivery)/);
+    assert.match(content, /(?:not selected|optional)/);
+    assert.doesNotMatch(content,
+      /(?:separate|independent) (?:read-only )?(?:verification|review|acceptance) is (?:mandatory|required) for (?:all|every)/i);
+  }
+  for (const relative of files) {
+    const text = fs.readFileSync(path.join(PROJECT_ROOT, relative), "utf8");
+    checkInstructions(text);
+    assert.throws(() => checkInstructions(text + "\nIndependent acceptance is required for every task.\n"));
+  }
+});
 
 function fixture(t, files = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "regression-guard-"));
@@ -544,7 +580,7 @@ test("strict mode rejects invalid N/A, vague self-satisfying, and misplaced sect
   assert.match(runChecker([], { TASK_PLAN_FILE: path.join(directory, "extra-field.md") }).stderr, /unexpected field/);
 });
 
-test("--fix-stub inserts only for qualifying plans, and is a no-op on a second run", (t) => {
+test("--fix-stub is disabled even for unsealed native text and never writes siblings", (t) => {
   const directory = fixture(t, {
     "qualifying.md": QUALIFYING_MISSING_PLAN,
     "excluded.md": EXCLUDED_ADDITIVE_PLAN,
@@ -556,14 +592,14 @@ test("--fix-stub inserts only for qualifying plans, and is a no-op on a second r
     complete: fs.readFileSync(path.join(directory, "already-complete.md"), "utf8"),
   };
   const first = runChecker(["--fix-stub"], { TASK_PLAN_FILE: target });
-  assert.equal(first.status, 0, first.stderr);
-  assert.match(first.stdout, /inserted 1 stub/);
-  assert.match(fs.readFileSync(target, "utf8"), /<FILL IN: concrete scenario/);
+  assert.equal(first.status, 1, first.stderr);
+  assert.match(first.stderr, /disabled/);
+  assert.equal(fs.readFileSync(target, "utf8"), QUALIFYING_MISSING_PLAN);
   assert.equal(fs.readFileSync(path.join(directory, "excluded.md"), "utf8"), untouched.excluded);
   assert.equal(fs.readFileSync(path.join(directory, "already-complete.md"), "utf8"), untouched.complete);
   const second = runChecker(["--fix-stub"], { TASK_PLAN_FILE: target });
-  assert.equal(second.status, 0, second.stderr);
-  assert.match(second.stdout, /inserted 0 stubs/);
+  assert.equal(second.status, 1, second.stderr);
+  assert.equal(fs.readFileSync(target, "utf8"), QUALIFYING_MISSING_PLAN);
 });
 
 test("--fix-stub leaves malformed existing guard sections byte-for-byte unchanged", (t) => {
@@ -593,13 +629,13 @@ test("--fix-stub leaves malformed existing guard sections byte-for-byte unchange
     const target = path.join(directory, `${name}.md`);
     const original = fs.readFileSync(target, "utf8");
     const result = runChecker(["--fix-stub"], { TASK_PLAN_FILE: target });
-    assert.equal(result.status, 0, `${name}: ${result.stderr}`);
-    assert.match(result.stdout, /inserted 0 stubs/);
+    assert.equal(result.status, 1, `${name}: ${result.stderr}`);
+    assert.match(result.stderr, /disabled/);
     assert.equal(fs.readFileSync(target, "utf8"), original, `${name} was modified`);
   }
 });
 
-test("--fix-stub inserts at real headings and preserves all existing plan text", (t) => {
+test("--fix-stub cannot normalize quoted headings or any existing plan text", (t) => {
   const original = `${QUALIFYING_MISSING_PLAN}
 \`\`\`markdown
 ## Regression Guard
@@ -623,11 +659,11 @@ test("--fix-stub inserts at real headings and preserves all existing plan text",
 **Covers:** <FILL IN: concrete scenario, boundary, invariant, lifecycle, reliability property, or contract>
 **Test location:** <FILL IN: test file path>
 **What it checks:** <FILL IN: specific assertion that catches recurrence>`;
-  const expected = `${before}${stub}\n\n${after}`;
+  const expected = original;
 
   const result = runChecker(["--fix-stub"], { TASK_PLAN_FILE: target });
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /inserted 1 stub/);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /disabled/);
   assert.equal(fs.readFileSync(target, "utf8"), expected);
 });
 
@@ -898,7 +934,7 @@ test("unknown and conflicting checker modes fail clearly", (t) => {
   assert.match(conflicting.stderr, /Choose at most one mode/);
 });
 
-test("fix-stub refuses sealed repairs and reports actual read/write failures honestly", t => {
+test("fix-stub refuses sealed repairs and reports actual read failures honestly", t => {
   const directory = fixture(t, {
     "sealed.md": QUALIFYING_MISSING_PLAN.replace("\n\n", "\n\n**Unified task ID:** FGU-fixture\n\n"),
     "editable.md": QUALIFYING_MISSING_PLAN,
@@ -909,7 +945,7 @@ test("fix-stub refuses sealed repairs and reports actual read/write failures hon
   assert.equal(refused.status, 1);
   assert.match(refused.stderr, /supported amendment/);
   assert.equal(fs.readFileSync(selected, "utf8"), sealed);
-  for (const operation of ["readFileSync", "writeFileSync"]) {
+  for (const operation of ["readFileSync"]) {
     const target = path.join(directory, "editable.md");
     const program = `import fs from "node:fs";
       import { main } from ${JSON.stringify(new URL("../check-regression-guard.mjs", import.meta.url).href)};
