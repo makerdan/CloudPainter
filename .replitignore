@@ -4,3 +4,5 @@
 # No need to store the pnpm store twice.
 .local
 /generated-artifacts/
+/.agents/skills/.workspace-projections/
+/.agents/skills/.workspace-projection-control/

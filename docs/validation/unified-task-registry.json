@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
-  "revision": 36,
+  "revision": 68,
   "records": {
     "FGU-81af9606-cc13-465c-99a0-820e95ec1e03": {
       "id": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
@@ -591,6 +591,294 @@
         "state": "PASS",
         "runId": "a3100529-1e7e-4b19-b3e7-b61ea538d536",
         "at": "2026-10-19T01:53:35.852Z"
+      }
+    },
+    "FGU-06f4e83c-1fc9-423e-a111-28840a38948e": {
+      "id": "FGU-06f4e83c-1fc9-423e-a111-28840a38948e",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "96320bc7e7cfbb05ac37418bdbb3f90f4c4e8ce8dccf31da859ab089437ea644",
+      "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-06f4e83c-1fc9-423e-a111-28840a38948e.md",
+      "spec": {
+        "title": "Apply Skill Mirror Sync",
+        "nativeTaskRef": "#53",
+        "tier": "test-fast",
+        "what": "Implement the complete canonical workspace-skill/v1 CLI, source inventory, projection, Linux locking and recovery, read-only status and fail-closed loading contract without changing definitions or writing runtime mirrors.",
+        "why": "The approved test-fast workload includes the disposable skill-sync protocol and adversarial suite plus existing gate checks without database, browser or provider operations.",
+        "coverageEvidence": "docs/validation/unified-tiers.json test-fast workspace-skill-sync step directly runs scripts/tests/workspace-skill-sync.test.mjs under node-tap; invoke pnpm run test-fast with the provisioned identity and observed sealed native context.",
+        "done": [
+          "Both root pnpm refresh/status commands satisfy exact version, argument, JSON, reason-code and exit contracts.",
+          "Explicit source only, complete safe inventory, opaque revision and normative length-framed SHA-256 manifest are validated twice.",
+          "Refresh checks actual Git/deployment exclusions and uses persistent Linux flock, structured process ownership, transactional staging, guarded renames, recovery, rollback and flushes.",
+          "Status is non-mutating and requires authoritative platform metadata; unavailable publication guarantees or attestation fail closed.",
+          "Loading validates and reads only requested manifested regular files under the same lock, never executing support files or using stale content.",
+          "Disposable tests cover hostile trees, drift, recovery, rollback, immutable status and fixture-only writes; tracked handoff maps requirements to evidence and platform limits."
+        ],
+        "outOfScope": [
+          "No skill definition changes, uploaded archives, mirror sources, runtime provisioning or writes to runtime mirrors.",
+          "No registry reconstruction, unrelated gate/product changes, production deployment or platform-wide enforcement claims.",
+          "Only the explicitly approved focused skill-sync workload addition changes validation; preserve existing checks, budgets, identities and historical bindings."
+        ],
+        "steps": [
+          "Verify current task and canonical contracts, inspect baseline and workload, provision one fresh identity, publish/read back exact native seal and run admission before edits.",
+          "Implement source, metadata, CLI and projection primitives with non-sensitive failures and explicit trusted-platform capability boundaries.",
+          "Implement ownership-aware locking, durable transactions, recovery, rollback, read-only status and locked loading.",
+          "Add isolated regression scenarios and run the complete bound tier plus required checks through supported routes.",
+          "Write requirement/evidence handoff, source snapshot, tested outcomes and platform limits without private instructions or source locations."
+        ],
+        "baselines": [],
+        "regression": {
+          "mode": "normal",
+          "covers": "Hostile trees or source drift are presented to refresh, status and loading. Interrupted installation or uncertain ownership is presented to recovery.",
+          "testLocation": "scripts/tests/workspace-skill-sync.test.mjs",
+          "checks": "Assert strict protocol and fingerprints, no outside writes or stale loads, immutable status and unavailable unattested metadata. Assert persistent lock exclusion, preserved artifacts and last-valid-backup restoration across failures."
+        },
+        "regressionAssessment": {
+          "classification": "material",
+          "rationale": "Private-instruction isolation and safe projection publication require security and filesystem lifecycle guards even though the helpers are new.",
+          "scopeReview": "Reviewed the entire canonical contract including argument parsing, complete inventory, metadata authority, persistent lock inode, recovery and fail-closed loading.",
+          "coverageReview": "The approved focused workload directly executes isolated Python-backed fixtures through a Node test entry, covering observable protocol and filesystem boundaries.",
+          "risks": [
+            {
+              "id": "isolation",
+              "category": "security-privacy",
+              "change": "Reject hostile source or metadata and prevent private instruction exposure, stale loading and writes beyond generated boundaries.",
+              "layer": "helper protocol and filesystem isolation boundary"
+            },
+            {
+              "id": "recovery",
+              "category": "concurrency-lifecycle",
+              "change": "Preserve last valid projections and uncertain artifacts across concurrent refresh, interrupted transactions and rollback failures.",
+              "layer": "helper lock and transactional filesystem boundary"
+            }
+          ],
+          "coverage": [
+            {
+              "risk": "isolation",
+              "scenario": "Hostile trees or source drift are presented to refresh, status and loading.",
+              "testLocation": "scripts/tests/workspace-skill-sync.test.mjs",
+              "assertion": "Assert strict protocol and fingerprints, no outside writes or stale loads, immutable status and unavailable unattested metadata.",
+              "layer": "helper protocol and filesystem isolation boundary"
+            },
+            {
+              "risk": "recovery",
+              "scenario": "Interrupted installation or uncertain ownership is presented to recovery.",
+              "testLocation": "scripts/tests/workspace-skill-sync.test.mjs",
+              "assertion": "Assert persistent lock exclusion, preserved artifacts and last-valid-backup restoration across failures.",
+              "layer": "helper lock and transactional filesystem boundary"
+            }
+          ]
+        },
+        "relevantFiles": [
+          "package.json",
+          ".gitignore",
+          ".replitignore",
+          "scripts/workspace_skill_sync",
+          "scripts/tests/workspace-skill-sync.test.mjs",
+          "docs/validation/workspace-skill-sync-application-handoff.md"
+        ]
+      },
+      "planTemplate": "unified-v4",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-19T02:04:52.416Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-19T02:04:52.470Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "9d4dc46e-ae44-47a2-8609-80b062d4ed45",
+          "state": "FAIL",
+          "at": "2026-10-19T02:11:35.748Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "8761b45e-6d9d-4334-bc7a-d2347534228a",
+          "state": "PASS",
+          "at": "2026-10-19T02:12:58.321Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "aad772dd-cd6a-47db-b964-271152dc9a34",
+          "state": "FAIL",
+          "at": "2026-10-19T02:15:29.068Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "79f50584-e00e-4b7b-80be-2b0ba889e588",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:48.618Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "54c5129e-09fe-4421-9c28-8c8fbe7859ad",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:50.110Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "5bb09e33-470a-4a24-8f5b-3722ce225e04",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:51.047Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "7a2cf3a4-9cba-415d-9478-5bde35e6c4a7",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:52.317Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "5e973484-2bb6-443a-a862-191200147d0a",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:54.128Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "5baf9db2-2037-4446-9430-3379d8b1caa9",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:55.917Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "135b251b-ba2f-411b-a216-59b6c6e842b1",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:57.389Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "7472c9a9-d3c1-4bd9-9df6-31455368234b",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:58.566Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "d2a7ea1d-9c63-4c9e-8176-a3029238f6ab",
+          "state": "PASS",
+          "at": "2026-10-19T02:17:49.007Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "3c9b469a-d31b-405c-bad3-df2ac8b65487",
+          "state": "FAIL",
+          "at": "2026-10-19T02:21:54.253Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "2fda9384-54f8-4131-af64-abd7d2c20b25",
+          "state": "PASS",
+          "at": "2026-10-19T02:23:11.804Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "b4efb63f-9985-4a3a-89d1-bc6672dfdcec",
+          "state": "PASS",
+          "at": "2026-10-19T02:24:51.951Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "9d4dc46e-ae44-47a2-8609-80b062d4ed45",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/9d4dc46e-ae44-47a2-8609-80b062d4ed45/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T02:11:25.330Z"
+        },
+        {
+          "runId": "8761b45e-6d9d-4334-bc7a-d2347534228a",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/8761b45e-6d9d-4334-bc7a-d2347534228a/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:12:57.646Z"
+        },
+        {
+          "runId": "aad772dd-cd6a-47db-b964-271152dc9a34",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/aad772dd-cd6a-47db-b964-271152dc9a34/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T02:15:22.191Z"
+        },
+        {
+          "runId": "79f50584-e00e-4b7b-80be-2b0ba889e588",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/79f50584-e00e-4b7b-80be-2b0ba889e588/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:47.641Z"
+        },
+        {
+          "runId": "54c5129e-09fe-4421-9c28-8c8fbe7859ad",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/54c5129e-09fe-4421-9c28-8c8fbe7859ad/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:48.847Z"
+        },
+        {
+          "runId": "5bb09e33-470a-4a24-8f5b-3722ce225e04",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/5bb09e33-470a-4a24-8f5b-3722ce225e04/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:50.324Z"
+        },
+        {
+          "runId": "7a2cf3a4-9cba-415d-9478-5bde35e6c4a7",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/7a2cf3a4-9cba-415d-9478-5bde35e6c4a7/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:51.243Z"
+        },
+        {
+          "runId": "5e973484-2bb6-443a-a862-191200147d0a",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/5e973484-2bb6-443a-a862-191200147d0a/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:52.543Z"
+        },
+        {
+          "runId": "5baf9db2-2037-4446-9430-3379d8b1caa9",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/5baf9db2-2037-4446-9430-3379d8b1caa9/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:54.357Z"
+        },
+        {
+          "runId": "135b251b-ba2f-411b-a216-59b6c6e842b1",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/135b251b-ba2f-411b-a216-59b6c6e842b1/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:56.131Z"
+        },
+        {
+          "runId": "7472c9a9-d3c1-4bd9-9df6-31455368234b",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/7472c9a9-d3c1-4bd9-9df6-31455368234b/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:57.606Z"
+        },
+        {
+          "runId": "d2a7ea1d-9c63-4c9e-8176-a3029238f6ab",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/d2a7ea1d-9c63-4c9e-8176-a3029238f6ab/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T02:16:09.345Z"
+        },
+        {
+          "runId": "3c9b469a-d31b-405c-bad3-df2ac8b65487",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/3c9b469a-d31b-405c-bad3-df2ac8b65487/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T02:21:43.211Z"
+        },
+        {
+          "runId": "2fda9384-54f8-4131-af64-abd7d2c20b25",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/2fda9384-54f8-4131-af64-abd7d2c20b25/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:23:10.027Z"
+        },
+        {
+          "runId": "b4efb63f-9985-4a3a-89d1-bc6672dfdcec",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/b4efb63f-9985-4a3a-89d1-bc6672dfdcec/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T02:23:12.318Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "321d66e0e086987c87be3ea0e1078ab656d33560ee87d4e11f33d9c19c06907c",
+      "assessment": {
+        "state": "PASS",
+        "runId": "b4efb63f-9985-4a3a-89d1-bc6672dfdcec",
+        "at": "2026-10-19T02:24:51.951Z"
       }
     }
   }
