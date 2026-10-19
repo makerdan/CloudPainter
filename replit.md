@@ -27,8 +27,11 @@ CloudPainter is a browser-based sketch workspace for noticing shapes in a photog
   acceptance and fresh task reconciliation are recorded in
   `docs/validation/unified-local-handoff.md` and
   `docs/validation/unified-cutover-acceptance.json`.
-  Admission works after restarts and in task environments, enforced by the
-  provisioner, sealed plans and the tier-bound runner. Gate maintenance follows
+  Portable admission is exercised by bounded fresh-process/separate-checkout
+  fixtures, not a live restart or a second Agent's execution. The pre-implementation
+  route and explicit host/cooperative limits are in
+  `docs/validation/unified-preflight-execution.md` and
+  `docs/validation/unified-preflight-application-handoff.md`. Gate maintenance follows
   the canonical skill's "Installing, updating and repairing the gate" section.
 - Preserve the original native sketch-recovery task contract and native ID.
   There is no prior local gate ID/tier to invent or rebind. The candidate legacy

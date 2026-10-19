@@ -4,6 +4,7 @@ import path from "node:path";
 import { policy, registry, transaction, tier, baseline, readText, safePath, sha, stamp, lease } from "./store.mjs";
 import { strictCheck } from "../check-regression-guard.mjs";
 import { RG_REVISION, regressionRevision, assessRegression, resolveDeferral, assertRegressionWorkload } from "./regression-contract.mjs";
+import { checkContext, requiresContext } from "./context.mjs";
 
 const filled = value => typeof value === "string" && value.trim() && !/[<>\r\n]|\b(?:TODO|TBD)\b/.test(value);
 export function validateSpec(spec, template = "unified-v2") {
@@ -13,6 +14,7 @@ export function validateSpec(spec, template = "unified-v2") {
     for (const key of ["done", "outOfScope", "steps", "relevantFiles"]) {
       if (!Array.isArray(spec[key]) || !spec[key].length || !spec[key].every(filled)) throw new Error("Fill " + key + " with concrete single-line entries");
     }
+    if (!spec.regression || typeof spec.regression !== "object") throw new Error("Concrete regression declaration required");
     const mode = spec.regression?.mode ?? "normal";
     const fields = { normal: ["covers", "testLocation", "checks"], na: ["why"], self: ["deliverable"], excluded: ["reason"] }[mode];
     if (!fields) throw new Error("Unknown regression declaration mode");
@@ -103,6 +105,9 @@ export function provision(root, spec, { resolveTask } = {}) {
   const template = newTemplate(p);
   const revision = regressionRevision(root, p, p.canonicalSha256, template);
   validateSpec(spec, template);
+  if ((p.preflightContracts ?? []).includes(p.canonicalSha256) && !/^#\d+$/.test(spec.nativeTaskRef ?? "")) {
+    throw new Error("New governed plan requires inspected native task linkage");
+  }
   if (p.mode === "staging" && sha(JSON.stringify(spec)) !== p.bootstrap?.specHash) throw new Error("Only the approved migration may be provisioned while staging");
   if (p.legacyNativeTasks.some(t => t.ref === spec.nativeTaskRef)) throw new Error("Legacy native task cannot be retroactively bound");
   const t = tier(root, spec.tier);
@@ -115,6 +120,10 @@ export function provision(root, spec, { resolveTask } = {}) {
   transaction(root, r => {
     if (p.mode === "staging" && Object.values(r.records).some(record => record.bootstrapTask)) throw new Error("Migration identity already consumed; no replacement or reuse");
     if (r.records[id]) throw new Error("ID collision");
+    if ((p.preflightContracts ?? []).includes(p.canonicalSha256) &&
+        Object.values(r.records).some(record => record.spec?.nativeTaskRef === spec.nativeTaskRef)) {
+      throw new Error("Native task already consumed a Unified identity; recover its exact inputs, never reprovision");
+    }
     r.records[id] = { id, status: "reserved", tier: spec.tier, tierHash: t.hash, contract: p.canonicalSha256,
       bootstrapTask: p.mode === "staging",
       planPath, spec, ...(["unified-v3", "unified-v4"].includes(template) ? { planTemplate: template } : {}),
@@ -144,11 +153,11 @@ export function checkPlan(root, id, selectedTier, selectedPath, allowTierDrift =
 }
 // Read-only RG component of the Agent-first preflight. Host authorization and
 // lifecycle assessment remain Agent/Unified responsibilities, not inferred here.
-export function regressionPreflight(root, id, selectedPath, expectedPlanHash, { nativeSealedText, resolveTask } = {}) {
+export function regressionPreflight(root, id, selectedPath, expectedPlanHash, { nativeSealedText, resolveTask, context } = {}) {
   const record = registry(root).records[id];
   if (!expectedPlanHash || expectedPlanHash !== record?.planHash) throw new Error("Stale Regression Guard preflight revision");
   if (record.activeRun) throw new Error("Owned run is active or uncertain; preflight waits for quiescence");
-  const admission = checkPlan(root, id, record.tier, selectedPath, false, { resolveTask });
+  const admission = checkPlan(root, id, record.tier, selectedPath, false, { resolveTask, context });
   if (record.planTemplate === "unified-v4") assertRegressionWorkload(record.spec, admission.t);
   if (nativeSealedText !== undefined && nativeSealedText !== readText(root, record.planPath)) {
     throw new Error("Native/local plan mismatch; supported amendment and revision reconciliation required");
@@ -158,10 +167,11 @@ export function regressionPreflight(root, id, selectedPath, expectedPlanHash, { 
       planTemplate(admission.p, record.contract, record.planTemplate)),
     assessment: "PLAN_VALID_NOT_DELIVERY_OR_HOST_AUTHORIZATION" };
 }
-function inspectPlan(root, id, selectedTier, selectedPath, allowTierDrift = false, amendmentSource = false, { resolveTask } = {}) {
+function inspectPlan(root, id, selectedTier, selectedPath, allowTierDrift = false, amendmentSource = false, { resolveTask, context } = {}) {
   const p = policy(root);
   const record = registry(root).records[id];
   if (!record || record.status !== "provisioned") throw new Error("Unknown/non-executable task ID");
+  if (!amendmentSource && requiresContext(p, record)) checkContext(root, record, context);
   if (typeof selectedPath !== "string" || !selectedPath) throw new Error("TASK_PLAN_FILE must name an existing .md bound plan");
   if (path.extname(selectedPath) !== ".md") throw new Error("TASK_PLAN_FILE must end in .md");
   const target = safePath(root, selectedPath);
@@ -201,12 +211,19 @@ function inspectPlan(root, id, selectedTier, selectedPath, allowTierDrift = fals
   }
   return { p, record, t };
 }
-export function amend(root, id, nextTier, why, replacementSpec = null, { resolveTask } = {}) {
+export function amend(root, id, nextTier, why, replacementSpec = null, { resolveTask, context, coordination } = {}) {
   const p = policy(root);
   if (p.mode === "staging") throw new Error("Migration bootstrap contract is fixed; amendment requires an approved staging-policy change");
   if (!filled(why)) throw new Error("Document amendment rationale");
   const existing = registry(root).records[id];
   if (!existing || existing.status !== "provisioned") throw new Error("Unknown/non-executable ID");
+  if (requiresContext(p, existing) || (p.preflightContracts ?? []).includes(p.canonicalSha256)) {
+    checkContext(root, existing, context);
+    if (!filled(coordination?.authorizationApplicability) || !filled(coordination?.evidenceImpact) ||
+        Object.keys(coordination).some(k => !["authorizationApplicability", "evidenceImpact"].includes(k))) {
+      throw new Error("Record amendment authorization applicability and evidence impact after actual host inspection; not an approval receipt");
+    }
+  }
   if (existing.activeRun) throw new Error("Owned run is active or uncertain; amendment blocked");
   const old = tier(root, existing.tier);
   const next = tier(root, nextTier);
@@ -215,6 +232,7 @@ export function amend(root, id, nextTier, why, replacementSpec = null, { resolve
     for (const name of [...new Set([old.target, next.target])].sort()) releases.push(lease(root, "target-" + name));
     inspectPlan(root, id, existing.tier, existing.planPath, true, true);
     const spec = { ...(replacementSpec ?? existing.spec), tier: nextTier, why };
+    if (spec.nativeTaskRef !== existing.spec.nativeTaskRef) throw new Error("Amendment cannot substitute native identity");
     const template = newTemplate(p);
     const revision = regressionRevision(root, p, p.canonicalSha256, template);
     validateSpec(spec, template);
@@ -224,14 +242,19 @@ export function amend(root, id, nextTier, why, replacementSpec = null, { resolve
     if (p.legacyNativeTasks.some(t => t.ref === spec.nativeTaskRef)) throw new Error("Legacy native task cannot be retroactively bound");
     const text = render(id, p.canonicalSha256, spec, template);
     strictPlan(text, existing.planPath, revision, spec);
+    if (sha(text) === existing.planHash && existing.contract === p.canonicalSha256 &&
+        existing.tierHash === next.hash) return { operation: "reuse", id, planHash: existing.planHash };
     // Commit invalidation before replacing plan. A crash can block, never silently run.
     transaction(root, r => {
+      if (r.records[id].planHash !== existing.planHash || r.records[id].status !== "provisioned" ||
+          r.records[id].tierHash !== existing.tierHash) throw new Error("Stale amendment context; re-inspect current revision");
       if (r.records[id].activeRun) throw new Error("Owned run is active or uncertain");
       r.records[id].status = "amending";
       r.records[id].events.push({ kind: "amendment-start", from: existing.tier, to: nextTier,
         fromDefinition: existing.tierHash, toDefinition: next.hash,
         fromContract: existing.contract, toContract: p.canonicalSha256,
-        coverageEvidence: spec.coverageEvidence, why, at: stamp() });
+        coverageEvidence: spec.coverageEvidence, why, at: stamp(),
+        ...(coordination ? { coordination, hostAuthorization: "AGENT_CHECK_NOT_MACHINE_VERIFIED" } : {}) });
     });
     const plan = safePath(root, existing.planPath);
     const temporary = plan + "." + crypto.randomUUID() + ".tmp";
@@ -258,6 +281,8 @@ export function cancel(root, id, why) {
   if (existing.activeRun) throw new Error("Owned run is active or uncertain; cancellation blocked");
   const release = lease(root, "target-" + tier(root, existing.tier).target);
   try { transaction(root, r => {
+    if (r.records[id].activeRun || r.records[id].planHash !== existing.planHash ||
+        r.records[id].status !== existing.status) throw new Error("Stale cancellation context or active/uncertain work");
     r.records[id].status = "cancelled";
     r.records[id].events.push({ kind: "cancelled", why, at: stamp() });
   }); } finally { release(); }

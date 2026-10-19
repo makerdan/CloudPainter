@@ -18,7 +18,8 @@ dependent record; it is not grandfathering or an archive reconstruction demand.
 No live records or historical plans are migrated by this cutover.
 
 Unified still owns IDs, baseline declarations, approval, binding, lifecycle,
-target leases, supervised execution and results. Its canonical pin is unchanged.
+target leases, supervised execution and results. Its subsequent preflight revision
+is recorded in `unified-preflight-application-handoff.md`; older RG mappings remain intact.
 No new tier or authority exists. Gate maintenance is outside ordinary admission
 under authentic owner instruction and does not allocate a live identity.
 

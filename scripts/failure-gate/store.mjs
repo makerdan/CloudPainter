@@ -63,6 +63,11 @@ export function policy(root, execution = true) {
   if (p.schemaVersion !== 1 || !["staging", "active"].includes(p.mode) || !Array.isArray(p.capabilities) || !Array.isArray(p.legacyNativeTasks)) throw new Error("Unknown policy");
   if (p.canonicalSource !== ".agents/skills/failure-gate-unified/SKILL.md" || !/^[a-f0-9]{64}$/.test(p.canonicalSha256)) throw new Error("Canonical .agents target required");
   if (sha(readText(root, p.canonicalSource)) !== p.canonicalSha256) throw new Error("Canonical source drift");
+  if (p.preflightContracts !== undefined && (!Array.isArray(p.preflightContracts) ||
+      new Set(p.preflightContracts).size !== p.preflightContracts.length ||
+      p.preflightContracts.some(hash => !/^[a-f0-9]{64}$/.test(hash) || !p.planTemplates?.[hash]))) {
+    throw new Error("Malformed preflight contract mapping");
+  }
   if (execution) {
     if (p.mode !== "active" && !p.bootstrap) throw new Error("BLOCKED: staged policy; cutover is not authorized");
   }

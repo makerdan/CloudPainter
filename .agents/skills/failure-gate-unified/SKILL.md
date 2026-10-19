@@ -249,6 +249,56 @@ validation/approval evidence through the supported mechanism before using it.
 A matching alias is not permission to omit required checks. Do not turn
 unrelated changes or purely cosmetic edits into blanket reapproval requirements.
 
+## Pre-implementation preflight and post-Start amendments
+
+For every task governed by this contract, automatically perform a preflight before
+implementation—not merely before tests. Use a verified host pre-dispatch hook when
+available; otherwise make it the executing Agent's first action after Start.
+Read-only inspection and supported plan preparation may precede admission;
+application edits, migrations, provider calls and validation workloads may not.
+Starting a native task or changing its visible description is not gate admission.
+
+Inspect actual scope, governing contract and plan revision, eligibility, baseline
+declarations, one adequate registered tier and its workload, approval evidence,
+and Regression Guard applicability/declaration when adopted. Reuse valid plans;
+do not amend just to produce a new revision or demand redundant tests.
+
+Automatically prepare concrete missing declarations, planned guard tests/assertions
+and the lightest adequate registered tier from inspected evidence. This prepares
+the plan; it does not deliver tests or justify weak coverage. Complete unsealed
+drafts through provisioning. For an existing sealed task, apply a candidate through
+the supported amendment/reseal/binding route when existing authorization covers the
+scope and identifiable revision under project policy. Ask only for genuinely
+uncovered decisions; do not infer that Start universally approves changed scope.
+Record amendment rationale and approval applicability, then rerun admission.
+
+An active task's native Plan may be editable where the host supports it. Keep that
+dispatch description and the authoritative local sealed plan consistent through
+the supported route; editing the description alone changes neither seal nor binding.
+Preserve task identity, consumed IDs, history and ledger guarantees. Never manually
+assign a Unified ID to historical native work that has no supported local binding.
+
+If a gap is found after implementation begins, pause affected implementation and
+validation, preserve observations and changes, and amend before proceeding. No
+concurrent run may continue against a changing plan/binding; wait for verified
+quiescence or use its supported authorized cancellation route. Do not stop unrelated
+work. A later amendment cannot retroactively authorize edits or certify old results.
+Assess already-made changes against the approved scope and rerun affected checks.
+
+Immediately before implementation dispatch, establish agreement among the current
+task, admitted plan revision, binding, lifecycle and approval evidence using the
+host's supported revision/concurrency checks. Reject stale context rather than
+silently continuing after another amendment. Admission remains read-only on sealed
+plans; preparation/amendment is a separate explicit operation with recorded results.
+
+Document actual enforcement coverage. A local runner can deny its own dispatch;
+it does not thereby intercept Replit's Start button or all Agent file edits.
+An Agent-first preflight is cooperative instruction, not platform interception.
+If a supported amendment route is missing, report the exact prerequisite and use
+owner-directed gate repair where applicable—not in-place edits, invented authority
+or a blanket new reviewer/bootstrap requirement. Preserve historical contracts;
+do not automatically retrofit old tasks on Start.
+
 ## Bounded execution
 
 Set the plan path and task ID context for every validation run. For the

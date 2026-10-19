@@ -1,0 +1,52 @@
+TAP version 13
+# Subtest: sealed Unified guard is strict, scoped and never rewrites historical archive plans
+ok 1 - sealed Unified guard is strict, scoped and never rewrites historical archive plans
+  ---
+  duration_ms: 356.800496
+  type: 'test'
+  ...
+# Subtest: independent targets can run without a blanket global validation lock
+ok 2 - independent targets can run without a blanket global validation lock
+  ---
+  duration_ms: 506.706898
+  type: 'test'
+  ...
+# Subtest: Unified preflight is read-only, exact-context scoped and never announces host approval
+ok 3 - Unified preflight is read-only, exact-context scoped and never announces host approval
+  ---
+  duration_ms: 267.99078
+  type: 'test'
+  ...
+# Subtest: Unified preparation fills concrete inspected gaps, selects adequate workload and reuses unchanged seals
+ok 4 - Unified preparation fills concrete inspected gaps, selects adequate workload and reuses unchanged seals
+  ---
+  duration_ms: 157.275361
+  type: 'test'
+  ...
+# Subtest: Unified dispatch holds affected work quiescent, rejects stale resume and records amendment impact
+ok 5 - Unified dispatch holds affected work quiescent, rejects stale resume and records amendment impact
+  ---
+  duration_ms: 160.890164
+  type: 'test'
+  ...
+# Subtest: Unified runner and every CLI validation caller require current context; terminal identities stay denied
+ok 6 - Unified runner and every CLI validation caller require current context; terminal identities stay denied
+  ---
+  duration_ms: 628.451432
+  type: 'test'
+  ...
+# Subtest: Unified preflight refuses uncertain work and malformed baseline without rewriting historical contracts
+ok 7 - Unified preflight refuses uncertain work and malformed baseline without rewriting historical contracts
+  ---
+  duration_ms: 116.844752
+  type: 'test'
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2271.289762

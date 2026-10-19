@@ -1,5 +1,11 @@
 # Unified execution
 
+Current pre-implementation preparation, expected native/sealed context,
+supported dispatch and host-tool coordination are specified in
+[`unified-preflight-execution.md`](unified-preflight-execution.md).
+That procedure precedes the validation commands below for newly governed
+contracts. Earlier sealed revisions retain their recorded rules.
+
 **Effective state: ACTIVE**, cutover **2026-10-14T04:48:37.343Z** via
 `configure-local-gate.mjs activate`, after independent acceptance recorded in
 `unified-cutover-acceptance.json` and fresh reconciliation in
@@ -125,6 +131,8 @@ amendments. In the task's own main-workspace or assigned task checkout, work
 from that environment's repository root. Confirm the recorded ID is still
 eligible and its exact sealed plan and registry binding are present; do not
 re-provision or fabricate replacement context when they are missing.
+For new preflight contracts, also set `UNIFIED_CONTEXT_FILE` to the exact native
+sealed payload retrieved and reconciled through the host, as documented above.
 Set `UNIFIED_TASK_ID` to that ID and `TASK_PLAN_FILE` to its recorded
 repository-relative plan path, then run `node scripts/validate-task-plans.mjs`
 and the full bound tier with `pnpm run <bound-tier> -- "$UNIFIED_TASK_ID"`.

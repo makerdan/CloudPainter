@@ -4,9 +4,8 @@ Read `replit.md` and `docs/validation/unified-policy.json` before new work.
 The only Failure Gate target is the canonical
 `.agents/skills/failure-gate-unified/SKILL.md`.
 
-Follow `docs/validation/unified-local-execution.md`. While staging, only the
-explicitly enrolled migration specification can provision/execute. After an
-accepted cutover, every new task plan and its validation must use the verified
+Follow `docs/validation/unified-local-execution.md`. Cutover is ACTIVE; the staged
+migration restriction is history, not current admission. Every new task plan and its validation must use the verified
 local provisioner, one bound tier and sealed plan context. Do not use independent
 app checks as a substitute for the task's tier.
 
@@ -56,10 +55,39 @@ adding a guard never authorizes another tier or independent app check.
 Before implementation, read the canonical contract and adopted mapping, actual
 scope, authoritative admitted plan, plan hash, binding and current host task
 authorization/lifecycle. Gate maintenance uses Unified's owner-directed exception,
-not a fabricated live ID. The shared preflight project is not delivered merely
-because it is proposed. No native Start hook is installed here.
+not a fabricated live ID. The Unified preflight handoff records delivery and
+proof limitations. No native Start hook is installed here.
 
-For an ordinary task, use the read-only RG preflight component:
+For newly governed ordinary tasks, follow the complete
+`docs/validation/unified-preflight-execution.md` procedure **as the first action
+after Start**, before any application edit, migration, provider call or workload.
+Retrieve the actual complete native task with the host task read/update tools;
+inspect scope, current eligibility and actual applicable owner authorization
+for the identifiable seal. Start, plan-check PASS and an approval boolean do not
+authorize work. Ask only about genuinely uncovered decisions.
+
+Run `TASK_PLAN_FILE=... UNIFIED_CONTEXT_FILE=... node scripts/check-unified-preflight.mjs ID`
+with the exact observed native sealed payload, not an agent-authored approval
+receipt. It is read-only, checks local revision/binding/baseline/RG/workload and
+reports host authorization/lifecycle **NOT_OBSERVED**. The Agent performs those
+host checks separately and repeats them immediately before dispatch/resumption.
+Scope meaning and the lightest adequate workload also require actual inspection.
+
+Use `prepare-plan.mjs` for a separate concrete candidate from inspected facts;
+valid unchanged plans are reused. For covered sealed changes, use the supported
+expected-context amendment with recorded authorization applicability/evidence
+impact, reconcile the native payload with `updateProjectTask`, read it back in
+full, then re-admit. Description-only edits are not admission. Unknown/missing
+sealed inputs require exact-byte delivery/reconciliation, never a replacement ID.
+
+The supported local `dispatch-implementation.mjs` and programmatic `dispatch`
+recheck revision under the affected target lease, excluding amendment/validation
+for that target. They do not authenticate host approval. Direct Agent editor
+actions remain cooperative: repeat the same current host and local checks before
+each affected batch, and do not claim an editor lock. No native Start hook exists.
+Historical bindings retain their recorded contract; no automatic retrofit.
+
+The read-only RG-only component remains available under its recorded contract:
 `TASK_PLAN_FILE=.local/tasks/ID.md node scripts/check-regression-preflight.mjs ID OBSERVED_PLAN_SHA256`.
 It checks local plan validity, current revision, quiescence, deferral evidence and
 explicit bound-workload inclusion, NOT host approval or actual test delivery.

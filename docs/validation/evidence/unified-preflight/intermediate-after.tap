@@ -1,0 +1,532 @@
+TAP version 13
+# Subtest: canonical Regression Guard package exactly matches the approved source fingerprints
+ok 1 - canonical Regression Guard package exactly matches the approved source fingerprints
+  ---
+  duration_ms: 5.212754
+  type: 'test'
+  ...
+# Subtest: canonical package closes references and retains preflight, amendment and optional-review obligations
+ok 2 - canonical package closes references and retains preflight, amendment and optional-review obligations
+  ---
+  duration_ms: 0.976431
+  type: 'test'
+  ...
+# Subtest: source-contract checks reject removal of every required obligation without relying on byte hashes
+ok 3 - source-contract checks reject removal of every required obligation without relying on byte hashes
+  ---
+  duration_ms: 37.792917
+  type: 'test'
+  ...
+# Subtest: source-contract checks reject missing reference files and removed or redirected required links
+ok 4 - source-contract checks reject missing reference files and removed or redirected required links
+  ---
+  duration_ms: 5.932817
+  type: 'test'
+  ...
+# Subtest: source-contract checks reject blanket mandatory unselected review even alongside optional wording
+ok 5 - source-contract checks reject blanket mandatory unselected review even alongside optional wording
+  ---
+  duration_ms: 4.482431
+  type: 'test'
+  ...
+# Subtest: current scope classification rejects executing DELETE and admission/test-title bypasses; old rules remain explicit
+ok 6 - current scope classification rejects executing DELETE and admission/test-title bypasses; old rules remain explicit
+  ---
+  duration_ms: 9.79642
+  type: 'test'
+  ...
+# Subtest: Agent-first instructions require assessment and handoff, never unselected independent acceptance
+ok 7 - Agent-first instructions require assessment and handoff, never unselected independent acceptance
+  ---
+  duration_ms: 2.129339
+  type: 'test'
+  ...
+# Subtest: strict mode accepts a complete qualifying regression guard
+ok 8 - strict mode accepts a complete qualifying regression guard
+  ---
+  duration_ms: 89.45823
+  type: 'test'
+  ...
+# Subtest: material mutations override test titles, negated and unrelated exclusions
+ok 9 - material mutations override test titles, negated and unrelated exclusions
+  ---
+  duration_ms: 800.166429
+  type: 'test'
+  ...
+# Subtest: legitimate exclusions survive incidental risk words and unchanged clauses
+ok 10 - legitimate exclusions survive incidental risk words and unchanged clauses
+  ---
+  duration_ms: 253.594873
+  type: 'test'
+  ...
+# Subtest: N/A rejects ordinary live API and race difficulty, and normal fields need specificity
+ok 11 - N/A rejects ordinary live API and race difficulty, and normal fields need specificity
+  ---
+  duration_ms: 238.12721
+  type: 'test'
+  ...
+# Subtest: strict mode ignores declaration examples in fenced blocks and blockquotes
+ok 12 - strict mode ignores declaration examples in fenced blocks and blockquotes
+  ---
+  duration_ms: 248.768293
+  type: 'test'
+  ...
+# Subtest: strict mode requires guards for material risks phrased without trigger keywords
+ok 13 - strict mode requires guards for material risks phrased without trigger keywords
+  ---
+  duration_ms: 494.198913
+  type: 'test'
+  ...
+# Subtest: section parsing ignores fenced and quoted example headings
+ok 14 - section parsing ignores fenced and quoted example headings
+  ---
+  duration_ms: 73.916739
+  type: 'test'
+  ...
+# Subtest: bug examples in fences and blockquotes do not qualify unrelated plans
+ok 15 - bug examples in fences and blockquotes do not qualify unrelated plans
+  ---
+  duration_ms: 40.87136
+  type: 'test'
+  ...
+# Subtest: strict mode exempts additive and DELETE-prefixed plans
+ok 16 - strict mode exempts additive and DELETE-prefixed plans
+  ---
+  duration_ms: 204.853949
+  type: 'test'
+  ...
+# Subtest: strict mode accepts a specific valid N/A reason and self-satisfying declaration
+ok 17 - strict mode accepts a specific valid N/A reason and self-satisfying declaration
+  ---
+  duration_ms: 93.610862
+  type: 'test'
+  ...
+# Subtest: N/A protocol accepts each of the four allowed reason categories
+ok 18 - N/A protocol accepts each of the four allowed reason categories
+  ---
+  duration_ms: 153.008268
+  type: 'test'
+  ...
+# Subtest: strict mode rejects missing sections for qualifying plans and incomplete declarations
+ok 19 - strict mode rejects missing sections for qualifying plans and incomplete declarations
+  ---
+  duration_ms: 70.208499
+  type: 'test'
+  ...
+# Subtest: strict mode rejects invalid N/A, vague self-satisfying, and misplaced sections
+ok 20 - strict mode rejects invalid N/A, vague self-satisfying, and misplaced sections
+  ---
+  duration_ms: 328.830698
+  type: 'test'
+  ...
+# Subtest: --fix-stub is disabled even for unsealed native text and never writes siblings
+ok 21 - --fix-stub is disabled even for unsealed native text and never writes siblings
+  ---
+  duration_ms: 69.198568
+  type: 'test'
+  ...
+# Subtest: --fix-stub leaves malformed existing guard sections byte-for-byte unchanged
+ok 22 - --fix-stub leaves malformed existing guard sections byte-for-byte unchanged
+  ---
+  duration_ms: 99.432192
+  type: 'test'
+  ...
+# Subtest: --fix-stub cannot normalize quoted headings or any existing plan text
+ok 23 - --fix-stub cannot normalize quoted headings or any existing plan text
+  ---
+  duration_ms: 41.020185
+  type: 'test'
+  ...
+# Subtest: --stubs-only ignores missing sections but rejects placeholders in existing sections
+ok 24 - --stubs-only ignores missing sections but rejects placeholders in existing sections
+  ---
+  duration_ms: 105.943151
+  type: 'test'
+  ...
+# Subtest: strict mode rejects duplicate, mixed, missing, misplaced, and case-mismatched declarations
+ok 25 - strict mode rejects duplicate, mixed, missing, misplaced, and case-mismatched declarations
+  ---
+  duration_ms: 557.722699
+  type: 'test'
+  ...
+# Subtest: --stubs-only catches placeholders in every declaration form, including mixed forms
+ok 26 - --stubs-only catches placeholders in every declaration form, including mixed forms
+  ---
+  duration_ms: 519.52439
+  type: 'test'
+  ...
+# Subtest: --stubs-only allows filled structural errors for strict mode to report
+ok 27 - --stubs-only allows filled structural errors for strict mode to report
+  ---
+  duration_ms: 311.723772
+  type: 'test'
+  ...
+# Subtest: TASK_PLAN_FILE rejects non-Markdown, missing, empty, and directory targets before scanning
+ok 28 - TASK_PLAN_FILE rejects non-Markdown, missing, empty, and directory targets before scanning
+  ---
+  duration_ms: 137.544046
+  type: 'test'
+  ...
+# Subtest: relative TASK_PLAN_FILE is resolved from the caller's working directory
+ok 29 - relative TASK_PLAN_FILE is resolved from the caller's working directory
+  ---
+  duration_ms: 41.613684
+  type: 'test'
+  ...
+# Subtest: active Unified runner refuses an unprovisioned plan without inserting stubs
+ok 30 - active Unified runner refuses an unprovisioned plan without inserting stubs
+  ---
+  duration_ms: 43.339379
+  type: 'test'
+  ...
+# Subtest: unknown and conflicting checker modes fail clearly
+ok 31 - unknown and conflicting checker modes fail clearly
+  ---
+  duration_ms: 66.017952
+  type: 'test'
+  ...
+# Subtest: fix-stub refuses sealed repairs and reports actual read failures honestly
+ok 32 - fix-stub refuses sealed repairs and reports actual read failures honestly
+  ---
+  duration_ms: 67.380412
+  type: 'test'
+  ...
+# Subtest: current RG maps all eight material categories and future/existing tests through CLI publication and amendment
+ok 33 - current RG maps all eight material categories and future/existing tests through CLI publication and amendment
+  ---
+  duration_ms: 4137.170992
+  type: 'test'
+  ...
+# Subtest: current RG admits factual N/A for all four categories and whole-scope self/exclusions without normal fields
+ok 34 - current RG admits factual N/A for all four categories and whole-scope self/exclusions without normal fields
+  ---
+  duration_ms: 782.348366
+  type: 'test'
+  ...
+# Subtest: current RG rejects title/metadata escapes, unmatched layers, missing risks and non-detecting declarations transactionally
+ok 35 - current RG rejects title/metadata escapes, unmatched layers, missing risks and non-detecting declarations transactionally
+  ---
+  duration_ms: 688.61378
+  type: 'test'
+  ...
+# Subtest: current RG rejects all malformed sections before every execution caller without seal or ledger mutation
+ok 36 - current RG rejects all malformed sections before every execution caller without seal or ledger mutation
+  ---
+  duration_ms: 1760.84909
+  type: 'test'
+  ...
+# Subtest: current deferrals use stable host refs and fresh commitment/scope/ownership at publication execution and delivery
+ok 37 - current deferrals use stable host refs and fresh commitment/scope/ownership at publication execution and delivery
+  ---
+  duration_ms: 227.87464
+  type: 'test'
+  ...
+# Subtest: Agent-first RG preflight reuses valid plans and detects native mismatch/stale revision; amendments require quiescence
+ok 38 - Agent-first RG preflight reuses valid plans and detects native mismatch/stale revision; amendments require quiescence
+  ---
+  duration_ms: 306.542472
+  type: 'test'
+  ...
+# Subtest: RG adoption preserves historical rule bytes; unknown mapping is local and amendments adopt current rules
+ok 39 - RG adoption preserves historical rule bytes; unknown mapping is local and amendments adopt current rules
+  ---
+  duration_ms: 153.248989
+  type: 'test'
+  ...
+# Subtest: current workload inclusion is explicit; missing coverage blocks dispatch without tier mutation
+ok 40 - current workload inclusion is explicit; missing coverage blocks dispatch without tier mutation
+  ---
+  duration_ms: 446.937058
+  type: 'test'
+  ...
+# Subtest: multiple risks need distinct mapped assertions and semantic review is not a delivered test
+ok 41 - multiple risks need distinct mapped assertions and semantic review is not a delivered test
+  ---
+  duration_ms: 71.883974
+  type: 'test'
+  ...
+# Subtest: effective project policy and fake-ID refusal do not fabricate identities
+ok 42 - effective project policy and fake-ID refusal do not fabricate identities
+  ---
+  duration_ms: 167.234412
+  type: 'test'
+  ...
+# Subtest: private CLI provisions a unique plan with required sections
+ok 43 - private CLI provisions a unique plan with required sections
+  ---
+  duration_ms: 214.412778
+  type: 'test'
+  ...
+# Subtest: versioned authoring and amendments support normal, N/A, self and excluded declarations
+ok 44 - versioned authoring and amendments support normal, N/A, self and excluded declarations
+  ---
+  duration_ms: 2910.996728
+  type: 'test'
+  ...
+# Subtest: invalid new declarations cannot publish; failed amendments preserve every sealed byte and identity
+ok 45 - invalid new declarations cannot publish; failed amendments preserve every sealed byte and identity
+  ---
+  duration_ms: 696.277746
+  type: 'test'
+  ...
+# Subtest: current strict check blocks sealed invalid declarations at all execution routes without launch or repair
+ok 46 - current strict check blocks sealed invalid declarations at all execution routes without launch or repair
+  ---
+  duration_ms: 388.916464
+  type: 'test'
+  ...
+# Subtest: both plan guards reject empty, directory, missing and non-md targets without touching siblings
+ok 47 - both plan guards reject empty, directory, missing and non-md targets without touching siblings
+  ---
+  duration_ms: 1152.295187
+  type: 'test'
+  ...
+# Subtest: new representation does not reinterpret historical renderer or contract mappings
+ok 48 - new representation does not reinterpret historical renderer or contract mappings
+  ---
+  duration_ms: 160.38614
+  type: 'test'
+  ...
+# Subtest: deferrals require authoritative project/ref/non-draft evidence at each plan write
+ok 49 - deferrals require authoritative project/ref/non-draft evidence at each plan write
+  ---
+  duration_ms: 223.792589
+  type: 'test'
+  ...
+# Subtest: package forwarded argument separator preserves exactly one task context
+ok 50 - package forwarded argument separator preserves exactly one task context
+  ---
+  duration_ms: 423.861666
+  type: 'test'
+  ...
+# Subtest: all four bindings deny every wrong tier before launch and permit the recorded tier
+ok 51 - all four bindings deny every wrong tier before launch and permit the recorded tier
+  ---
+  duration_ms: 798.10885
+  type: 'test'
+  ...
+# Subtest: missing context, unknown IDs, edited plans and source drift fail closed
+ok 52 - missing context, unknown IDs, edited plans and source drift fail closed
+  ---
+  duration_ms: 62.648293
+  type: 'test'
+  ...
+# Subtest: generation failure reserves identity permanently; cancelled/deleted plans do not reuse it
+ok 53 - generation failure reserves identity permanently; cancelled/deleted plans do not reuse it
+  ---
+  duration_ms: 106.643881
+  type: 'test'
+  ...
+# Subtest: concurrent CLI allocations serialize or reject without lost records
+ok 54 - concurrent CLI allocations serialize or reject without lost records
+  ---
+  duration_ms: 150.208479
+  type: 'test'
+  ...
+# Subtest: explicit amendments update plan and binding together; drift requires renewal
+ok 55 - explicit amendments update plan and binding together; drift requires renewal
+  ---
+  duration_ms: 102.513104
+  type: 'test'
+  ...
+# Subtest: legacy native linkage cannot be retroactively bound
+ok 56 - legacy native linkage cannot be retroactively bound
+  ---
+  duration_ms: 123.918091
+  type: 'test'
+  ...
+# Subtest: actual CLI route admits a different checkout path with sealed plans and tier enforcement
+ok 57 - actual CLI route admits a different checkout path with sealed plans and tier enforcement
+  ---
+  duration_ms: 870.830758
+  type: 'test'
+  ...
+# Subtest: admission, provisioning and runner remain usable across simulated boot/device changes
+ok 58 - admission, provisioning and runner remain usable across simulated boot/device changes
+  ---
+  duration_ms: 238.011691
+  type: 'test'
+  ...
+# Subtest: older sealed contract verifies unchanged after pin update; amendment explicitly adopts current contract
+ok 59 - older sealed contract verifies unchanged after pin update; amendment explicitly adopts current contract
+  ---
+  duration_ms: 298.62886
+  type: 'test'
+  ...
+# Subtest: new plans render the canonical Validation section exactly and require coverage evidence
+ok 60 - new plans render the canonical Validation section exactly and require coverage evidence
+  ---
+  duration_ms: 55.697869
+  type: 'test'
+  ...
+# Subtest: committed merge guard rejects lost IDs, tombstones and unsupported binding edits
+ok 61 - committed merge guard rejects lost IDs, tombstones and unsupported binding edits
+  ---
+  duration_ms: 753.485793
+  type: 'test'
+  ...
+# Subtest: symlinks including dangling links and traversal are denied
+ok 62 - symlinks including dangling links and traversal are denied
+  ---
+  duration_ms: 23.585597
+  type: 'test'
+  ...
+# Subtest: same-target single flight rejects duplicates and amendments during a run
+ok 63 - same-target single flight rejects duplicates and amendments during a run
+  ---
+  duration_ms: 918.418175
+  type: 'test'
+  ...
+# Subtest: timeout cleans TERM-ignoring owned work and preserves an unrelated sentinel
+ok 64 - timeout cleans TERM-ignoring owned work and preserves an unrelated sentinel
+  ---
+  duration_ms: 606.370335
+  type: 'test'
+  ...
+# Subtest: detached descendants are adopted, stopped and reaped before PASS
+ok 65 - detached descendants are adopted, stopped and reaped before PASS
+  ---
+  duration_ms: 191.148435
+  type: 'test'
+  ...
+# Subtest: supervisor failure retains exclusion; no stale-lock automatic recovery
+ok 66 - supervisor failure retains exclusion; no stale-lock automatic recovery
+  ---
+  duration_ms: 207.216614
+  type: 'test'
+  ...
+# Subtest: killed CLI parent triggers child cleanup and leaves its lease retained
+ok 67 - killed CLI parent triggers child cleanup and leaves its lease retained
+  ---
+  duration_ms: 418.428729
+  type: 'test'
+  ...
+# Subtest: credentials and NODE_OPTIONS are not forwarded to validation children
+ok 68 - credentials and NODE_OPTIONS are not forwarded to validation children
+  ---
+  duration_ms: 246.807102
+  type: 'test'
+  ...
+# Subtest: missing disposable-resource capability blocks before a command starts
+ok 69 - missing disposable-resource capability blocks before a command starts
+  ---
+  duration_ms: 82.19584
+  type: 'test'
+  ...
+# Subtest: exact ignored baseline can assess PASS while retaining raw failure; owned repair fails
+ok 70 - exact ignored baseline can assess PASS while retaining raw failure; owned repair fails
+  ---
+  duration_ms: 1051.701977
+  type: 'test'
+  ...
+# Subtest: passing isolated retry is not provenance; documented evidence is logged separately
+ok 71 - passing isolated retry is not provenance; documented evidence is logged separately
+  ---
+  duration_ms: 762.353245
+  type: 'test'
+  ...
+# Subtest: unknown output, ambiguous catalog and skipped required tests never count as PASS
+ok 72 - unknown output, ambiguous catalog and skipped required tests never count as PASS
+  ---
+  duration_ms: 270.85438
+  type: 'test'
+  ...
+# Subtest: superseded alias cannot import the former rules; canonical target remains unchanged
+ok 73 - superseded alias cannot import the former rules; canonical target remains unchanged
+  ---
+  duration_ms: 97.327635
+  type: 'test'
+  ...
+# Subtest: administrative closure cannot forge authority or overwrite failed assessment
+ok 74 - administrative closure cannot forge authority or overwrite failed assessment
+  ---
+  duration_ms: 215.04113
+  type: 'test'
+  ...
+# Subtest: read-only recovery preview protects tombstones and never overwrites current state
+ok 75 - read-only recovery preview protects tombstones and never overwrites current state
+  ---
+  duration_ms: 62.899716
+  type: 'test'
+  ...
+# Subtest: uncertain registry persistence retains its transaction lock
+ok 76 - uncertain registry persistence retains its transaction lock
+  ---
+  duration_ms: 28.605823
+  type: 'test'
+  ...
+# Subtest: sealed Unified guard is strict, scoped and never rewrites historical archive plans
+ok 77 - sealed Unified guard is strict, scoped and never rewrites historical archive plans
+  ---
+  duration_ms: 268.001444
+  type: 'test'
+  ...
+# Subtest: independent targets can run without a blanket global validation lock
+ok 78 - independent targets can run without a blanket global validation lock
+  ---
+  duration_ms: 530.11919
+  type: 'test'
+  ...
+# Subtest: Unified preflight is read-only, exact-context scoped and never announces host approval
+ok 79 - Unified preflight is read-only, exact-context scoped and never announces host approval
+  ---
+  duration_ms: 575.328395
+  type: 'test'
+  ...
+# Subtest: Unified preparation fills concrete inspected gaps, selects adequate workload and reuses unchanged seals
+ok 80 - Unified preparation fills concrete inspected gaps, selects adequate workload and reuses unchanged seals
+  ---
+  duration_ms: 187.34441
+  type: 'test'
+  ...
+# Subtest: Unified dispatch holds affected work quiescent, rejects stale resume and records amendment impact
+ok 81 - Unified dispatch holds affected work quiescent, rejects stale resume and records amendment impact
+  ---
+  duration_ms: 183.776023
+  type: 'test'
+  ...
+# Subtest: Unified runner and every CLI validation caller require current context; terminal identities stay denied
+ok 82 - Unified runner and every CLI validation caller require current context; terminal identities stay denied
+  ---
+  duration_ms: 687.844418
+  type: 'test'
+  ...
+# Subtest: Unified amendments preserve native identity and actual CLI dispatch rejects stale context before any edit
+ok 83 - Unified amendments preserve native identity and actual CLI dispatch rejects stale context before any edit
+  ---
+  duration_ms: 281.385059
+  type: 'test'
+  ...
+# Subtest: Unified preflight refuses uncertain work and malformed baseline without rewriting historical contracts
+ok 84 - Unified preflight refuses uncertain work and malformed baseline without rewriting historical contracts
+  ---
+  duration_ms: 135.529549
+  type: 'test'
+  ...
+# Subtest: Unified current pin does not retrofit older bindings and only explicit amendment advances their contract
+ok 85 - Unified current pin does not retrofit older bindings and only explicit amendment advances their contract
+  ---
+  duration_ms: 535.091052
+  type: 'test'
+  ...
+# Subtest: Unified separate-checkout reconciliation preserves independently consumed identities and exact sealed inputs
+ok 86 - Unified separate-checkout reconciliation preserves independently consumed identities and exact sealed inputs
+  ---
+  duration_ms: 315.810074
+  type: 'test'
+  ...
+# Subtest: output bounds cannot report PASS or leave fixture children running
+ok 87 - output bounds cannot report PASS or leave fixture children running
+  ---
+  duration_ms: 189.224135
+  type: 'test'
+  ...
+1..87
+# tests 87
+# suites 0
+# pass 87
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 27735.665382

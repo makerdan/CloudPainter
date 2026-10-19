@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { performance } from "node:perf_hooks";
 import { checkPlan } from "./plans.mjs";
 import { policy, registry, tier, baseline, warnings, lease, transaction, atomicJson, readJson, readText, safePath, stamp, sha } from "./store.mjs";
-import { executionSources } from "./execution-sources.mjs";
+import { executionSources, implementationSources } from "./execution-sources.mjs";
 import { assertRegressionWorkload } from "./regression-contract.mjs";
 
 export function parseFailures(step, text) {
@@ -41,7 +41,7 @@ function safeEnv() {
   if (process.env.HOME) env.HOME = process.env.HOME;
   return env;
 }
-async function supervise(root, step, timeoutMs, cleanupMs, log) {
+export async function supervise(root, step, timeoutMs, cleanupMs, log) {
   return await new Promise(resolve => {
     const child = spawn("python3", [safePath(root, "scripts/failure-gate/supervisor.py"), String(timeoutMs), String(cleanupMs), safePath(root, log), JSON.stringify(step.argv)],
       { cwd: safePath(root, step.cwd), env: safeEnv(), detached: true, stdio: ["ignore", "pipe", "pipe"] });
@@ -70,7 +70,8 @@ async function supervise(root, step, timeoutMs, cleanupMs, log) {
         const result = JSON.parse(out.trim());
         if (typeof result.quiescent !== "boolean" || !Object.hasOwn(result, "exit")) throw new Error("Malformed result");
         finish(result);
-      } catch { finish({ exit: null, blocked: "supervisor-failed", quiescent: false }); }
+      } catch { finish({ exit: null, blocked: "supervisor-failed", quiescent: false,
+        diagnostic: err.slice(-4000) || "Supervisor returned an unobservable result" }); }
     });
   });
 }
@@ -82,10 +83,14 @@ export async function run(root, id, selectedTier, planPath, retryRequest = null,
   const runId = crypto.randomUUID();
   const directory = ".local/failure-gate/runs/" + id + "/" + runId;
   const report = { schemaVersion: 1, id, runId, tier: selectedTier, contract: admission.record.contract, planHash: admission.record.planHash,
-    tierHash: admission.t.hash, sources: executionSources(root), startedAt: stamp(), state: "INCOMPLETE", required: 0, steps: [], retryOf: retryRequest, warnings: [] };
+    tierHash: admission.t.hash, sources: executionSources(root), implementation: implementationSources(root, admission.t),
+    startedAt: stamp(), state: "INCOMPLETE", required: 0, steps: [], retryOf: retryRequest, warnings: [] };
   const reportPath = directory + "/report.json";
   try {
     admission = checkPlan(root, id, selectedTier, planPath, false, regressionOptions);
+    if (admission.record.planHash !== report.planHash || admission.t.hash !== report.tierHash) {
+      throw new Error("Stale validation dispatch revision");
+    }
     if (admission.record.planTemplate === "unified-v4") assertRegressionWorkload(admission.record.spec, admission.t);
     if (admission.record.activeRun) throw new Error("Owned run is active or uncertain; admission blocked");
     const catalog = baseline(root);
@@ -112,6 +117,8 @@ export async function run(root, id, selectedTier, planPath, retryRequest = null,
     report.required = steps.length;
     atomicJson(root, reportPath, report);
     transaction(root, r => {
+      if (r.records[id].status !== "provisioned" || r.records[id].planHash !== report.planHash ||
+          r.records[id].tierHash !== report.tierHash) throw new Error("Stale validation dispatch context");
       if (r.records[id].activeRun) throw new Error("Owned run is active or uncertain");
       r.records[id].activeRun = { runId, target: admission.t.target, planHash: report.planHash, at: stamp() };
       r.records[id].runs.push({ runId, reportPath, kind: retryRequest ? "isolated-retry" : "tier-run", at: stamp() });
@@ -144,6 +151,12 @@ export async function run(root, id, selectedTier, planPath, retryRequest = null,
       if (index === steps.length - 1) report.state = "PASS";
     }
     report.finishedAt = stamp();
+    report.changedGateSources = executionSources(root).filter(source =>
+      report.sources.some(old => old.file === source.file && old.hash !== source.hash));
+    if (report.changedGateSources.length) {
+      report.state = "INCOMPLETE";
+      report.reason = "Gate/configuration sources changed during execution; renew affected evidence";
+    }
     report.rawAllPassed = report.steps.length === report.required && report.steps.every(s => s.exit === 0 && !s.blocked && s.quiescent);
     report.isolatedRetryOnly = Boolean(retryRequest);
     atomicJson(root, reportPath, report);
@@ -157,11 +170,11 @@ export async function run(root, id, selectedTier, planPath, retryRequest = null,
     if (quiescent) release(); // Uncertain owned work retains exclusion; never age-delete.
   }
 }
-export function selfClassify(root, id, runId, stepIndex, failureIndex, sources) {
+export function selfClassify(root, id, runId, stepIndex, failureIndex, sources, options = {}) {
   const r = registry(root).records[id];
   if (!r) throw new Error("Unknown task");
   if (r.activeRun) throw new Error("Owned run is active or uncertain; classification blocked");
-  checkPlan(root, id, r.tier, r.planPath);
+  checkPlan(root, id, r.tier, r.planPath, false, options);
   const original = readJson(root, `.local/failure-gate/runs/${id}/${runId}/report.json`);
   if (original.id !== id || original.planHash !== r.planHash || original.tierHash !== r.tierHash) throw new Error("Failure provenance changed");
   const failure = original.steps[stepIndex]?.assessment?.classifications[failureIndex];

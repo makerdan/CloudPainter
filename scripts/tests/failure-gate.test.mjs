@@ -12,6 +12,7 @@ import { transaction } from "../failure-gate/store.mjs";
 import { recoveryPreview } from "../failure-gate/recovery.mjs";
 import { assertRegistryEvolution } from "../failure-gate/merge-guard.mjs";
 import { RG_REVISION, assessRegression, assertRegressionWorkload, CATEGORIES } from "../failure-gate/regression-contract.mjs";
+import { preflight, prepare, dispatch, sealedInputs } from "../failure-gate/preflight.mjs";
 
 const SOURCE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 process.env.REPL_ID ??= "private-fixture";
@@ -34,7 +35,7 @@ function fixture(t, work = 'console.log("ok")', adapter = "exit") {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
   fs.cpSync(path.join(SOURCE, "scripts/failure-gate"), path.join(root, "scripts/failure-gate"), { recursive: true });
-  for (const entry of ["new-plan", "run-validation", "check-failure-gate", "check-regression-preflight", "amend-plan", "validation-tier", "validate-task-plans", "check-regression-guard"]) {
+  for (const entry of ["new-plan", "run-validation", "check-failure-gate", "check-regression-preflight", "check-unified-preflight", "prepare-plan", "dispatch-implementation", "amend-plan", "validation-tier", "validate-task-plans", "check-regression-guard"]) {
     fs.copyFileSync(path.join(SOURCE, "scripts/" + entry + ".mjs"), path.join(root, "scripts/" + entry + ".mjs"));
   }
   fs.mkdirSync(path.join(root, ".agents/skills/failure-gate-unified"), { recursive: true });
@@ -1024,7 +1025,289 @@ test("independent targets can run without a blanket global validation lock", asy
     run(root, one, "test-fast", context(root, one)),
     run(root, two, "test-standard", context(root, two))
   ]);
-  assert.deepEqual(reports.map(r => r.state), ["PASS", "PASS"]);
+  assert.deepEqual(reports.map(r => r.state), ["PASS", "PASS"], JSON.stringify(reports));
+});
+
+function governed(t, work = 'console.log("ok")') {
+  const root = currentFixture(t, work);
+  const p = policy(root);
+  p.preflightContracts = [p.canonicalSha256];
+  json(root, "docs/validation/unified-policy.json", p);
+  return root;
+}
+const governedSpec = (extra = {}) => currentSpec({ nativeTaskRef: "#400", ...extra });
+const coordination = {
+  authorizationApplicability: "Fixture-only scope inspection; this is not actual owner approval or a host receipt.",
+  evidenceImpact: "Pause affected work; preserve earlier changes and rerun affected checks after native reconciliation.",
+};
+function observed(root, id) {
+  const r = registry(root).records[id];
+  return { id, planHash: r.planHash, tier: r.tier, contract: r.contract,
+    nativeTaskRef: r.spec.nativeTaskRef, nativeSealedText: fs.readFileSync(path.join(root, r.planPath), "utf8") };
+}
+
+test("Unified preflight is read-only, exact-context scoped and never announces host approval", async t => {
+  const root = governed(t);
+  const id = provision(root, governedSpec());
+  const ctx = observed(root, id);
+  const before = fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8");
+  const plan = ctx.nativeSealedText;
+  assert.deepEqual(sealedInputs(root, id), ctx);
+  const result = preflight(root, id, context(root, id), ctx);
+  assert.equal(result.hostAuthorization, "NOT_OBSERVED");
+  assert.equal(result.hostLifecycle, "NOT_OBSERVED");
+  assert.equal(result.assessment, "LOCAL_PLAN_VALID_HOST_CHECKS_REQUIRED");
+  for (const bad of [undefined, {}, { ...ctx, approved: true }, { ...ctx, planHash: "0".repeat(64) },
+    { ...ctx, id: "FGU-" + cryptoFixtureId() }, { ...ctx, tier: "test-heavy" },
+    { ...ctx, contract: "0".repeat(64) }, { ...ctx, nativeTaskRef: "#401" },
+    { ...ctx, nativeSealedText: plan + "\nStart approved" }]) {
+    await assert.rejects(dispatch(root, id, context(root, id), bad, () => fs.writeFileSync(path.join(root, "sentinel"), "unsafe")));
+    assert.equal(fs.existsSync(path.join(root, "sentinel")), false);
+  }
+  assert.equal(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8"), before);
+  assert.equal(fs.readFileSync(path.join(root, context(root, id)), "utf8"), plan);
+  json(root, "native-context.json", ctx);
+  const cliResult = cli(root, "check-unified-preflight", [id], { TASK_PLAN_FILE: context(root, id), UNIFIED_CONTEXT_FILE: "native-context.json" });
+  assert.equal(cliResult.status, 0, cliResult.stderr);
+  assert.equal(JSON.parse(cliResult.stdout).hostAuthorization, "NOT_OBSERVED");
+  assert.equal(cli(root, "check-unified-preflight", [id], { TASK_PLAN_FILE: context(root, id) }).status, 1);
+  fs.writeFileSync(path.join(root, "implement.mjs"), 'import fs from "node:fs"; fs.writeFileSync("implementation-sentinel", "done");');
+  json(root, "command.json", { script: "implement.mjs", args: [], timeoutMs: 3000, cleanupMs: 600 });
+  const denied = cli(root, "dispatch-implementation", [id, "command.json"], { TASK_PLAN_FILE: context(root, id) });
+  assert.equal(denied.status, 1);
+  assert.equal(fs.existsSync(path.join(root, "implementation-sentinel")), false);
+  const dispatched = cli(root, "dispatch-implementation", [id, "command.json"],
+    { TASK_PLAN_FILE: context(root, id), UNIFIED_CONTEXT_FILE: "native-context.json" });
+  assert.equal(dispatched.status, 0, dispatched.stdout + dispatched.stderr);
+  const dispatchedReport = JSON.parse(dispatched.stdout);
+  assert.equal(dispatchedReport.hostAuthorization, "NOT_OBSERVED");
+  assert.equal(dispatchedReport.quiescent, true);
+  assert.equal(dispatchedReport.exit, 0);
+  assert.equal(fs.readFileSync(path.join(root, "implementation-sentinel"), "utf8"), "done");
+});
+function cryptoFixtureId() { return "00000000-0000-4000-8000-000000000000"; }
+
+test("Unified preparation fills concrete inspected gaps, selects adequate workload and reuses unchanged seals", t => {
+  const root = governed(t);
+  const full = governedSpec();
+  const { regression, regressionAssessment, ...draft } = full;
+  const inspection = { requiredSteps: ["work"], regression, regressionAssessment };
+  const registryBefore = fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8");
+  const candidate = prepare(root, draft, inspection);
+  assert.equal(candidate.operation, "provision-required");
+  assert.deepEqual(candidate.spec, full);
+  assert.equal(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8"), registryBefore);
+  assert.throws(() => prepare(root, draft, { requiredSteps: ["work"] }), /regression/);
+  assert.throws(() => prepare(root, draft, { ...inspection, requiredSteps: ["backup-not-covered"] }), /No registered adequate/);
+  const id = provision(root, candidate.spec);
+  const ctx = observed(root, id);
+  const before = registry(root);
+  assert.equal(prepare(root, full, inspection, { id, context: ctx }).operation, "reuse");
+  assert.deepEqual(registry(root), before);
+  const changed = { ...full, done: [...full.done, "A changed assertion remains scope reviewed."] };
+  assert.equal(prepare(root, changed, inspection, { id, context: ctx }).operation, "amendment-required");
+  assert.deepEqual(registry(root), before);
+  assert.throws(() => prepare(root, { ...changed, nativeTaskRef: "#401" }, inspection, { id, context: ctx }), /native identity/);
+  json(root, "candidate.json", { draft, inspection });
+  const prepared = cli(root, "prepare-plan", ["candidate.json"]);
+  assert.equal(prepared.status, 0, prepared.stderr);
+  assert.equal(JSON.parse(prepared.stdout).operation, "provision-required");
+  const tiers = readJson(root, "docs/validation/unified-tiers.json");
+  tiers.tiers["test-standard-plus"].steps.push({ name: "database-only", cwd: ".", adapter: "exit", argv: ["node", "database.mjs"] });
+  tiers.tiers["test-standard-plus"].requires = ["unavailable-database"];
+  json(root, "docs/validation/unified-tiers.json", tiers);
+  const adequate = prepare(root, full, { ...inspection, requiredSteps: ["database-only"] });
+  assert.equal(adequate.spec.tier, "test-standard-plus"); // unavailable is not permission to lower coverage
+});
+
+test("Unified dispatch holds affected work quiescent, rejects stale resume and records amendment impact", async t => {
+  const root = governed(t);
+  const full = governedSpec();
+  const id = provision(root, full);
+  const ctx = observed(root, id);
+  const saved = registry(root);
+  assert.throws(() => amend(root, id, "test-fast", "Inspected amendment", full), /context/);
+  assert.throws(() => amend(root, id, "test-fast", "Inspected amendment", full, { context: ctx }), /applicability/);
+  assert.deepEqual(registry(root), saved);
+  let releaseWork;
+  const barrier = new Promise(resolve => { releaseWork = resolve; });
+  let entered = false;
+  const working = dispatch(root, id, context(root, id), ctx, async () => { entered = true; await barrier; });
+  await waitFor(() => entered);
+  assert.throws(() => amend(root, id, "test-fast", "Inspected amendment", full, { context: ctx, coordination }), /lock retained/);
+  assert.throws(() => cancel(root, id, "Cancel affected fixture"), /lock retained/);
+  await assert.rejects(run(root, id, "test-fast", context(root, id), null, { context: ctx }), /lock retained/);
+  assert.deepEqual(registry(root), saved);
+  releaseWork();
+  await working;
+  const changed = { ...full, done: [...full.done, "New requirement preserved after amendment."] };
+  amend(root, id, "test-fast", "Inspected amendment", changed, { context: ctx, coordination });
+  const after = registry(root).records[id];
+  assert.notEqual(after.planHash, ctx.planHash);
+  assert.deepEqual(after.runs, saved.records[id].runs);
+  assert.deepEqual(after.events.find(e => e.kind === "amendment-start").coordination, coordination);
+  await assert.rejects(dispatch(root, id, context(root, id), ctx, () => fs.writeFileSync(path.join(root, "sentinel"), "unsafe")), /Stale/);
+  assert.equal(fs.existsSync(path.join(root, "sentinel")), false);
+  assert.throws(() => amend(root, id, "test-fast", "A stale competing amendment", changed, { context: ctx, coordination }), /Stale/);
+  const fresh = observed(root, id);
+  await dispatch(root, id, context(root, id), fresh, () => fs.writeFileSync(path.join(root, "sentinel"), "observed"));
+  assert.equal(fs.readFileSync(path.join(root, "sentinel"), "utf8"), "observed");
+});
+
+test("Unified runner and every CLI validation caller require current context; terminal identities stay denied", async t => {
+  const root = governed(t, 'import fs from "node:fs"; fs.writeFileSync("sentinel", "ran");');
+  const id = provision(root, governedSpec());
+  const ctx = observed(root, id);
+  for (const command of ["run-validation", "validation-tier", "validate-task-plans", "check-failure-gate"]) {
+    const args = command === "run-validation" ? [id, "test-fast"] : command === "validation-tier" ? ["test-fast", id] : command === "check-failure-gate" ? [id] : [];
+    const refused = cli(root, command, args, { TASK_PLAN_FILE: context(root, id), UNIFIED_TASK_ID: id });
+    assert.equal(refused.status, 1, command + refused.stdout + refused.stderr);
+    assert.equal(fs.existsSync(path.join(root, "sentinel")), false);
+  }
+  // Fresh processes and a separate checkout transport the exact sealed bytes,
+  // including a non-ASCII/native newline payload, not a reconstructed renderer.
+  json(root, "native-context.json", ctx);
+  const copy = fs.mkdtempSync(path.join(os.tmpdir(), "unified-dispatch-checkout-"));
+  t.after(() => fs.rmSync(copy, { recursive: true, force: true }));
+  fs.cpSync(root, copy, { recursive: true });
+  const accepted = cli(copy, "run-validation", [id, "test-fast"], { TASK_PLAN_FILE: context(copy, id), UNIFIED_CONTEXT_FILE: "native-context.json" });
+  assert.equal(accepted.status, 0, accepted.stderr + accepted.stdout);
+  const report = JSON.parse(accepted.stdout);
+  assert.equal(report.state, "PASS");
+  assert.equal(report.planHash, ctx.planHash);
+  assert.equal(report.isolatedRetryOnly, false);
+  assert.ok(report.implementation.some(f => f.file === "work.mjs" && f.hash));
+  assert.equal(fs.existsSync(path.join(root, "sentinel")), false);
+  assert.deepEqual(observed(copy, id), ctx);
+  const second = provision(copy, governedSpec({ nativeTaskRef: "#401" }));
+  cancel(copy, second, "Keep this independently consumed tombstone.");
+  assert.equal(registry(copy).records[second].status, "cancelled");
+  assertRegistryEvolution(registry(root), registry(copy));
+  cancel(root, id, "Fixture task has closed.");
+  await assert.rejects(dispatch(root, id, context(root, id), ctx, () => assert.fail("terminal work")), /non-executable/);
+  await assert.rejects(run(root, id, "test-fast", context(root, id), null, { context: ctx }), /non-executable/);
+  assert.throws(() => provision(root, governedSpec()), /already consumed/);
+});
+
+test("Unified amendments preserve native identity and actual CLI dispatch rejects stale context before any edit", t => {
+  const root = governed(t);
+  const full = governedSpec();
+  const id = provision(root, full);
+  const ctx = observed(root, id);
+  json(root, "native-context.json", ctx);
+  json(root, "replacement.json", { ...full, done: [...full.done, "Amended fixture scope stays identifiable."] });
+  json(root, "coordination.json", coordination);
+  const before = registry(root);
+  assert.throws(() => amend(root, id, "test-fast", "Changing native identity is unsupported",
+    { ...full, nativeTaskRef: "#401" }, { context: ctx, coordination }), /native identity/);
+  assert.deepEqual(registry(root), before);
+  const amended = cli(root, "amend-plan", [id, "test-fast", "Inspected concrete scope amendment", "replacement.json", "coordination.json"],
+    { UNIFIED_CONTEXT_FILE: "native-context.json" });
+  assert.equal(amended.status, 0, amended.stderr + amended.stdout);
+  fs.writeFileSync(path.join(root, "implement.mjs"), 'import fs from "node:fs"; fs.writeFileSync("edit", "unsafe");');
+  json(root, "command.json", { script: "implement.mjs", args: [], timeoutMs: 3000, cleanupMs: 600 });
+  const stale = cli(root, "dispatch-implementation", [id, "command.json"],
+    { TASK_PLAN_FILE: context(root, id), UNIFIED_CONTEXT_FILE: "native-context.json" });
+  assert.equal(stale.status, 1);
+  assert.match(stale.stderr, /Stale/);
+  assert.equal(fs.existsSync(path.join(root, "edit")), false);
+  assert.equal(registry(root).records[id].spec.nativeTaskRef, "#400");
+});
+
+test("Unified preflight refuses uncertain work and malformed baseline without rewriting historical contracts", async t => {
+  const root = governed(t);
+  const id = provision(root, governedSpec());
+  const ctx = observed(root, id);
+  const held = lease(root, "target-fixture-repository");
+  assert.throws(() => preflight(root, id, context(root, id), ctx), /lease retained/);
+  held();
+  const before = observed(root, id);
+  json(root, "docs/validation/failure-baseline.json", { schemaVersion: 1 });
+  await assert.rejects(dispatch(root, id, context(root, id), ctx, () => assert.fail("malformed baseline")), /Malformed baseline/);
+  assert.deepEqual(observed(root, id), before);
+  json(root, "docs/validation/failure-baseline.json", { schemaVersion: 1, entries: [] });
+  const r = registry(root);
+  // Simulate a crash after active-run publication, preserving required history.
+  transaction(root, store => {
+    store.records[id].activeRun = { runId: "uncertain", target: "fixture-repository" };
+    store.records[id].runs.push({ runId: "uncertain", kind: "tier-run" });
+  });
+  assert.throws(() => preflight(root, id, context(root, id), ctx), /active or uncertain/);
+  assert.throws(() => amend(root, id, "test-fast", "Cannot overlap uncertain work", r.records[id].spec,
+    { context: ctx, coordination }), /active or uncertain/);
+  assert.deepEqual(observed(root, id), before);
+});
+
+test("Unified current pin does not retrofit older bindings and only explicit amendment advances their contract", async t => {
+  const root = currentFixture(t);
+  const id = provision(root, governedSpec());
+  const old = observed(root, id);
+  const p = policy(root);
+  fs.appendFileSync(path.join(root, p.canonicalSource), "\nDisposable revision fixture\n");
+  p.canonicalSha256 = sha(fs.readFileSync(path.join(root, p.canonicalSource)));
+  p.planTemplates[p.canonicalSha256] = "unified-v2";
+  p.regressionGuard.contracts[p.canonicalSha256 + "/unified-v4"] = RG_REVISION;
+  p.preflightContracts = [p.canonicalSha256];
+  json(root, "docs/validation/unified-policy.json", p);
+  assert.equal((await run(root, id, "test-fast", context(root, id))).state, "PASS");
+  assert.deepEqual(observed(root, id), old);
+  amend(root, id, "test-fast", "Explicitly adopt current approved fixture contract", null, { context: old, coordination });
+  const fresh = observed(root, id);
+  assert.equal(fresh.contract, p.canonicalSha256);
+  await assert.rejects(run(root, id, "test-fast", context(root, id)), /context/);
+  assert.equal((await run(root, id, "test-fast", context(root, id), null, { context: fresh })).state, "PASS");
+  const before = registry(root);
+  assert.equal(amend(root, id, "test-fast", registry(root).records[id].spec.why, null,
+    { context: fresh, coordination }).operation, "reuse");
+  assert.deepEqual(registry(root), before);
+});
+
+test("Unified separate-checkout reconciliation preserves independently consumed identities and exact sealed inputs", t => {
+  const left = governed(t);
+  const shared = provision(left, governedSpec());
+  const right = fs.mkdtempSync(path.join(os.tmpdir(), "unified-independent-checkout-"));
+  t.after(() => fs.rmSync(right, { recursive: true, force: true }));
+  fs.cpSync(left, right, { recursive: true });
+  const leftId = provision(left, governedSpec({ nativeTaskRef: "#401" }));
+  const rightId = provision(right, governedSpec({ nativeTaskRef: "#402" }));
+  cancel(left, leftId, "Independent left cancellation remains consumed.");
+  cancel(right, rightId, "Independent right cancellation remains consumed.");
+  const l = registry(left), r = registry(right);
+  assert.notEqual(leftId, rightId);
+  const union = { ...l, revision: Math.max(l.revision, r.revision) + 1, records: { ...l.records, ...r.records } };
+  assertRegistryEvolution(l, union);
+  assertRegistryEvolution(r, union);
+  const lost = structuredClone(union); delete lost.records[leftId];
+  assert.throws(() => assertRegistryEvolution(l, lost), /dropped ID/);
+  for (const root of [left, right]) {
+    json(root, "docs/validation/unified-task-registry.json", union);
+    assert.equal(registry(root).records[leftId].status, "cancelled");
+    assert.equal(registry(root).records[rightId].status, "cancelled");
+  }
+  const ctx = observed(left, shared);
+  // Prove missing ignored local plan delivery uses exact payload bytes, not a
+  // replacement identity or a normalization/rendering operation.
+  fs.unlinkSync(path.join(right, context(right, shared)));
+  json(right, "native-context.json", ctx);
+  assert.equal(cli(right, "check-unified-preflight", [shared],
+    { TASK_PLAN_FILE: context(right, shared), UNIFIED_CONTEXT_FILE: "native-context.json" }).status, 1);
+  fs.writeFileSync(path.join(right, context(right, shared)), ctx.nativeSealedText, { flag: "wx" });
+  const checked = cli(right, "check-unified-preflight", [shared],
+    { TASK_PLAN_FILE: context(right, shared), UNIFIED_CONTEXT_FILE: "native-context.json" });
+  assert.equal(checked.status, 0, checked.stderr);
+  assert.deepEqual(observed(right, shared), ctx);
+  assert.equal(Object.keys(registry(right).records).length, 3);
+});
+
+test("Unified gate-source changes cannot turn an observed raw command pass into current validation PASS", async t => {
+  const root = governed(t, 'import fs from "node:fs"; fs.appendFileSync("scripts/failure-gate/context.mjs", "\\nexport const fixtureChange = true;\\n");');
+  const id = provision(root, governedSpec());
+  const result = await run(root, id, "test-fast", context(root, id), null, { context: observed(root, id) });
+  assert.equal(result.steps[0].exit, 0);
+  assert.equal(result.rawAllPassed, true);
+  assert.equal(result.state, "INCOMPLETE");
+  assert.equal(result.changedGateSources[0].file, "scripts/failure-gate/context.mjs");
+  assert.equal(registry(root).records[id].assessment.state, "INCOMPLETE");
 });
 test("output bounds cannot report PASS or leave fixture children running", async t => {
   const root = fixture(t, 'process.stdout.write("x".repeat(2000000));setInterval(()=>{},100);');

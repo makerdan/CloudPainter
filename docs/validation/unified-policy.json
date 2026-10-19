@@ -4,13 +4,15 @@
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
   "allocatorAuthorityVerified": false,
   "canonicalSource": ".agents/skills/failure-gate-unified/SKILL.md",
-  "canonicalSha256": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+  "canonicalSha256": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
   "planTemplates": {
     "f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12": "legacy-v1",
     "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0": "legacy-v1",
-    "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc": "unified-v2"
+    "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc": "unified-v2",
+    "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22": "unified-v2"
   },
   "newPlanTemplate": "unified-v4",
+  "preflightContracts": ["2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22"],
   "regressionGuard": {
     "source": ".agents/skills/regression-guard/SKILL.md",
     "current": "6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1",
@@ -20,10 +22,21 @@
       "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0/legacy-v1": "legacy-v1",
       "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc/unified-v2": "legacy-v1",
       "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc/unified-v3": "legacy-v1",
-      "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc/unified-v4": "6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1"
+      "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc/unified-v4": "6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1",
+      "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22/unified-v4": "6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1"
     }
   },
   "contractRevisions": [
+    {
+      "revision": 3,
+      "fromCanonicalSha256": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "toCanonicalSha256": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "sourceArchive": "attached_assets/failure-gate-unified-2026-10-15_1792282392881.zip",
+      "sourceArchiveSha256": "478d37336a161b376d067ac220a7ae34eb482486e86144050ed7ebccbbecf88e",
+      "authorization": "Owner selected Apply the attached revision; gate-only maintenance under the canonical exception.",
+      "scope": "Pre-implementation preflight, preparation and amendment coordination; no historical retrofit or live ledger mutation.",
+      "record": "docs/validation/unified-preflight-application-handoff.md"
+    },
     {
       "revision": 1,
       "recordedAt": "2026-10-15T20:56:33Z",

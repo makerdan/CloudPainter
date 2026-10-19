@@ -1,0 +1,48 @@
+TAP version 13
+# Subtest: independent targets can run without a blanket global validation lock
+ok 1 - independent targets can run without a blanket global validation lock
+  ---
+  duration_ms: 517.349044
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 584.507154
+TAP version 13
+# Subtest: independent targets can run without a blanket global validation lock
+ok 1 - independent targets can run without a blanket global validation lock
+  ---
+  duration_ms: 514.256649
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 588.48873
+TAP version 13
+# Subtest: independent targets can run without a blanket global validation lock
+ok 1 - independent targets can run without a blanket global validation lock
+  ---
+  duration_ms: 520.812231
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 592.646073
