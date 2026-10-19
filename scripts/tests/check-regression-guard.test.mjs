@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,6 +10,128 @@ import { fileURLToPath } from "node:url";
 const PROJECT_ROOT = path.dirname(path.dirname(path.dirname(fileURLToPath(import.meta.url))));
 const CHECKER = path.join(PROJECT_ROOT, "scripts", "check-regression-guard.mjs");
 const RUNNER = path.join(PROJECT_ROOT, "scripts", "validate-task-plans.mjs");
+const PACKAGE_ROOT = path.join(PROJECT_ROOT, ".agents/skills/regression-guard");
+// Owner-selected package fingerprints. This is source-installation acceptance,
+// not the live gate's revision/cutover policy. Change only with an authorized
+// definition revision, updating the installation handoff through maintenance.
+const PACKAGE_SHA256 = {
+  "SKILL.md": "6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1",
+  "reference/enforcement-contract.md": "bdae119a887cda74dadbc6fded7ff7360e94c54fb57a858756ee4fdfa192d964",
+  "reference/delivery-handoff.md": "2df6f93305e3757989bff36be1ab1bc7cc9deb3229ad703cec83e3ef1a4c9910",
+  "REVISION-NOTES.md": "0e1b11b5900591eafd6bb4134b25c91cf5a19416d4158feef5807f0edf8cf868",
+};
+const SOURCE_OBLIGATIONS = {
+  "SKILL.md": [
+    "Any material component makes mixed work qualifying for that component.",
+    "The entire implementation scope is the test/check itself:",
+    "Automatically reassess actual scope and the applicable declaration before any\nimplementation",
+    "otherwise the executing Agent performs this as its first\naction after Start.",
+    "through draft creation or the supported amendment/reseal route",
+    "Failed amendments leave the last admitted sealed revision intact.",
+    "Never wire automatic `--fix-stub` rewriting into validation, CI or execution.",
+    "does not update a local sealed plan or tier binding.",
+    "Recheck the current admitted revision before\nimplementation dispatch; reject stale context.",
+    "If the gap appears after work begins, pause affected work",
+    "historical tasks retain their original rules until an authorized supported\namendment applies a newer revision.",
+    "Maintain a revision-bound requirement-to-delivery handoff",
+    "The handoff is required; separate **read-only verification is optional** unless\nthe owner explicitly selects it or an identifiable already-approved requirement\ncalls for it.",
+    'Record optional review as "not selected," not "pending."',
+  ],
+  "reference/enforcement-contract.md": [
+    "Separate read-only verification is optional unless selected by the owner",
+    "Locate a genuine host hook or document the Agent-first cooperative preflight.",
+    "apply supported amendments before implementation starts.",
+    "For failed amendment, preserve the last admitted revision,\nbinding and ledger history.",
+  ],
+  "reference/delivery-handoff.md": [
+    "The handoff above is required; a separate verifier is not.",
+    "Pre-implementation preflight outcome and any post-Start amendment references,",
+    "Do not claim retrospective authorization or test delivery from plan edits.",
+    "Review-only work must not run tests, create tasks, change task states, repair files,",
+  ],
+};
+
+function packageFiles(root = PACKAGE_ROOT) {
+  return Object.fromEntries(Object.keys(PACKAGE_SHA256).map(file => [
+    file, fs.readFileSync(path.join(root, file), "utf8"),
+  ]));
+}
+
+// These assertions inspect source text, not application behavior or semantic
+// adequacy of arbitrary plans. Exact-byte acceptance is deliberately separate.
+function assertPackageContract(root) {
+  const files = packageFiles(root);
+  const links = [...files["SKILL.md"].matchAll(/\[[^\]]+\]\((reference\/[^)]+)\)/g)]
+    .map(match => match[1]);
+  for (const required of ["reference/enforcement-contract.md", "reference/delivery-handoff.md"]) {
+    assert.ok(links.includes(required), `missing required link: ${required}`);
+  }
+  for (const link of links) {
+    assert.ok(fs.statSync(path.join(root, link)).isFile(), `unresolved reference: ${link}`);
+  }
+  for (const [file, obligations] of Object.entries(SOURCE_OBLIGATIONS)) {
+    for (const obligation of obligations) {
+      assert.ok(files[file].includes(obligation), `missing source obligation in ${file}: ${obligation}`);
+    }
+    assert.doesNotMatch(files[file],
+      /(?:separate|independent) (?:read-only )?(?:verification|review) is (?:mandatory|required) for (?:all|every)/i,
+      `unselected blanket review requirement in ${file}`);
+  }
+}
+
+test("canonical Regression Guard package exactly matches the approved source fingerprints", () => {
+  for (const [file, expected] of Object.entries(PACKAGE_SHA256)) {
+    const actual = createHash("sha256").update(fs.readFileSync(path.join(PACKAGE_ROOT, file))).digest("hex");
+    assert.equal(actual, expected, `${file}: unauthorized source drift; use an approved definition revision`);
+  }
+});
+
+test("canonical package closes references and retains preflight, amendment and optional-review obligations", () => {
+  assertPackageContract(PACKAGE_ROOT);
+});
+
+test("source-contract checks reject removal of every required obligation without relying on byte hashes", t => {
+  const originals = packageFiles();
+  const root = fixture(t, originals);
+  for (const [file, obligations] of Object.entries(SOURCE_OBLIGATIONS)) {
+    const target = path.join(root, file);
+    for (const obligation of obligations) {
+      fs.writeFileSync(target, originals[file].replace(obligation, ""));
+      assert.throws(() => assertPackageContract(root), /missing source obligation/, `${file}: ${obligation}`);
+      fs.writeFileSync(target, originals[file]);
+    }
+  }
+  assertPackageContract(root);
+});
+
+test("source-contract checks reject missing reference files and removed or redirected required links", t => {
+  const originals = packageFiles();
+  const root = fixture(t, originals);
+  for (const reference of ["reference/enforcement-contract.md", "reference/delivery-handoff.md"]) {
+    const target = path.join(root, reference);
+    fs.unlinkSync(target);
+    assert.throws(() => assertPackageContract(root), /ENOENT/);
+    fs.writeFileSync(target, originals[reference]);
+    for (const replacement of ["", "reference/missing.md"]) {
+      fs.writeFileSync(path.join(root, "SKILL.md"), originals["SKILL.md"].replace(`](${reference})`, `](${replacement})`));
+      assert.throws(() => assertPackageContract(root), /missing required link/);
+    }
+    fs.writeFileSync(path.join(root, "SKILL.md"), originals["SKILL.md"]);
+  }
+  assertPackageContract(root);
+});
+
+test("source-contract checks reject blanket mandatory unselected review even alongside optional wording", t => {
+  const originals = packageFiles();
+  const root = fixture(t, originals);
+  for (const file of Object.keys(SOURCE_OBLIGATIONS)) {
+    fs.writeFileSync(path.join(root, file), originals[file] +
+      "\nSeparate read-only verification is mandatory for all work.\n");
+    assert.throws(() => assertPackageContract(root), /unselected blanket review requirement/);
+    fs.writeFileSync(path.join(root, file), originals[file]);
+  }
+});
+
 const VALID_GUARD = `## Regression Guard
 **Covers:** Loading a saved sketch with a photo whose dimensions changed after resize.
 **Test location:** artifacts/cloudpainter/src/lib/photoLayout.test.ts
@@ -125,7 +248,10 @@ function fixture(t, files = {}) {
     fs.mkdirSync(path.dirname(destination), { recursive: true });
     fs.writeFileSync(destination, contents);
   }
-  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  t.after(() => {
+    fs.rmSync(directory, { recursive: true, force: true });
+    assert.equal(fs.existsSync(directory), false, "disposable fixture root must be removed");
+  });
   return directory;
 }
 
