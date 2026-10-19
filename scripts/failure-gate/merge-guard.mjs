@@ -31,6 +31,11 @@ export function assertRegistryEvolution(before, after) {
     const allowed = new Set(["events"]);
     for (const event of events) {
       switch (event.kind) {
+        case "provisioning-retry-started":
+          if (!["reserved", "incomplete"].includes(old.status) || !event.expectedRecordHash || !event.specHash) {
+            reject("invalid provisioning retry " + id);
+          }
+          break;
         case "amendment-start": allowed.add("status"); break;
         case "amended":
           for (const key of ["status", "spec", "tier", "tierHash", "contract", "planTemplate", "regressionDeferral", "planHash", "preexistingNotes"]) allowed.add(key);

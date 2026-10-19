@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
-import { provision, checkPlan, amend, cancel, render, regressionPreflight } from "../failure-gate/plans.mjs";
+import { provision, checkPlan, amend, cancel, render, regressionPreflight, completeProvisioning, provisioningContext } from "../failure-gate/plans.mjs";
 import { run, supervise, parseFailures, evaluateFailures, selfClassify, closeOwnerDirection } from "../failure-gate/runner.mjs";
 import { registry, readJson, atomicJson, lease, sha, TIERS, baseline, warnings, safePath, policy, tier } from "../failure-gate/store.mjs";
 import { transaction } from "../failure-gate/store.mjs";
@@ -35,7 +35,7 @@ function fixture(t, work = 'console.log("ok")', adapter = "exit") {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, "scripts"), { recursive: true });
   fs.cpSync(path.join(SOURCE, "scripts/failure-gate"), path.join(root, "scripts/failure-gate"), { recursive: true });
-  for (const entry of ["new-plan", "run-validation", "check-failure-gate", "check-regression-preflight", "check-unified-preflight", "prepare-plan", "dispatch-implementation", "amend-plan", "validation-tier", "validate-task-plans", "check-regression-guard"]) {
+  for (const entry of ["new-plan", "complete-provisioning", "run-validation", "check-failure-gate", "check-regression-preflight", "check-unified-preflight", "prepare-plan", "dispatch-implementation", "amend-plan", "validation-tier", "validate-task-plans", "check-regression-guard"]) {
     fs.copyFileSync(path.join(SOURCE, "scripts/" + entry + ".mjs"), path.join(root, "scripts/" + entry + ".mjs"));
   }
   fs.mkdirSync(path.join(root, ".agents/skills/failure-gate-unified"), { recursive: true });
@@ -561,7 +561,8 @@ test("invalid new declarations cannot publish; failed amendments preserve every 
     assert.equal(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"), "utf8"), ledger);
   }
   const records = Object.values(registry(root).records);
-  assert.equal(records.filter(record => record.status === "incomplete").length, bad.length);
+  assert.equal(records.filter(record => record.status === "incomplete").length, 0,
+    "deterministic declaration failures are rejected before reservation");
   for (const record of records.filter(record => record.status === "incomplete")) {
     assert.equal(fs.existsSync(path.join(root, record.planPath)), false);
   }
@@ -719,6 +720,158 @@ test("generation failure reserves identity permanently; cancelled/deleted plans 
   assert.notEqual(next, id);
   assert.notEqual(next, reserved);
   assert.equal(registry(root).records[id].status, "cancelled");
+});
+
+test("exact retained instructional candidate qualifies for exclusion without changing its specification", t => {
+  const root = governed(t);
+  const input = readJson(SOURCE, "docs/validation/evidence/app-support-ops-failed-candidate.json");
+  assert.equal(sha(JSON.stringify(input)), "fdab6a8bc75dfd8905aa1813c23872dc285bf9daa0dd99dca766f7371d0d44b4");
+  // Source binding is illustrative here; fixture workload is not installation acceptance.
+  const id = provision(root, input);
+  const r = registry(root).records[id];
+  assert.deepEqual(r.spec, input);
+  const ctx = sealedInputs(root, id);
+  assert.equal(preflight(root, id, r.planPath, ctx).assessment, "LOCAL_PLAN_VALID_HOST_CHECKS_REQUIRED");
+});
+
+test("deterministic candidate rejection precedes reservation, including material instructional and mixed exclusions", t => {
+  const root = governed(t);
+  for (const what of [
+    "Change supported instructional policy to waive admission prerequisites.",
+    "Install a copy-only definition. Also change existing authorization behavior.",
+    "The definition includes instructions to disable authorization checks.",
+    "The definition includes instructions to disable access checks.",
+    "The file describes existing boundaries, and disables access checks.",
+    "The definition includes existing coverage guidance and instructions to disable authorization checks.",
+    "The definition retains existing modes. The definition includes a new optional authorization bypass.",
+    "The definition includes new admission requirements.",
+    "Recheck current access and disable authorization checks.",
+    "Use normal provisioning to disable authorization checks.",
+  ]) {
+    const input = readJson(SOURCE, "docs/validation/evidence/app-support-ops-failed-candidate.json");
+    input.what = what;
+    // Exercise the complete rendered exclusion with its actual metadata, not
+    // merely a prose snippet. No heading/filename/copy claim can waive it.
+    assert.throws(() => assessRegression(input, render("candidate", policy(root).canonicalSha256, input, "unified-v4")),
+      /Regression Guard/);
+    const before = fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"));
+    assert.throws(() => provision(root, input), /Regression Guard/);
+    assert.deepEqual(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json")), before);
+    assert.equal(fs.existsSync(path.join(root, ".local/tasks")), false);
+  }
+});
+
+function interruptedProvision(t) {
+  const root = governed(t);
+  const input = governedSpec();
+  fs.mkdirSync(path.join(root, ".local"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".local/tasks"), "IO obstruction after reservation");
+  assert.throws(() => provision(root, input));
+  const record = Object.values(registry(root).records)[0];
+  assert.equal(record.status, "incomplete");
+  fs.unlinkSync(path.join(root, ".local/tasks"));
+  return { root, id: record.id, record, input };
+}
+
+test("same-reservation completion preserves exact identity, scope, workload, contract and append-only history through the CLI", t => {
+  const { root, id, record } = interruptedProvision(t);
+  const ctx = provisioningContext(root, id);
+  json(root, "expected.json", ctx);
+  const result = cli(root, "complete-provisioning", [id, "expected.json"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).id, id);
+  const after = registry(root).records[id];
+  assert.deepEqual(Object.keys(registry(root).records), [id]);
+  for (const key of ["spec", "tier", "tierHash", "contract", "planTemplate", "planPath"]) assert.deepEqual(after[key], record[key]);
+  assert.deepEqual(after.events.slice(0, record.events.length), record.events);
+  assert.equal(after.events.at(-1).operation, "same-reservation-completion");
+  assert.equal(after.planHash, sha(render(id, record.contract, record.spec, record.planTemplate)));
+  assert.throws(() => completeProvisioning(root, id, ctx), /not eligible/);
+  // Reconciliation is still required; recovery is not ordinary admission.
+  assert.throws(() => checkPlan(root, id, "test-fast", after.planPath), /context required/);
+  const observed = sealedInputs(root, id);
+  checkPlan(root, id, "test-fast", after.planPath, false, { context: observed });
+});
+
+test("provisioning completion rejects stale/substituted context and conflicting files without changing the reservation", t => {
+  const { root, id } = interruptedProvision(t);
+  const ctx = provisioningContext(root, id);
+  const before = fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json"));
+  for (const change of [{ id: "FGU-other" }, { nativeTaskRef: "#999" }, { specHash: "a".repeat(64) },
+    { recordHash: "b".repeat(64) }, { approval: true }, { spec: {} }]) {
+    assert.throws(() => completeProvisioning(root, id, { ...ctx, ...change }), /context/);
+    assert.deepEqual(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json")), before);
+  }
+  const r = registry(root).records[id];
+  fs.mkdirSync(path.dirname(path.join(root, r.planPath)), { recursive: true });
+  fs.writeFileSync(path.join(root, r.planPath), "partial or conflicting plan");
+  assert.throws(() => completeProvisioning(root, id, ctx), /Conflicting/);
+  assert.equal(fs.readFileSync(path.join(root, r.planPath), "utf8"), "partial or conflicting plan");
+  assert.deepEqual(fs.readFileSync(path.join(root, "docs/validation/unified-task-registry.json")), before);
+  fs.unlinkSync(path.join(root, r.planPath));
+  transaction(root, ledger => ledger.records[id].events.push({ kind: "generation-failed", at: new Date().toISOString() }));
+  assert.throws(() => completeProvisioning(root, id, ctx), /Stale/);
+});
+
+test("interrupted exact-file generation can complete a reserved record; terminal records and changed workloads cannot", t => {
+  const { root, id } = interruptedProvision(t);
+  const old = registry(root).records[id];
+  // Isolated fixture models a process that died after writing the complete file.
+  const setup = readJson(root, "docs/validation/unified-task-registry.json");
+  setup.records[id].status = "reserved";
+  setup.records[id].events = setup.records[id].events.slice(0, 1);
+  json(root, "docs/validation/unified-task-registry.json", setup);
+  const reserved = registry(root).records[id];
+  fs.mkdirSync(path.dirname(path.join(root, reserved.planPath)), { recursive: true });
+  fs.writeFileSync(path.join(root, reserved.planPath), render(id, old.contract, old.spec, old.planTemplate));
+  completeProvisioning(root, id, provisioningContext(root, id));
+  cancel(root, id, "Terminal fixture preserves consumed identity");
+  assert.throws(() => completeProvisioning(root, id, provisioningContext(root, id)), /not eligible/);
+  const other = interruptedProvision(t);
+  const table = readJson(other.root, "docs/validation/unified-tiers.json");
+  table.tiers["test-fast"].timeoutMs++;
+  json(other.root, "docs/validation/unified-tiers.json", table);
+  assert.throws(() => completeProvisioning(other.root, other.id, provisioningContext(other.root, other.id)), /contract\/workload/);
+});
+
+test("provisioning retry rejects a concurrent owner and retries a later IO failure using renewed context", t => {
+  const { root, id } = interruptedProvision(t);
+  const ctx = provisioningContext(root, id);
+  const release = lease(root, "provision-" + id.toLowerCase());
+  try { assert.throws(() => completeProvisioning(root, id, ctx), /lock retained/); } finally { release(); }
+  const originalOpen = fs.openSync;
+  const plan = path.join(root, registry(root).records[id].planPath);
+  fs.openSync = (file, flags, ...args) => {
+    if (file === plan && flags === "wx") throw new Error("isolated IO failure after retry-start");
+    return originalOpen(file, flags, ...args);
+  };
+  try { assert.throws(() => completeProvisioning(root, id, ctx), /isolated IO failure/); }
+  finally { fs.openSync = originalOpen; }
+  const failed = registry(root).records[id];
+  assert.equal(failed.status, "incomplete");
+  assert.equal(failed.events.at(-1).kind, "generation-failed");
+  assert.throws(() => completeProvisioning(root, id, ctx), /Stale/);
+  completeProvisioning(root, id, provisioningContext(root, id));
+});
+
+test("concurrent provisioning-completion CLI callers admit at most the same reservation once", async t => {
+  const { root, id } = interruptedProvision(t);
+  json(root, "expected.json", provisioningContext(root, id));
+  const results = await Promise.all(Array.from({ length: 2 }, () => new Promise(resolve => {
+    const child = spawn(process.execPath, [path.join(root, "scripts/complete-provisioning.mjs"), id, "expected.json"], {
+      cwd: root, env: { PATH: process.env.PATH, HOME: process.env.HOME }, stdio: ["ignore", "pipe", "pipe"],
+      timeout: 10000,
+    });
+    let stdout = "", stderr = "";
+    child.stdout.on("data", s => { stdout += s; });
+    child.stderr.on("data", s => { stderr += s; });
+    child.on("close", code => resolve({ code, stdout, stderr }));
+  })));
+  assert.equal(results.filter(r => r.code === 0).length, 1, JSON.stringify(results));
+  assert.match(results.find(r => r.code !== 0).stderr, /lock retained|not eligible|Stale/);
+  const records = registry(root).records;
+  assert.deepEqual(Object.keys(records), [id]);
+  assert.equal(records[id].events.filter(e => e.kind === "provisioned").length, 1);
 });
 test("concurrent CLI allocations serialize or reject without lost records", async t => {
   const root = fixture(t);

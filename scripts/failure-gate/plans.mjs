@@ -114,6 +114,9 @@ export function provision(root, spec, { resolveTask } = {}) {
   declarations(root, spec);
   const regressionDeferral = revision === RG_REVISION ? resolveDeferral(spec, p.projectId, resolveTask) :
     deferralEvidence(spec, p.projectId, resolveTask);
+  // Deterministic candidate rejection must not consume an identity. IO and
+  // publication can still fail after reservation, which remains durable.
+  strictPlan(render("candidate", p.canonicalSha256, spec, template), "candidate", revision, spec);
   const id = "FGU-" + crypto.randomUUID();
   const planPath = ".local/tasks/" + id + ".md";
   // Reservation commits first. Any subsequent failure retains this ID forever.
@@ -146,6 +149,100 @@ export function provision(root, spec, { resolveTask } = {}) {
   } catch (e) {
     transaction(root, r => { r.records[id].status = "incomplete"; r.records[id].events.push({ kind: "generation-failed", at: stamp() }); });
     throw e;
+  }
+}
+
+// Explicit recovery of the recorded inputs only, not a replacement provision
+// or an amendment. The expected full-record hash includes status and history.
+export function provisioningContext(root, id) {
+  const record = registry(root).records[id];
+  if (!record) throw new Error("Unknown provisioning reservation");
+  return { id, nativeTaskRef: record.spec.nativeTaskRef ?? "", specHash: sha(JSON.stringify(record.spec)),
+    recordHash: sha(JSON.stringify(record)) };
+}
+
+export function completeProvisioning(root, id, expected, { resolveTask } = {}) {
+  const p = policy(root);
+  const check = record => {
+    if (!record || !["reserved", "incomplete"].includes(record.status) || record.planHash ||
+        record.activeRun || record.runs.length) throw new Error("Reservation is not eligible for provisioning completion");
+    if (!expected || Object.keys(expected).sort().join() !== "id,nativeTaskRef,recordHash,specHash" ||
+        expected.id !== id || expected.nativeTaskRef !== (record.spec.nativeTaskRef ?? "") ||
+        expected.specHash !== sha(JSON.stringify(record.spec)) ||
+        expected.recordHash !== sha(JSON.stringify(record))) throw new Error("Stale or substituted provisioning context");
+    if (record.contract !== p.canonicalSha256 || record.tier !== record.spec.tier ||
+        record.tierHash !== tier(root, record.tier).hash ||
+        record.planPath !== ".local/tasks/" + id + ".md") throw new Error("Recorded provisioning contract/workload/path changed; supported correction required");
+  };
+  const first = registry(root).records[id];
+  check(first);
+  const release = lease(root, "provision-" + id.toLowerCase());
+  let releaseTarget;
+  try {
+    releaseTarget = lease(root, "target-" + tier(root, first.tier).target);
+    const current = registry(root).records[id];
+    check(current);
+    const template = planTemplate(p, current.contract, current.planTemplate);
+    const revision = regressionRevision(root, p, current.contract, template);
+    validateSpec(current.spec, template);
+    declarations(root, current.spec);
+    const evidence = revision === RG_REVISION ? resolveDeferral(current.spec, p.projectId, resolveTask) :
+      deferralEvidence(current.spec, p.projectId, resolveTask);
+    if (JSON.stringify(evidence ?? null) !== JSON.stringify(current.regressionDeferral ?? null)) {
+      throw new Error("Recorded deferral evidence changed; supported correction required");
+    }
+    const text = render(id, current.contract, current.spec, template);
+    strictPlan(text, current.planPath, revision, current.spec);
+    const file = safePath(root, current.planPath);
+    const assertFile = () => {
+      const stat = fs.lstatSync(file);
+      if (!stat.isFile() || stat.size > 4_000_000 || stat.nlink !== 1 ||
+          !fs.readFileSync(file).equals(Buffer.from(text))) throw new Error("Conflicting provisioning plan file; preserved");
+    };
+    if (fs.existsSync(file)) assertFile();
+    const retryEvent = { kind: "provisioning-retry-started", at: stamp(),
+      expectedRecordHash: expected.recordHash, specHash: expected.specHash };
+    transaction(root, r => {
+      check(r.records[id]);
+      r.records[id].events.push(retryEvent);
+    });
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      let fd;
+      try { fd = fs.openSync(file, "wx", 0o600); }
+      catch (error) { if (error.code !== "EEXIST") throw error; assertFile(); }
+      if (fd !== undefined) {
+        try { fs.writeFileSync(fd, text); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+      }
+      assertFile();
+      const directory = fs.openSync(path.dirname(file), "r");
+      try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
+      transaction(root, r => {
+        const record = r.records[id];
+        if (sha(JSON.stringify(record)) !== sha(JSON.stringify({ ...current, events: [
+          ...current.events, retryEvent,
+        ] }))) {
+          throw new Error("Provisioning context changed during completion");
+        }
+        record.status = "provisioned";
+        record.planHash = sha(text);
+        record.events.push({ kind: "provisioned", at: stamp(), operation: "same-reservation-completion",
+          specHash: expected.specHash });
+      });
+    } catch (error) {
+      transaction(root, r => {
+        const record = r.records[id];
+        if (!["reserved", "incomplete"].includes(record.status)) throw error;
+        record.status = "incomplete";
+        record.events.push({ kind: "generation-failed", at: stamp(), operation: "same-reservation-completion" });
+      });
+      throw error;
+    }
+    return { id, planHash: sha(text), operation: "same-reservation-completion",
+      meaning: "Provisioned only; native reconciliation, host approval and preflight still required" };
+  } finally {
+    releaseTarget?.();
+    release();
   }
 }
 export function checkPlan(root, id, selectedTier, selectedPath, allowTierDrift = false, options = {}) {

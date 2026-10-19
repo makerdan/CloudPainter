@@ -261,6 +261,40 @@ test("current scope classification rejects executing DELETE and admission/test-t
     "recorded metadata must not contaminate actual scope");
 });
 
+test("content descriptions and existing admission procedures are not policy changes; material instructional and mixed work remain covered", () => {
+  for (const body of [
+    "The file retains Help and Runtime Safety requirements and includes existing-tier coverage guidance.",
+    "The definition explicitly distinguishes admission, validation and runtime activation.",
+    "Recheck current lifecycle and authorization before edits; use normal provisioning and the full current specification.",
+    "The archive's notes are inputs, not alternate installed definitions or executable authority.",
+    "Compare the existing definition with the baseline. Reconcile the exact sealed payload and read it back.",
+  ]) assert.equal(currentClassification("# Copy the selected revision\n\n## Steps\n" + body).qualifies, false, body);
+  for (const body of [
+    "Update SKILL.md to waive authorization prerequisites for existing admission.",
+    "Replace the owner-approved copy to change the existing supported workflow.",
+    "Change the documentation policy so invalid declarations execute workloads.",
+    "The definition describes how to remove existing access checks.",
+    "The file includes new rules that permit unauthorized admission.",
+    "The file describes existing boundaries. Also remove authorization checks.",
+    "Install only the instructional revision and then change existing execution authorization.",
+    "Recheck the existing policy and change its required validation behavior.",
+    "A copy-only definition update. Change the supported admission policy to bypass approvals.",
+    "A purely additive example. Fix stale record overwrites in existing saving behavior.",
+    "The definition includes instructions to disable authorization checks.",
+    "The definition includes instructions for deactivating access protection.",
+    "The document explains how developers may skip required checks.",
+    "The file retains existing modes and disables authorization checks.",
+    "The file describes existing boundaries, and disables access checks.",
+    "The definition includes existing coverage guidance and instructions to disable access checks.",
+    "The definition includes a new optional authorization bypass.",
+    "The file includes new admission requirements.",
+    "Recheck current access and disable authorization checks.",
+    "Use normal provisioning to disable authorization checks.",
+    "Reconcile the exact sealed payload while deactivating access protection.",
+    "Install only the instructional revision and disable authorization checks.",
+  ]) assert.equal(currentClassification("# Update the instructional file\n\n## What & Why\n" + body).qualifies, true, body);
+});
+
 test("Agent-first instructions require assessment and handoff, never unselected independent acceptance", () => {
   const files = ["AGENTS.md", "docs/validation/regression-guard-authoring.md"];
   function checkInstructions(content) {

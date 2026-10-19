@@ -195,15 +195,76 @@ function hasMaterialMutation(title, body) {
   });
 }
 
+// Project only explicitly descriptive content and ordinary use of the gate's
+// existing procedures. This is not a file-type exemption: a directive to change
+// supported policy/behavior (even inside an instructional file) remains active.
+function requestedScope(body) {
+  const unresolvedDescriptions = [];
+  const projected = body.split(/(?<=\n)|(?<=[.!;])(?=[\t ])/).map(clause => {
+    const plain = clause.trim().replace(/^\*\*[^*\n]+\*\*[\t ]*—[\t ]*/, "")
+      .replace(/[`*]/g, "").replace(/^\s*(?:[-\d.)]+\s*)?/, "").trim();
+    const changesRules = /\b(?:to|and|then|also|must|will|that|which)\s+(?:\w+\s+){0,3}(?:waiv\w*|permit\w*|allow\w*|den\w*|remov\w*|chang\w*|alter\w*|replac\w*|bypass\w*|weaken\w*|requir(?:e|es|ed|ing)|enabl\w*|fix\w*|repair\w*)\b|\b(?:new|changed|different|revised)\s+(?:rules?|policy|workflow|defaults?|permissions?|requirements?|approval|authorization)\b/i;
+    const description = /^(?:the|this)\s+(?:file|definition|document|revision)\s+(?:explicitly\s+)?(?:retains?|describes?|documents?|lists?|includes?|distinguishes?|explains?)\b/i.test(plain);
+    if (description) {
+      // Positive structural vocabulary, not a blacklist of dangerous verbs.
+      // Unknown prose is never erased just because it describes a definition.
+      // In particular, instructions/how/to/modal clauses and arbitrary actions
+      // are not established as neutral by an owner-approved-copy label.
+      const topics = new Set(("identity existing current unchanged all the a an and or of with without separate " +
+        "help admin analytics runtime safety combined requirements tier coverage amendment subsection section guidance " +
+        "canonical port authority heavy companion prerequisite definition installation gate maintenance application " +
+        "admission assigned validation activation boundaries modes references includes").split(" "));
+      const nouns = plain.replace(/^(?:the|this)\s+(?:file|definition|document|revision)\s+(?:explicitly\s+)?(?:retains?|describes?|documents?|lists?|includes?|distinguishes?|explains?)\s+/i, "")
+        .replace(/^(?:the\s+)?[A-Z][\w-]*(?:\s+[A-Z][\w-]*)*\s+identity\b/, "identity")
+        .replace(/\bnew\s+(?=(?:existing-tier\s+)?(?:coverage\/amendment\s+)?(?:subsection|section|table|heading)\b)/gi, "")
+        .replace(/,\s+and does not grant implicit workload, listener-takeover, live-restart or deployment permission[.]?$/i, "");
+      const neutral = !changesRules.test(plain) &&
+        nouns.split(/[\s,./-]+/).filter(Boolean).every(word => topics.has(word.toLowerCase()));
+      if (!neutral) unresolvedDescriptions.push(plain);
+      return neutral ? clause.replace(/[^\r\n]/g, " ") : clause;
+    }
+    if (changesRules.test(plain)) return clause;
+    const inspection = /^(?:recheck|inspect|read|compare|reverify|establish|verify)\b/i.test(plain) &&
+      !/\b(?:chang\w*|alter(?:s|ed|ing)?|replac\w*|remov\w*|waiv\w*|permit\w*|bypass\w*|repair\w*|fix\w*)\b/i.test(plain);
+    const procedure = /^(?:reconcile the exact sealed payload|use normal provisioning|use supported amendments for covered changes|run the full admitted tier|then run the full admitted tier|publish the definition handoff|if the canonical file has changed, preserve it and reconcile)\b/i.test(plain);
+    const existingProcedureWords = new Set(("recheck inspect read compare reverify establish verify adopted owner instruction " +
+      "current existing all task eligibility canonical governing sources baseline catalog actual workload archive identity crc unique safe " +
+      "regular member paths manifest listed bytes definition approved exact delivered source parity preservation independently " +
+      "bound tier result then run full admitted through its supported supervised route reconcile sealed payload into this native " +
+      "it back satisfy preflight approval before edits use normal provisioning specification for exactly one adequate " +
+      "amendments covered changes never hand edit seals records publish handoff pre identities checks authorization limits " +
+      "explicit separation from subsequent runtime application lifecycle if file has changed preserve differences replacement instead " +
+      "overwriting newer instructions silently adopting another the a and or of with to").split(" "));
+    // Existing procedure prefixes alone are not exemptions either. Unknown
+    // operations stay visible to material/risk checks rather than being hidden
+    // inside an apparently harmless inspection or provisioning sentence.
+    const neutralProcedure = (inspection || procedure) &&
+      plain.split(/[\s,./;:-]+/).filter(Boolean).every(word => existingProcedureWords.has(word.toLowerCase()));
+    if (neutralProcedure) return clause.replace(/[^\r\n]/g, " ");
+    if (inspection || procedure) unresolvedDescriptions.push(plain);
+    // "alternate" is not the verb "alter"; keep historical classification intact.
+    return clause.replace(/\balternate\b/gi, "other");
+  }).join("");
+  return { body: projected, unresolvedDescriptions };
+}
+
 function classifyPlan(content, current = false) {
   const title = getTitle(content);
-  const body = extractPlanBody(content);
+  const extracted = extractPlanBody(content);
+  const projected = current ? requestedScope(extracted) : null;
+  const body = projected?.body ?? extracted;
+  if (projected?.unresolvedDescriptions.length) {
+    return { qualifies: true, reason: "instructional description or procedure is not established as neutral; material coverage assessment required" };
+  }
   if (!current && isDeletePlan(title)) return { qualifies: false, reason: "DELETE-prefixed plan" };
   if (current && /\b(?:this )?task is marked for deletion\b/i.test(body) &&
       !/\b(?:implement|execute|change|remove|repair|fix)\b/i.test(body.replace(/\bthis task is marked for deletion\b/ig, ""))) {
     return { qualifies: false, reason: "non-executing deletion-marked task" };
   }
   if (hasMaterialMutation(title, body)) return { qualifies: true, reason: "material-change signal found" };
+  if (current && /\b(?:change|alter|replace|remove|waive|bypass)\w*\b[^.!;\n]{0,180}\b(?:supported workflow|existing workflow|policy|rules?|prerequisites?)\b/i.test(body)) {
+    return { qualifies: true, reason: "material instructional policy/workflow change" };
+  }
   if (current && body.split(/\n|[.!;]/).some(clause =>
     !/^\s*(?:[-*\d.)]+\s*)?(?:no|not|without|never|unchanged|does not)\b/i.test(clause) &&
     /\b(?:change|alter|replace|remove|reject|permit|repair|fix|deny|admit)\w*\b.{0,180}\b(?:admission|execution|publication|dispatch|authorization|workload|binding)\b/i.test(clause))) {

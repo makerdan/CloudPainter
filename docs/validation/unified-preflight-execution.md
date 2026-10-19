@@ -166,6 +166,44 @@ work does not require a fresh owner click or gratuitous revision.
 
 ## 6. Delivery, restart and unsupported routes
 
+### Interrupted provisioning (owner-directed repair, 2026-10-19)
+
+`new-plan.mjs` now validates the deterministic rendered candidate before reserving
+an ID. Publication/IO failures after reservation still retain a consumed
+`reserved` or `incomplete` identity; they are not clean admission failures.
+
+Retrieve the actual record from the task environment where provisioning failed.
+The read-only `provisioningContext(root,id)` export in
+`scripts/failure-gate/plans.mjs` returns `id`, `nativeTaskRef`, `specHash` and
+`recordHash` (the full observed record including history). Save these exact
+observations in a repository-relative JSON file, then use:
+
+```sh
+node scripts/complete-provisioning.mjs "$UNIFIED_TASK_ID" expected-reservation-context.json
+```
+
+Use this distinct operation only with applicable owner authorization and verified
+native lifecycle/scope. It preserves the same recorded specification, ID, native
+linkage, contract, representation, tier and workload fingerprint. A per-ID
+single-flight lease and the existing target lease exclude concurrent recovery
+and workload execution; stale observations, admitted/terminal records, changed
+workloads/contracts, symlinks and conflicting files refuse without replacement.
+An existing exact complete plan can finish interrupted publication; partial or
+different bytes are preserved and blocked. Do not remove uncertain leases.
+
+The operation appends retry/publication history and never accepts replacement
+specification fields. If the recorded candidate cannot pass, an explicit
+supported, audited specification-correction route is required; this command does
+not provide one. Do not re-provision, hand-edit the ledger or assume a missing
+record in another checkout is permission to reconstruct it.
+
+Completion is provisioning only, not host authorization, native reconciliation,
+preflight, validation or installation acceptance. Continue sections 1–4 normally.
+Local control-file reads are bounded, leases fail fast, and the command spawns
+no workload or service children; its Git preservation probes retain their finite
+timeouts. Fixture and maintenance evidence:
+`app-support-ops-gate-maintenance.md`.
+
 Ignored `.local/tasks` plans do not automatically reach another task checkout.
 Deliver exact sealed bytes via the authoritative native payload or a tracked
 delivery file; verify SHA and authoritative existing binding before writing a

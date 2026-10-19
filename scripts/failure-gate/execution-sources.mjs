@@ -18,6 +18,7 @@ export function executionSources(root) {
     "scripts/validate-task-plans.mjs",
     "scripts/validation-tier.mjs",
     "scripts/new-plan.mjs",
+    "scripts/complete-provisioning.mjs",
     "scripts/run-validation.mjs",
     "scripts/check-failure-gate.mjs",
     "scripts/check-regression-preflight.mjs",

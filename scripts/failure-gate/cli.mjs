@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { readJson, registry, baseline, warnings, policy } from "./store.mjs";
-import { provision, checkPlan, amend, cancel, regressionPreflight } from "./plans.mjs";
+import { provision, checkPlan, amend, cancel, regressionPreflight, completeProvisioning } from "./plans.mjs";
 import { run, selfClassify, closeOwnerDirection } from "./runner.mjs";
 import { validateSelectedPlan } from "../check-regression-guard.mjs";
 import { preflight, prepare, dispatchCommand } from "./preflight.mjs";
@@ -15,6 +15,9 @@ export async function main(action, args = process.argv.slice(2)) {
       case "new":
         if (args.length !== 1) throw new Error("Usage: new-plan.mjs <repository-relative-spec.json>");
         console.log(provision(ROOT, readJson(ROOT, id))); break;
+      case "complete-provisioning":
+        if (args.length !== 2) throw new Error("Usage: complete-provisioning.mjs ID expected-reservation-context.json");
+        console.log(JSON.stringify(completeProvisioning(ROOT, id, readJson(ROOT, second)))); break;
       case "check": {
         if (args.length > 1) throw new Error("Usage: check-failure-gate.mjs [task-id]");
         if (Object.hasOwn(process.env, "TASK_PLAN_FILE")) {
