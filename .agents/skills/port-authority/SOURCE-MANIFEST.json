@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "skillIdentity": "port-authority",
-  "revisionLabel": "core-default revision",
+  "revisionLabel": "historical core-default revision; not the current source manifest",
   "scope": "definition/package authoring; isolated package checks only",
   "canonicalSourceRoot": ".agents/skills/port-authority",
   "originalArchive": {
@@ -45,7 +45,7 @@
       }
     ]
   },
-  "deliveredCanonicalSources": [
+  "historicalCanonicalSources": [
     {
       "path": ".agents/skills/port-authority/SKILL.md",
       "bytes": 10373,
@@ -107,7 +107,7 @@
       "mode": "0o644"
     }
   ],
-  "packageRegressionRuns": [
+  "historicalPackageRegressionRuns": [
     {
       "run": 1,
       "archivePath": "validation/run-1.log",
@@ -163,7 +163,7 @@
       }
     }
   ],
-  "checks": {
+  "historicalChecks": {
     "sourceFileCount": 10,
     "relativeReferenceLinks": "passed",
     "nodeSyntaxAllRuntimeAndTestModules": "passed",
@@ -172,7 +172,7 @@
     "defaultBehaviorCasesAdded": 11,
     "staticContractCases": 5
   },
-  "readingMetrics": {
+  "historicalReadingMetrics": {
     "originalRequiredWords": 10369,
     "coreRequiredWords": 2689,
     "allRevisedInstructionWords": 4348,

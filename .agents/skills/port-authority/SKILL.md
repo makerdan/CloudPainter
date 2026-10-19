@@ -29,11 +29,23 @@ supported supervised steps; do not introduce another tier, bypass admission or c
 another approval system. Port Authority control-readiness labels are not Unified task
 completion states, and package checks alone never establish a task's tier PASS.
 
-Before implementing or activating a control, verify its ownership, authorization,
-finite-execution, cleanup and acceptance requirements against the actual host.
-Unknown requirements block only the affected control.
+Use the adopted pre-implementation preflight and supported amendment routes;
+Port Authority adds no Start interceptor, plan editor or admission authority.
+An adequate authorized plan needs no gratuitous amendment. A post-Start change
+uses the host's actual revision/seal/binding route, not an in-place sealed edit.
+Pause affected work when a gap is found; establish safe quiescence or use the
+supported authorized cancellation route before changing an active run's plan,
+binding, limits or resource configuration. A plan amendment is not permission to
+restart services, reclaim processes or clear leases, and grants no retroactive
+authorization. Do not stop unrelated work.
 
-Use canonical `.agents` sources.
+Read [the core runtime contract](reference/runtime-contract.md) before implementing,
+adapting, testing or activating runtime controls. Read
+[advanced controls](reference/advanced-controls.md) only when those features are
+requested or an audited dependency needs an explicitly approved extension.
+Use [symptom guidance](reference/symptom-guidance.md) only for the affected symptom.
+
+Use canonical `.agents` sources and the full applicable reference closure.
 An authorized original package may be the source for new definition installation;
 do not treat a runtime mirror, alternate definition or remembered prompt as authority.
 Choose routine programming methods within approved boundaries without a coding diary.
@@ -159,8 +171,19 @@ Per control/caller, report **STAGED**, **CORE_VERIFIED**, **ADVANCED_VERIFIED** 
 blocked, not-run and justified-not-applicable checks. Staging and isolated tests
 do not prove host activation, validation completion or independent acceptance.
 
-When independent verification is required, inspect first, list gaps before scoped
-repair, invalidate affected proof and obtain fresh independent post-repair acceptance.
+Two acceptance runs are required runtime evidence for newly activated controls,
+not a requirement for a separate reviewer. The authorized implementer may obtain
+them through the supported route. Separate independent review is optional unless
+the owner selects it or an identifiable already-approved requirement calls for it.
+Without that basis, record review as "not selected," not pending or blocked, and
+do not create a verifier task or require independent approval. Required runtime
+checks, safe cleanup and truthful readiness reporting still apply.
+
+When separate review is selected/required, identify that basis and its scope.
+A read-only verifier reports findings without edits or workloads. Repair authority,
+if separately selected, follows its actual scope; it is not implied by review.
+Renew affected separate review after repair only while it remains selected/required.
+Never claim earlier evidence certifies changed delivery.
 Use canonical Paired Task Orchestration if it is actually selected; do not embed a
 second pairing protocol here or automatically create tasks, approvals or hooks.
 

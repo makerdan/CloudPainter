@@ -1,4 +1,4 @@
-# Port Authority — core-default revision
+# Port Authority — Failure Gate Unified compatibility revision
 
 This package updates the existing `port-authority` identity. It is not a second
 Port Authority Core/Heavy skill and does not publish or activate workspace skills.
@@ -13,11 +13,36 @@ Port Authority Core/Heavy skill and does not publish or activate workspace skill
 - All production indicators block the default profile; the independently attested
   development exception is advanced-only.
 - Validation approval, tiers, baseline policy, diagnostic retries and completion
-  belong to the actual adopted validation contract, not duplicated v4 instructions.
+  belong to Failure Gate Unified when adopted, otherwise the verified host policy.
 - Advanced reclaim retains real attestation, exact checked scope/claim/revocation,
   safe signaling and acknowledged outcome storage. Missing providers remain blocked.
-- Failure Gate Core does not supply pre-existing-process reclaim. It is not needed
+- Failure Gate Unified does not supply pre-existing-process reclaim authority. It is not needed
   for an ordinary Port Authority installation, and an advanced flag grants nothing.
+
+## Failure Gate Unified compatibility
+
+Applicable task checks use Unified's admitted plan, task ID and one assigned tier,
+not a second runner authority, extra tier or approval system. Two consecutive host
+acceptance runs remain evidence for affected control activation, through the supported
+assigned-tier route; they do not gate unrelated plan publication or add two approvals.
+Package acceptance is not a tier PASS or application readiness.
+
+Required runtime acceptance evidence does not require a separate reviewer. The
+authorized implementer may obtain it. Separate review is optional unless explicitly
+selected or required by an identifiable already-approved requirement; otherwise
+record it as not selected, not pending or blocked. Runtime watchdog/cleanup
+acknowledgements remain required mechanisms, not human/Agent approval loops.
+
+Use Unified/Regression Guard's adopted preflight and supported post-Start amendment
+routes. Port Authority adds no Start interceptor or plan editor. A task amendment
+does not authorize service disruption, lease deletion or reclaim; pause affected
+work and establish safe quiescence before changing an active run's configuration.
+
+Boot/process/socket/lease identity protects ownership and exclusion, not Unified task
+admission. Keep these runtime safeguards. Unified's owner-directed gate repair does
+not authorize uncertain-lease deletion, reclaim or service disruption. Missing optional
+reclaim capability blocks only work that depends on it. Definition installation does
+not repair an app's existing wiring or grant it new recovery capabilities.
 
 The hardened lifecycle engine is retained, not rewritten to achieve a smaller
 line count. Process-incarnation identity, independent startup/watchdog registration,
@@ -32,8 +57,8 @@ It includes four runtime modules, three reference modules and two test modules.
 Add the complete package through the workspace's supported Skills process for
 workspace reuse; authoring this package does not publish it automatically.
 
-Use `usage-prompt.txt` to request application to an app through canonical Paired Task
-Orchestration. That prompt is a proposed invocation, not an existing approval.
+Use `usage-prompt.txt` to request a scoped application plan. It does not select a
+paired workflow or independent verifier by default and is not implementation approval.
 The app's own canonical sources, policies, capabilities and task permissions must
 be discovered there. Installing this definition is not app wiring or host acceptance.
 
@@ -53,7 +78,15 @@ were created here.
 
 ## Verification scope
 
-See the bundled authoring verification report and raw run logs. They distinguish
+See `CLOCK-TEST-REPAIR.md` for the current stage-specific clock-test repair and
+observed package results. `PREFLIGHT-REVIEW-VERIFICATION.md` records earlier
+wording-only checks, not current full-runtime acceptance.
+`COMPATIBILITY-VERIFICATION.md` preserves earlier complete runtime runs: 74/75
+and 75/75, not two consecutive complete passes. Those runs were not repeated or
+reclassified as current full-runtime acceptance. `VERIFICATION-REPORT.md` and
+`SOURCE-MANIFEST.json` are also historical; `PACKAGE-MANIFEST.json` fingerprints
+the current delivered files.
+The reports distinguish
 syntax/package checks, isolated default/advanced regressions, actual host acceptance
 and independent review. Test-only providers and profile prefixes remain inside private
 fixtures and must never be shipped as genuine attestation/authorization adapters.

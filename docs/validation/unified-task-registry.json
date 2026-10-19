@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
-  "revision": 28,
+  "revision": 36,
   "records": {
     "FGU-81af9606-cc13-465c-99a0-820e95ec1e03": {
       "id": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
@@ -395,6 +395,202 @@
         "state": "PASS",
         "runId": "bbd09dda-b2bd-422a-ab2c-d69c84a0709e",
         "at": "2026-10-18T00:07:10.183Z"
+      }
+    },
+    "FGU-d889655a-2deb-421c-98bf-a5141e2d04d3": {
+      "id": "FGU-d889655a-2deb-421c-98bf-a5141e2d04d3",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc",
+      "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-d889655a-2deb-421c-98bf-a5141e2d04d3.md",
+      "spec": {
+        "title": "Integrate Port Authority Clock Repair",
+        "nativeTaskRef": "#50",
+        "what": "Install exactly the approved Port Authority clock-test-repair ZIP under the canonical .agents skill directory and repair only the existing supervised focused proof. This fixes wrong-phase timeout classification and skipped independent queue evidence at the private package-test execution boundary. The owner additionally approved changing only the private replacement waiter's queue limit to 8000ms, preserving installed package bytes, first-workload limits and all exit/cleanup assertions; no live controls are activated.",
+        "tier": "test-fast",
+        "why": "Owner-approved private replacement-waiter queue headroom correction only; same complete focused workload and unchanged host limits.",
+        "coverageEvidence": "Inspected docs/validation/unified-tiers.json via the project tier reader: definition hash 3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc. Update only scripts/port-authority-clock-proof.mjs within its existing step, verifying the new ZIP and installed manifest bytes and syntax, and running exact package cases through node test-name filtering without replacement bodies. Three independent wall-clock reversal cases plus repaired expired-admission, execution-budget, direct-dispatcher, async/hook, synchronous-supervisor, late-zero and core execution-budget cases fit the focused route; no author full suite. Supported execution is pnpm run test-fast -- with this generated ID and observed native sealed context. The current Unified pin is 2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22 and Regression Guard is adopted as unified-v4; preserve both.",
+        "done": [
+          "Verify ZIP attached_assets/port-authority-clock-test-repair_1792370288101.zip digest 9ea10f440242655f9a0bfa800e7cf803602186365de243ed2356c191111f3098, CRC, safe unique regular paths, all 33 manifest entries and sole manifest self-exclusion before installing exactly its 34 members.",
+          "Installed .agents/skills/port-authority/SKILL.md hash is b495c93a5fe9495d396fb8615a1cca6eaf66d01244072f05ff58790406102717; all installed members match archive bytes and no older variant or runtime mirror supplies source.",
+          "The existing admitted proof checks archive and installed manifest bytes, syntax-checks all four runtime and both test modules, and executes the three exact phase cases and smallest related repaired budget cases without weakening assertions, raising host limits or substituting local fixtures. The sole owner-approved private test-body correction gives the execution-budget replacement waiter 8000ms queue headroom instead of its inherited 5000ms; installed bytes and all detecting assertions remain exact.",
+          "Separate startup expiry proves exit 4 with no dispatch and retained recovery-required lease; dispatched expiry proves exit 1 with workload identity, reversal after dispatch and verified exact-incarnation cleanup; independent queue expiry proves exit 3, reversal while queued and byte-identical live-owner lease.",
+          "Preserve historical records, IDs, reservations, seals, bindings and runs for all prior identities including native tasks #13 and #41; preserve current Unified and Regression Guard sources, pins, baseline, tier definitions, adjacent skills, inactive wiring and unrelated files.",
+          "Publish docs/validation/port-authority-clock-repair-delivery.md with generated identity, seal, single tier, exact changed files and fingerprints, commands/results, recurrence map and honest limitations. No live process, port, database, CI, deployment or runtime activation."
+        ],
+        "outOfScope": [
+          "Application code, live services/processes, ports, databases, hooks, CI, deployment, production controls and runtime mirror installation.",
+          "Unified or Regression Guard source/pin changes, tier-definition edits, baseline edits, historical reopening/rebinding or ledger edits outside normal provisioner/amendment/runner writes.",
+          "New tiers, raised budgets, direct/unbound package checks, full-package acceptance under insufficient bounds, retries until lucky, generic authority restoration or extra reviewer requirements."
+        ],
+        "steps": [
+          "Inspect current source, archive, schema, baseline, workload and host task records; prepare the complete current-contract plan, provision a new identity and reconcile its exact seal into the native payload. Present scope, identity, coverage and Regression Guard; pass admission and current host authorization before implementation.",
+          "Record historical and protected fingerprints, reverify package safety and digest and copy only exact canonical package members, preserving adjacent sources and inactive wiring.",
+          "Update only the existing supervised proof to compare archive and installed manifest bytes, syntax-check the package and run exact independent phase and repaired budget cases, with only the approved private replacement-waiter 8000ms queue correction. Keep positive dispatch, actual clock reversal, exact exit and cleanup assertions, and preserve uncertain fixture leases.",
+          "Reassess scope and workload against the seal; use a supported same-ID amendment and renewed native reconciliation only for a material change before execution. Run the entire single bound tier without skipped original steps or direct package invocations.",
+          "Reconcile actual regression assertions and preservation fingerprints and publish revision-bound delivery with commands, observed results, exact diff and limitations; distinguish focused proof from author logs, optional review and activation."
+        ],
+        "baselines": [],
+        "regression": {
+          "mode": "normal",
+          "covers": "Startup-inclusive expiry is misclassified as dispatched timeout. Dispatched timeout is asserted without positive workload evidence. Queue expiry is skipped after a failing execution assertion. Related short-budget cases confuse startup denial with post-dispatch cleanup.",
+          "testLocation": "scripts/port-authority-clock-proof.mjs orchestrates the unchanged exact package tests in .agents/skills/port-authority/tests/hardening.test.mjs (three wall-clock reversal cases and related repaired budgets) and .agents/skills/port-authority/tests/core.test.mjs (execution-budget case); old scripts/fixtures/port-authority-clock-cases.mjs.txt is preserved but not used as replacement proof.",
+          "checks": "Assert exact startup exit 4, absent dispatch and retained recovery-required lease. Assert exact dispatched exit 1, workload incarnation, actual reversal and quiescent release. Assert independent queue exit 3, queued reversal, absent dispatch/acquisition and byte-identical owner lease. Assert positive dispatch before related post-dispatch timeout and cleanup expectations. Verify exact package source, selected case execution counts, zero failures/skips/cancellations and syntax inside the bound step; inspect old combined/wrong-phase assertions against these detecting conditions."
+        },
+        "regressionAssessment": {
+          "classification": "material",
+          "rationale": "The focused proof governs existing timeout classification, finite execution and cleanup evidence, so normal coverage applies despite package-installation wording.",
+          "scopeReview": "Reviewed all eight categories; affected material components are bug-fix, error-handling, concurrency-lifecycle and performance-reliability in private package proof, not application or live runtime changes.",
+          "coverageReview": "The explicit bound proof script executes package-level fixtures at the affected boundary, with immutable archive and installed-byte verification. Only the approved private replacement-waiter queue override changes a case body; first-workload timing, all exact assertions and the three phase bodies remain unchanged. Initial failed run is retained, the corrected full tier must renew evidence, and negative detection is established by inspecting exact prior combined assertions.",
+          "risks": [
+            {
+              "id": "startup",
+              "category": "bug-fix",
+              "change": "Wrong-phase classification accepts or expects post-dispatch status after startup expiry.",
+              "layer": "private package timeout and cleanup proof boundary"
+            },
+            {
+              "id": "dispatch",
+              "category": "error-handling",
+              "change": "Timeout cleanup expectations lack proof of actual dispatched workload identity.",
+              "layer": "private package timeout and cleanup proof boundary"
+            },
+            {
+              "id": "queue",
+              "category": "concurrency-lifecycle",
+              "change": "Execution assertion failure suppresses independent queue expiry evidence.",
+              "layer": "private package timeout and cleanup proof boundary"
+            },
+            {
+              "id": "budgets",
+              "category": "performance-reliability",
+              "change": "Related startup-inclusive budget fixtures assume dispatch before cleanup assertions.",
+              "layer": "private package timeout and cleanup proof boundary"
+            }
+          ],
+          "coverage": [
+            {
+              "risk": "startup",
+              "scenario": "Startup-inclusive expiry is misclassified as dispatched timeout.",
+              "testLocation": "scripts/port-authority-clock-proof.mjs",
+              "assertion": "Assert exact startup exit 4, absent dispatch and retained recovery-required lease.",
+              "layer": "private package timeout and cleanup proof boundary"
+            },
+            {
+              "risk": "dispatch",
+              "scenario": "Dispatched timeout is asserted without positive workload evidence.",
+              "testLocation": "scripts/port-authority-clock-proof.mjs",
+              "assertion": "Assert exact dispatched exit 1, workload incarnation, actual reversal and quiescent release.",
+              "layer": "private package timeout and cleanup proof boundary"
+            },
+            {
+              "risk": "queue",
+              "scenario": "Queue expiry is skipped after a failing execution assertion.",
+              "testLocation": "scripts/port-authority-clock-proof.mjs",
+              "assertion": "Assert independent queue exit 3, queued reversal, absent dispatch/acquisition and byte-identical owner lease.",
+              "layer": "private package timeout and cleanup proof boundary"
+            },
+            {
+              "risk": "budgets",
+              "scenario": "Related short-budget cases confuse startup denial with post-dispatch cleanup.",
+              "testLocation": "scripts/port-authority-clock-proof.mjs",
+              "assertion": "Assert positive dispatch before related post-dispatch timeout and cleanup expectations.",
+              "layer": "private package timeout and cleanup proof boundary"
+            }
+          ]
+        },
+        "relevantFiles": [
+          "attached_assets/port-authority-clock-test-repair_1792370288101.zip",
+          ".agents/skills/port-authority/SKILL.md",
+          ".agents/skills/failure-gate-unified/SKILL.md",
+          ".agents/skills/regression-guard/SKILL.md",
+          "scripts/new-plan.mjs",
+          "scripts/amend-plan.mjs",
+          "scripts/failure-gate/plans.mjs",
+          "scripts/failure-gate/store.mjs",
+          "scripts/validate-task-plans.mjs",
+          "scripts/port-authority-clock-proof.mjs",
+          "scripts/fixtures/port-authority-clock-cases.mjs.txt",
+          "docs/validation/unified-local-execution.md",
+          "docs/validation/unified-policy.json",
+          "docs/validation/unified-tiers.json",
+          "docs/validation/failure-baseline.json",
+          "docs/validation/regression-guard-authoring.md",
+          "docs/validation/port-authority-clock-investigation.md"
+        ]
+      },
+      "planTemplate": "unified-v4",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-19T01:35:39.164Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-19T01:35:39.206Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "9631abaa-aecd-4e14-990e-0ff11f878e8d",
+          "state": "FAIL",
+          "at": "2026-10-19T01:38:46.995Z"
+        },
+        {
+          "kind": "amendment-start",
+          "from": "test-fast",
+          "to": "test-fast",
+          "fromDefinition": "3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc",
+          "toDefinition": "3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc",
+          "fromContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "toContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "coverageEvidence": "Inspected docs/validation/unified-tiers.json via the project tier reader: definition hash 3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc. Update only scripts/port-authority-clock-proof.mjs within its existing step, verifying the new ZIP and installed manifest bytes and syntax, and running exact package cases through node test-name filtering without replacement bodies. Three independent wall-clock reversal cases plus repaired expired-admission, execution-budget, direct-dispatcher, async/hook, synchronous-supervisor, late-zero and core execution-budget cases fit the focused route; no author full suite. Supported execution is pnpm run test-fast -- with this generated ID and observed native sealed context. The current Unified pin is 2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22 and Regression Guard is adopted as unified-v4; preserve both.",
+          "why": "Owner-approved private replacement-waiter queue headroom correction only; same complete focused workload and unchanged host limits.",
+          "at": "2026-10-19T01:51:12.562Z",
+          "coordination": {
+            "authorizationApplicability": "The owner answered Approve the private fixture correction to the explicit proposal of an 8-second private replacement-waiter queue budget with installed package bytes, host limits and all exit/cleanup assertions unchanged. This amendment applies only to that supported extension of task #50, using the existing generated ID and same test-fast tier.",
+            "evidenceImpact": "Initial admitted integration is preserved, including exact installed package bytes and full failed run 9631abaa-aecd-4e14-990e-0ff11f878e8d. Its failure was the replacement waiter returning 3 instead of 0. No active or uncertain run remains; the supervisor reported all steps quiescent. The private harness correction and full same-tier rerun require new evidence; no prior failed result is relabeled or retroactively certified."
+          },
+          "hostAuthorization": "AGENT_CHECK_NOT_MACHINE_VERIFIED"
+        },
+        {
+          "kind": "amended",
+          "from": "test-fast",
+          "to": "test-fast",
+          "fromContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "toContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "coverageEvidence": "Inspected docs/validation/unified-tiers.json via the project tier reader: definition hash 3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc. Update only scripts/port-authority-clock-proof.mjs within its existing step, verifying the new ZIP and installed manifest bytes and syntax, and running exact package cases through node test-name filtering without replacement bodies. Three independent wall-clock reversal cases plus repaired expired-admission, execution-budget, direct-dispatcher, async/hook, synchronous-supervisor, late-zero and core execution-budget cases fit the focused route; no author full suite. Supported execution is pnpm run test-fast -- with this generated ID and observed native sealed context. The current Unified pin is 2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22 and Regression Guard is adopted as unified-v4; preserve both.",
+          "why": "Owner-approved private replacement-waiter queue headroom correction only; same complete focused workload and unchanged host limits.",
+          "at": "2026-10-19T01:51:12.587Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "a3100529-1e7e-4b19-b3e7-b61ea538d536",
+          "state": "PASS",
+          "at": "2026-10-19T01:53:35.852Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "9631abaa-aecd-4e14-990e-0ff11f878e8d",
+          "reportPath": ".local/failure-gate/runs/FGU-d889655a-2deb-421c-98bf-a5141e2d04d3/9631abaa-aecd-4e14-990e-0ff11f878e8d/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T01:37:26.950Z"
+        },
+        {
+          "runId": "a3100529-1e7e-4b19-b3e7-b61ea538d536",
+          "reportPath": ".local/failure-gate/runs/FGU-d889655a-2deb-421c-98bf-a5141e2d04d3/a3100529-1e7e-4b19-b3e7-b61ea538d536/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T01:52:11.080Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "7030101d712c89b4c3d739443ff034346fb49de43d63f6ff3720004e423c5ec2",
+      "assessment": {
+        "state": "PASS",
+        "runId": "a3100529-1e7e-4b19-b3e7-b61ea538d536",
+        "at": "2026-10-19T01:53:35.852Z"
       }
     }
   }

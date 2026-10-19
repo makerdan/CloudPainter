@@ -1,4 +1,9 @@
-# Port Authority core-default — authoring verification
+# Historical Port Authority package verification
+
+This report and `validation/run-1.log` / `validation/run-2.log` describe the
+pre-compatibility revision only. They are retained historical evidence, not
+verification of the current sources. See `COMPATIBILITY-VERIFICATION.md` for
+the current Failure Gate Unified compatibility revision.
 
 **Result:** two consecutive complete isolated package runs passed on the delivered
 canonical source revision. This is package regression evidence, not application
@@ -95,4 +100,4 @@ The original entry point was 498 lines; the revised entry point is 168 lines.
 
 Actual adoption must still discover the app's capabilities and policy, implement the
 affected real callers, obtain required independent review and run the applicable
-authorized host acceptance checks. Failure Gate Core does not supply live reclaim.
+authorized host acceptance checks. Failure Gate Unified does not supply live reclaim authority.

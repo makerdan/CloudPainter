@@ -21,7 +21,7 @@ skill publication, policy activation or live process reclaim.
 | Action-capable cleanup interface as ordinary template | Default read-only inventory; action requires leading advanced profile plus genuine checked authority. |
 | Named resources, priority and verified reentry exposed together | Single outer lease by default; those features explicitly advanced. |
 | Attested exception available through shared admission | All production markers deny core; independent exception is advanced-only. |
-| v4 tier/ignore/provenance/retry/completion instructions duplicated | Actual adopted validation contract owns those rules; no new tiers, ignores or automatic diagnostic retries here. |
+| Duplicated tier/ignore/provenance/retry/completion instructions | Failure Gate Unified when adopted, otherwise the verified host contract, owns those rules; no new tiers, ignores or automatic diagnostic retries here. |
 | Application-timer/pool/browser/WebSocket guidance in main flow | Symptom-specific reference; no unrelated app audit by default. |
 
 These are approved behavioral boundaries, not claims of semantics-preserving prose
@@ -44,7 +44,9 @@ continues until actual approved cutover.
 - Retained uncertain/error/legacy/launch-gap state; no heartbeat-age takeover or blind unlink.
 - Two consecutive authorized acceptance runs for activated controls; fixtures do not prove deployed wiring.
 - Stage-specific expected-versus-actual outcomes; correct negative cases do not excuse missing requirements.
-- Existing independent review remains independent; scoped repair renews affected proof.
+- Existing selected/required independent review remains separate; scoped repair
+  renews affected proof only while that review remains selected/required. There is
+  no default reviewer prerequisite; runtime watchdog independence is unchanged.
 - Canonical sources/deliverables outside `.local`; disposable runtime/fixture state is distinct.
 
 ## Regression Guard
@@ -60,7 +62,7 @@ Add actual default-profile regressions for read-only busy/free discovery, invali
 production inputs, denied action/manifest/reentry/priority/resource options, unconfigured
 adapters, raw exits, same-file exclusion, queue expiry, finite limits and execution expiry.
 
-Replace obsolete phase-count/seven-file/v4-retry wording assertions with complete
+Replace obsolete phase-count, package-size and retry wording assertions with complete
 core requirement IDs C01–C12 and explicit stage/advanced/host-evidence boundaries.
 These are static contract checks, not proof of installed application behavior.
 
