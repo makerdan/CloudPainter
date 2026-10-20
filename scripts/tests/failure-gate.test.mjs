@@ -1557,7 +1557,7 @@ function poeSpec(file, cwd, nativeTaskRef = "#" + poeNativeRef++, tierName = "te
 }
 test("Poe checks are the exact mocked suites in standard and inherited tiers", async t => {
   const root = governed(t);
-  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  const after = skillPackageBefore();
   assertPoeDelta(root, after);
   for (const name of TIERS) for (const [file, cwd] of poeFiles) {
     const id = provision(root, poeSpec(file, cwd, undefined, name));
@@ -1601,7 +1601,7 @@ test("Poe checks are the exact mocked suites in standard and inherited tiers", a
 test("Poe workload changes preserve prior checks, limits, prerequisites and the fast definition", t => {
   const root = fixture(t);
   const before = ciDelivered();
-  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  const after = skillPackageBefore();
   assertPoeDelta(root, after);
   assert.deepEqual(after.tiers["test-fast"], before.tiers["test-fast"]);
   for (const name of TIERS) {
@@ -1624,7 +1624,7 @@ test("Poe workload changes preserve prior checks, limits, prerequisites and the 
 test("Poe stale and wrong-tier workloads deny dispatch and leave all historical bytes unchanged", async t => {
   const root = governed(t);
   const before = ciDelivered();
-  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  const after = skillPackageBefore();
   json(root, "docs/validation/unified-tiers.json", before);
   const historical = provision(root, governedSpec());
   const tombstone = provision(root, governedSpec({ nativeTaskRef: "#990" }));
@@ -2085,6 +2085,88 @@ test("Unified gate-source changes cannot turn an observed raw command pass into 
   assert.equal(result.changedGateSources[0].file, "scripts/failure-gate/context.mjs");
   assert.equal(registry(root).records[id].assessment.state, "INCOMPLETE");
 });
+function skillPackageBefore() {
+  const before = readJson(SOURCE, "docs/validation/evidence/skill-package-tiers-before.json");
+  assert.equal(sha(JSON.stringify(before)), "6c00f6acd84534a2e81f0dbaf268594f22c864d66a827b3582da8e5fa0c21cb3");
+  return before;
+}
+const skillPackageStep = {
+  name: "skill-package-integrity", cwd: ".", adapter: "node-tap",
+  argv: ["node", "--test", "--test-reporter=tap", "--test-timeout=10000", "scripts/tests/skill-package-integrity.test.mjs"],
+  retryPrefix: ["node", "--test", "--test-reporter=tap", "--test-timeout=10000", "--test-name-pattern"],
+  retrySuffix: ["scripts/tests/skill-package-integrity.test.mjs"],
+};
+function assertSkillPackageDelta(root, after) {
+  const before = skillPackageBefore();
+  const unchanged = structuredClone(after);
+  assert.deepEqual(unchanged.tiers["test-fast"].steps.pop(), skillPackageStep);
+  assert.deepEqual(unchanged, before, "Only the exact approved fast step is appended; every prior field is preserved");
+  json(root, "docs/validation/unified-tiers.json", after);
+  for (const name of TIERS) {
+    assert.deepEqual(tier(root, name).steps.filter(step => step.name === skillPackageStep.name), [skillPackageStep],
+      `${name} inherits the exact integrity step once`);
+  }
+}
+test("Skill package registration preserves the complete prior table and exact inherited check", t => {
+  const root = fixture(t);
+  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  assertSkillPackageDelta(root, after);
+  for (const mutation of ["missing", "duplicate", "alias", "timeout", "retry", "budget", "prerequisite", "old-step"]) {
+    const changed = structuredClone(after);
+    const fast = changed.tiers["test-fast"];
+    if (mutation === "missing") fast.steps.pop();
+    if (mutation === "duplicate") fast.steps.push(structuredClone(skillPackageStep));
+    if (mutation === "alias") fast.steps.at(-1).argv = ["node", "-e", "process.exit(0)"];
+    if (mutation === "timeout") fast.steps.at(-1).argv[4] = "--test-timeout=20000";
+    if (mutation === "retry") fast.steps.at(-1).retrySuffix = ["different.test.mjs"];
+    if (mutation === "budget") fast.timeoutMs++;
+    if (mutation === "prerequisite") changed.tiers["test-heavy"].requires = [];
+    if (mutation === "old-step") fast.steps[0].argv = ["node", "-e", "process.exit(0)"];
+    assert.throws(() => assertSkillPackageDelta(root, changed), assert.AssertionError, mutation);
+  }
+});
+test("Skill package workload rejects stale and wrong-tier context without rewriting historical contracts", async t => {
+  const root = governed(t);
+  const after = readJson(SOURCE, "docs/validation/unified-tiers.json");
+  json(root, "docs/validation/unified-tiers.json", skillPackageBefore());
+  const input = nativeTaskRef => {
+    const spec = governedSpec({ nativeTaskRef });
+    spec.regression.testLocation = "scripts/tests/failure-gate.test.mjs";
+    spec.regressionAssessment.coverage[0].testLocation = spec.regression.testLocation;
+    return spec;
+  };
+  const historical = provision(root, input("#1800"));
+  const tombstone = provision(root, input("#1801"));
+  cancel(root, tombstone, "Disposable package registration historical tombstone");
+  const stale = provision(root, input("#1802"));
+  const ctx = observed(root, stale);
+  const ledgerFile = path.join(root, "docs/validation/unified-task-registry.json");
+  const ledger = fs.readFileSync(ledgerFile);
+  const plans = Object.values(registry(root).records).map(record =>
+    [record.planPath, fs.readFileSync(path.join(root, record.planPath))]);
+  json(root, "docs/validation/unified-tiers.json", after);
+  assert.throws(() => preflight(root, stale, context(root, stale), ctx), /definition changed/);
+  const sentinel = path.join(root, "sentinel");
+  await assert.rejects(dispatch(root, stale, context(root, stale), ctx,
+    () => fs.writeFileSync(sentinel, "unsafe")), /definition changed/);
+  await assert.rejects(run(root, stale, "test-fast", context(root, stale), null, { context: ctx }), /definition changed/);
+  assert.equal(fs.existsSync(sentinel), false);
+  assert.deepEqual(fs.readFileSync(ledgerFile), ledger);
+  for (const [file, bytes] of plans) assert.deepEqual(fs.readFileSync(path.join(root, file)), bytes);
+  const priorRecords = structuredClone(registry(root).records);
+  const fresh = provision(root, input("#1803"));
+  const next = observed(root, fresh);
+  assert.equal(next.tier, "test-fast");
+  assert.equal(registry(root).records[fresh].tierHash, sha(JSON.stringify(after)));
+  assert.equal(preflight(root, fresh, context(root, fresh), next).assessment, "LOCAL_PLAN_VALID_HOST_CHECKS_REQUIRED");
+  const admittedLedger = fs.readFileSync(ledgerFile);
+  for (const wrong of TIERS.filter(name => name !== "test-fast")) {
+    await assert.rejects(run(root, fresh, wrong, context(root, fresh), null, { context: next }), /Wrong contract/);
+  }
+  assert.deepEqual(fs.readFileSync(ledgerFile), admittedLedger);
+  for (const id of [historical, tombstone, stale]) assert.deepEqual(registry(root).records[id], priorRecords[id]);
+});
+
 test("output bounds cannot report PASS or leave fixture children running", async t => {
   const root = fixture(t, 'process.stdout.write("x".repeat(2000000));setInterval(()=>{},100);');
   const id = provision(root, spec());

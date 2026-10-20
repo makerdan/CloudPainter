@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
-  "revision": 117,
+  "revision": 121,
   "records": {
     "FGU-81af9606-cc13-465c-99a0-820e95ec1e03": {
       "id": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
@@ -1711,6 +1711,111 @@
         "state": "PASS",
         "runId": "fdc53c8a-84aa-4b56-ba50-c8c785e7209c",
         "at": "2026-10-19T21:13:37.004Z"
+      }
+    },
+    "FGU-836b3c19-83da-4639-95fb-75420a1f8973": {
+      "id": "FGU-836b3c19-83da-4639-95fb-75420a1f8973",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "053047da1f12470f6d06d4c87f1c38522799819f606473d8ff24c7ceb6b4385e",
+      "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-836b3c19-83da-4639-95fb-75420a1f8973.md",
+      "spec": {
+        "title": "Complete skill package provenance",
+        "nativeTaskRef": "#68",
+        "tier": "test-fast",
+        "what": "Add the six missing passive App Support Ops package provenance resources from the approved archive and a deterministic package-integrity test suite. Preserve every existing canonical definition and the Port Authority consumer byte-for-byte. The copied authoring baseline and application prompt remain inactive provenance, not newly adopted instructions. Record package comparisons and observed delivery evidence in the handoff.",
+        "why": "The amended fast tier includes the new deterministic package-integrity suite plus the existing gate, Regression Guard, source-helper and Port Authority proof checks, with no service or credential prerequisites.",
+        "coverageEvidence": "docs/validation/unified-tiers.json test-fast now has workspace-skill-sync, gate-unit, regression-guard, port-authority-clock and skill-package-integrity; the new suite uses node:test with a 10000 ms per-test deadline, within unchanged 120000 ms run, 60000 ms step and 5000 ms cleanup budgets. Invoke pnpm run test-fast -- ID with the exact sealed plan and observed native context in this assigned task environment.",
+        "baselines": [],
+        "done": [
+          "The six approved missing App Support Ops provenance files match their archive bytes; the existing definition and evals remain unchanged.",
+          "The package-integrity suite checks all eight regular members, seven manifest records, lengths, hashes, safe paths, frontmatter and required local references; isolated missing, altered, duplicate, unsafe and symlink fixtures reject.",
+          "All six current definitions, Router corrections, Port Authority package/runtime modules and private proof adjustments remain byte-identical to the pre-edit snapshot.",
+          "The handoff maps PKG-01 through RUN-01 to actual detecting cases, maintenance and assigned-tier outcomes, protected-history comparisons, recovery status and unverified external capabilities."
+        ],
+        "outOfScope": [
+          "Any canonical definition or current revision-pin alteration; Port Authority fixture authoring or removal of current private corrections.",
+          "Application behavior, runtime activation, workspace publication/mirror editing, remote CI configuration, database or storage mutation, secrets/provider operations, deployment or backup retirement.",
+          "Existing task contracts, IDs, tombstones, reservations, historical runs and baseline changes; only this new admitted identity may append supported normal history.",
+          "Independent review is not selected; no new SKILL.md output triggers file-only confirmation."
+        ],
+        "steps": [
+          "Copy exactly the six absent passive provenance members from the verified App Support Ops archive without changing existing files.",
+          "Implement the owning package-integrity test suite with bounded disposable negative fixtures and no external capabilities.",
+          "Compare all package members against approved inputs and preserve the current Router reconciliation and Port Authority proof unchanged.",
+          "Validate only the complete assigned fast tier with actual native plan context and write the revision-bound delivery handoff."
+        ],
+        "relevantFiles": [
+          ".agents/skills/app-support-ops/SKILL.md",
+          ".agents/skills/app-support-ops/evals/evals.json",
+          "attached_assets/app-support-ops-skill_(10.18.2026)_1792458739186.zip",
+          "docs/validation/unified-tiers.json",
+          "scripts/port-authority-clock-proof.mjs",
+          "docs/resource-recovery-coverage.md"
+        ],
+        "regression": {
+          "mode": "normal",
+          "covers": "The supporting package is incomplete, modified, duplicated or points outside the approved canonical tree.",
+          "testLocation": "scripts/tests/skill-package-integrity.test.mjs",
+          "checks": "Assert all eight regular members and seven unique manifest records match exact byte lengths and digests, and reject missing, altered, duplicate, unsafe-path and symlink fixtures."
+        },
+        "regressionAssessment": {
+          "classification": "material",
+          "rationale": "The current publication guard classifies the newly introduced instructional provenance resources as requiring material coverage assessment. Use a conservative normal data-integrity declaration for package consistency without changing the approved content, scope or instruction adoption.",
+          "scopeReview": "Reviewed all eight categories and actual package member effects. Current SKILL definitions, active instructions and runtime behavior remain unchanged; the explicitly covered boundary is consistency and path safety of newly delivered instructional provenance.",
+          "coverageReview": "The owning skill-package-integrity suite is explicitly registered in test-fast and will exercise canonical completeness plus disposable corrupted, unsafe and symlink fixtures at the filesystem package boundary.",
+          "risks": [
+            {
+              "id": "package-integrity",
+              "category": "data-integrity",
+              "change": "New package provenance and its supplied manifest must stay complete and mutually consistent without escaping the approved canonical directory.",
+              "layer": "filesystem package manifest and canonical resource boundary"
+            }
+          ],
+          "coverage": [
+            {
+              "risk": "package-integrity",
+              "scenario": "The supporting package is incomplete, modified, duplicated or points outside the approved canonical tree.",
+              "testLocation": "scripts/tests/skill-package-integrity.test.mjs",
+              "assertion": "Assert all eight regular members and seven unique manifest records match exact byte lengths and digests, and reject missing, altered, duplicate, unsafe-path and symlink fixtures.",
+              "layer": "filesystem package manifest and canonical resource boundary"
+            }
+          ]
+        }
+      },
+      "planTemplate": "unified-v4",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-20T01:43:39.258Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-20T01:43:39.286Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "e9d4382c-8a4a-416c-86ce-9ab663a60808",
+          "state": "PASS",
+          "at": "2026-10-20T01:48:42.575Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "e9d4382c-8a4a-416c-86ce-9ab663a60808",
+          "reportPath": ".local/failure-gate/runs/FGU-836b3c19-83da-4639-95fb-75420a1f8973/e9d4382c-8a4a-416c-86ce-9ab663a60808/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-20T01:47:10.813Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "a910de40bbc251acd9f3c5350e7d58d92dba55790e127dc8e7fa221c2b099c2c",
+      "assessment": {
+        "state": "PASS",
+        "runId": "e9d4382c-8a4a-416c-86ce-9ab663a60808",
+        "at": "2026-10-20T01:48:42.575Z"
       }
     }
   }

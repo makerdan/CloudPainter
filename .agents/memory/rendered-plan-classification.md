@@ -29,3 +29,6 @@ miss this coverage bypass; full rendered mixed-work negative controls matter.
 **How to apply:** When extending plan representations or scope classifiers, keep
 full-render exclusion cases and check that recorded assessment metadata neither
 creates nor erases material scope. Semantic coverage still needs executor review.
+For incoming package provenance whose instructional neutrality remains unresolved,
+map concrete consistency/path-safety coverage to that boundary. Preserve the
+approved scope rather than cycling declaration labels or relaxing policy to pass.

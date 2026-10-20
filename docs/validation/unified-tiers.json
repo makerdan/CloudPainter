@@ -11,7 +11,8 @@
         {"name":"workspace-skill-sync","cwd":".","adapter":"node-tap","argv":["node","--test","--test-reporter=tap","--test-timeout=45000","scripts/tests/workspace-skill-sync.test.mjs"],"retryPrefix":["node","--test","--test-reporter=tap","--test-timeout=45000","--test-name-pattern"],"retrySuffix":["scripts/tests/workspace-skill-sync.test.mjs"]},
         {"name":"gate-unit","cwd":".","adapter":"node-tap","argv":["node","--test","--test-reporter=tap","--test-timeout=45000","scripts/tests/failure-gate.test.mjs"],"retryPrefix":["node","--test","--test-reporter=tap","--test-timeout=45000","--test-name-pattern"],"retrySuffix":["scripts/tests/failure-gate.test.mjs"]},
         {"name":"regression-guard","cwd":".","adapter":"node-tap","argv":["node","--test","--test-reporter=tap","--test-timeout=45000","scripts/tests/check-regression-guard.test.mjs"],"retryPrefix":["node","--test","--test-reporter=tap","--test-timeout=45000","--test-name-pattern"],"retrySuffix":["scripts/tests/check-regression-guard.test.mjs"]},
-        {"name":"port-authority-clock","cwd":".","adapter":"node-tap","argv":["node","scripts/port-authority-clock-proof.mjs"]}
+        {"name":"port-authority-clock","cwd":".","adapter":"node-tap","argv":["node","scripts/port-authority-clock-proof.mjs"]},
+        {"name":"skill-package-integrity","cwd":".","adapter":"node-tap","argv":["node","--test","--test-reporter=tap","--test-timeout=10000","scripts/tests/skill-package-integrity.test.mjs"],"retryPrefix":["node","--test","--test-reporter=tap","--test-timeout=10000","--test-name-pattern"],"retrySuffix":["scripts/tests/skill-package-integrity.test.mjs"]}
       ]
     },
     "test-standard": {
