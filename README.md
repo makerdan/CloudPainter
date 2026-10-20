@@ -94,7 +94,7 @@ The Replit environment is configured for Node.js 24 and PostgreSQL 16. Use pnpm 
 Root commands:
 
 - `pnpm run typecheck` — typecheck shared libraries and workspace artifacts.
-- `PORT=26247 BASE_PATH=/ pnpm run build` — typecheck and build all packages from a shell. Choose an available port if that example port is occupied; managed workflows provide their own environment.
+- `PORT="$PORT" BASE_PATH=/ pnpm run build` — typecheck and build all packages from a shell using an explicitly supplied environment port; managed workflows provide their own environment.
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate client hooks and Zod schemas from the OpenAPI specification.
 - `pnpm --filter @workspace/db run push` — push Drizzle schema changes to the configured database; development use only by default.
 

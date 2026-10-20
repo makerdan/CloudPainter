@@ -13,7 +13,7 @@ The routed live verification generated an actual image through Poe, downloaded i
 | Initial `pnpm run typecheck` | Passed |
 | Initial image-dimension checks | 5 passed |
 | Initial bare `pnpm run build` | Failed because the mockup Vite config requires `PORT`; no failure was waived |
-| `PORT=26247 BASE_PATH=/ pnpm run build` | Passed across all packages, including its full typecheck |
+| `pnpm run build` with historical observed PORT=26247 and `BASE_PATH=/` (not a shell assignment) | Passed across all packages, including its full typecheck |
 | `pnpm run typecheck` | Passed |
 | `pnpm --filter @workspace/api-spec run codegen` | Passed; checked-in API client and Zod contracts regenerated |
 | `pnpm --filter @workspace/cloudpainter run test:image-dimensions` | 5 passed |

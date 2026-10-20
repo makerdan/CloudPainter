@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
-import { createServer } from 'node:net';
+import { execFileSync } from 'node:child_process';
+import { startCloudPainterTestServer } from '../../../scripts/runtime/owned-server.mjs';
 import { after, before, test } from 'node:test';
-import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright-core';
 
-const appDirectory = new URL('../', import.meta.url);
 const fixtures = [
   {
     name: 'dog portrait',
@@ -61,36 +59,9 @@ const HARNESS = `<!doctype html>
   };
 </script>`;
 
-let serverProcess;
+let ownedServer;
 let browser;
 let appUrl;
-let serverOutput = '';
-
-async function findAvailablePort() {
-  const server = createServer();
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
-  const { port } = server.address();
-  await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
-  return port;
-}
-
-async function waitForApp(url) {
-  const deadline = Date.now() + 20_000;
-  let lastError;
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return;
-    } catch (error) {
-      lastError = error;
-    }
-    await delay(200);
-  }
-  throw new Error(`CloudPainter did not start at ${url}.\n${serverOutput}\n${lastError ?? ''}`);
-}
 
 async function readPublicFixture(fixture) {
   const response = await fetch(fixture.url, { signal: AbortSignal.timeout(FIXTURE_TIMEOUT_MS) });
@@ -120,17 +91,8 @@ function contourBounds(points) {
 }
 
 before(async () => {
-  const port = await findAvailablePort();
-  appUrl = `http://127.0.0.1:${port}/`;
-  serverProcess = spawn('pnpm', ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-    cwd: new URL('.', appDirectory),
-    env: { ...process.env, PORT: String(port), BASE_PATH: '/' },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: process.platform !== 'win32',
-  });
-  serverProcess.stdout.setEncoding('utf8').on('data', chunk => { serverOutput += chunk; });
-  serverProcess.stderr.setEncoding('utf8').on('data', chunk => { serverOutput += chunk; });
-  await waitForApp(appUrl);
+  ownedServer = await startCloudPainterTestServer();
+  appUrl = ownedServer.url;
   browser = await chromium.launch({
     headless: true,
     executablePath: process.env.CHROMIUM_PATH || execFileSync('which', ['chromium'], { encoding: 'utf8' }).trim(),
@@ -139,14 +101,8 @@ before(async () => {
 });
 
 after(async () => {
-  await browser?.close();
-  if (serverProcess?.pid) {
-    try {
-      process.kill(process.platform === 'win32' ? serverProcess.pid : -serverProcess.pid, 'SIGTERM');
-    } catch (error) {
-      if (error.code !== 'ESRCH') throw error;
-    }
-  }
+  try { await browser?.close(); }
+  finally { await ownedServer?.stop(); }
 });
 
 test('varied public dog and cat fixtures retain usable local subject outlines', { timeout: 420_000 }, async () => {

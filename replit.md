@@ -139,7 +139,7 @@ Root commands:
 - `pnpm --filter @workspace/cloudpainter run typecheck` (and the API Server equivalent) — low-level consumer-only check, **not** complete standalone validation. It requires current declarations from `typecheck:libs`; otherwise missing-output/export and downstream implicit-any errors can be misleading. Root validation uses these low-level commands only after preparation.
 - `pnpm run test:workspace-typecheck` — isolated temporary fixtures exercise both focused routes with missing/stale declarations, warm repeats, nonexistent exports, library errors, and conflicting preparation. They do not modify live library outputs.
 - Supported declaration-preparation routes share a fail-fast `.workspace-typecheck.lock`. Do not run raw `tsc --build` alongside them. If a check is interrupted, confirm its process and children have stopped before removing a leftover lock; the runner never reclaims one automatically.
-- `PORT=26247 BASE_PATH=/ pnpm run build` — typecheck and build all packages from a shell. Choose an available port if that example port is occupied; managed workflows provide their own environment.
+- `PORT="$PORT" BASE_PATH=/ pnpm run build` — typecheck and build all packages from a shell using an explicitly supplied environment port; managed workflows provide their own environment.
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate client hooks and Zod schemas from the OpenAPI specification.
 - `pnpm --filter @workspace/db run push` — push Drizzle schema changes to the configured database; development use only by default.
 

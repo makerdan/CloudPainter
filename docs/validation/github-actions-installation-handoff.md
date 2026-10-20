@@ -111,7 +111,7 @@ a 45-minute timeout. The aggregate job has a five-minute timeout.
 | Local validation surface / exact command | CI coverage and decision |
 | --- | --- |
 | `pnpm --filter @workspace/api-spec run codegen` | Included before compilation. Then `git diff --exit-code -- lib/api-client-react/src/generated lib/api-zod/src/generated` and an untracked-file check fail if generated outputs are stale or newly emitted. |
-| `pnpm run build` with `PORT=4173 BASE_PATH=/` | Included; this root command runs `pnpm run typecheck` and all package builds. Covers `artifacts/api-server`, `artifacts/cloudpainter`, and `artifacts/mockup-sandbox` build/typecheck scripts, plus the workspace TypeScript project build. |
+| `pnpm run build` with environment-provided PORT and `BASE_PATH=/` | Included; this root command runs `pnpm run typecheck` and all package builds. Covers `artifacts/api-server`, `artifacts/cloudpainter`, and `artifacts/mockup-sandbox` build/typecheck scripts, plus the workspace TypeScript project build. |
 | `node --test scripts/ci/check-required-results.test.mjs` | Included; tests both the exported classifier and actual CLI exits, JSON parsing, required-job argument validation, and fail-closed results with synthetic environments. |
 | `node --test scripts/ci/api-test-coverage.test.mjs` | Included in the existing validation job; asserts the exact step-scoped disposable database URL and matching PostgreSQL service environment/port mapping before running local command stubs, rejects missing/mismatched service configuration, checks each stub's effective `DATABASE_URL`, rejects shared/secret-backed env and shell overrides, checks effective image-access/palettes/settings selection, rejects a comment-only settings mention, and preserves nonzero suite results. No database, live auth, provider, or real package command is used by this guard. |
 | `pnpm run test:regression-guard` | Included; tests the regression-guard checker and local task-plan runner using temporary fixtures. |
@@ -573,10 +573,11 @@ for the post-rebase update; generated build/test artifacts are ignored.
   1/1. They used a new disposable PostgreSQL 16.10 cluster initialized with
   `/nix/store/bgwr5i8jf8jpg75rr53rz3fqv5k8yrwp-postgresql-16.10/bin/initdb`,
   a temporary socket directory, a `pg_isready` readiness loop, and only
-  `DATABASE_URL=postgresql://postgres@127.0.0.1:55439/cloudpainter_test`.
+  DATABASE_URL=postgresql://postgres@127.0.0.1:55439/cloudpainter_test
+  (historical observed target, not an execution instruction).
   The server was stopped and the temporary directory removed.
 - Browser validation used the isolated Vite server at
-  `http://127.0.0.1:4178/`, the fabricated non-secret publishable test key,
+  http://127.0.0.1:4178/ (historical observed target, not an execution instruction), the fabricated non-secret publishable test key,
   and system Chromium 152.0.7977.64 at `/repl/tools/bin/chromium`.
   Instruments passed 4/4; drawing colors, keyboard shortcuts, and logo browser
   each passed 1/1; clipboard browser passed 3/3; on-device outline model passed

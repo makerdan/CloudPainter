@@ -5,7 +5,65 @@ import os from "node:os";
 import path from "node:path";
 import net from "node:net";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { scanText, scanRepository } from "../runtime-port-policy.mjs";
+import { configuredPort } from "../runtime/configured-port.mjs";
+
+const rootDirectory = fileURLToPath(new URL("../../", import.meta.url));
+const viteRequire = createRequire(new URL("../../artifacts/cloudpainter/package.json", import.meta.url));
+
+test("service configs reject invalid PORT and preserve managed bindings", async () => {
+  const { loadConfigFromFile } = await import(pathToFileURL(viteRequire.resolve("vite")));
+  const originalPort = process.env.PORT, originalBase = process.env.BASE_PATH;
+  const configPaths = ["artifacts/cloudpainter/vite.config.ts", "artifacts/mockup-sandbox/vite.config.ts"];
+  try {
+    process.env.BASE_PATH = "/runtime-config-proof/";
+    for (const raw of [undefined, "", "0", "-1", "1.5", "Infinity", "0xFF", "1e3", " 80", "65536", "1junk"]) {
+      assert.throws(() => configuredPort(raw), /PORT must/);
+      if (raw === undefined) delete process.env.PORT;
+      else process.env.PORT = raw;
+      for (const config of configPaths) {
+        await assert.rejects(loadConfigFromFile({ command: "serve", mode: "test" }, path.join(rootDirectory, config)), /PORT must/);
+      }
+      const env = { ...process.env };
+      delete env.DATABASE_URL; // Invalid port must refuse before app/data initialization.
+      const api = spawnSync(process.execPath, ["--import", "tsx", "src/index.ts"], {
+        cwd: path.join(rootDirectory, "artifacts/api-server"), env,
+        encoding: "utf8", timeout: 2000, maxBuffer: 16384,
+      });
+      assert.equal(api.status, 1, api.stderr);
+      assert.match(api.stderr, /PORT must/);
+      assert.doesNotMatch(api.stderr, /DATABASE_URL/);
+    }
+    for (const raw of ["1", "65535", "0080"]) assert.equal(configuredPort(raw), Number(raw));
+    // A held ephemeral port exercises actual returned config values without a
+    // fixed listener or permission to disturb a managed service.
+    const holder = net.createServer();
+    await new Promise(resolve => holder.listen(0, "127.0.0.1", resolve));
+    try {
+      process.env.PORT = String(holder.address().port);
+      for (const config of configPaths) {
+        const { config: actual } = await loadConfigFromFile({ command: "serve", mode: "test" }, path.join(rootDirectory, config));
+        assert.equal(actual.server.port, holder.address().port);
+        assert.equal(actual.preview.port, holder.address().port);
+        assert.equal(actual.server.strictPort, true);
+        assert.equal(actual.preview.strictPort, true);
+        assert.equal(actual.base, process.env.BASE_PATH);
+      }
+    } finally { await new Promise(resolve => holder.close(resolve)); }
+    const api = fs.readFileSync(path.join(rootDirectory, "artifacts/api-server/src/index.ts"), "utf8");
+    assert.match(api, /const port = configuredPort\(process\.env\["PORT"\]\)/);
+    assert.match(api, /app\.listen\(port,/);
+    for (const [artifact, route] of [["api-server", "/api"], ["cloudpainter", "/"], ["mockup-sandbox", "/__mockup"]]) {
+      const manifest = fs.readFileSync(path.join(rootDirectory, "artifacts", artifact, ".replit-artifact/artifact.toml"), "utf8");
+      assert.ok(manifest.includes(JSON.stringify(route)));
+    }
+  } finally {
+    if (originalPort === undefined) delete process.env.PORT; else process.env.PORT = originalPort;
+    if (originalBase === undefined) delete process.env.BASE_PATH; else process.env.BASE_PATH = originalBase;
+  }
+});
 
 // Deliberate policy violations are assembled as input data, not executable
 // ports in this test runner. Every input is scanned unmodified by scanText.
@@ -48,6 +106,7 @@ test("RG-RUNTIME-01 accepts environment configuration and explicit examples, not
   rejects("docs/operations.md", "```sh\ncurl " + url + "\n```");
   accepts("src/server.ts", `// server.listen(${literalPort})\nserver.listen(Number(process.env.PORT));`);
   rejects("src/server.ts", `server.listen(${literalPort}); // environment example`);
+  rejects("docs/operations.md", "`curl " + url + "` — that example port is occupied");
   rejects("src/server.ts", "fetch('http://" + "127.0.0.1:0/')");
 });
 
@@ -55,6 +114,16 @@ test("RG-RUNTIME-01 narrow platform/data rules do not exempt adjacent executable
   accepts("artifacts/app/.replit-artifact/artifact.toml", `localPort = ${literalPort}\nPORT = "${literalPort}"`);
   rejects("artifacts/app/.replit-artifact/artifact.toml", `run = "node server.js --port ${literalPort}"`);
   rejects("run.toml", `localPort = ${literalPort}`);
+  const workflow = fs.readFileSync(path.join(rootDirectory, ".github/workflows/cloudpainter-ci.yml"), "utf8");
+  accepts(".github/workflows/cloudpainter-ci.yml", workflow);
+  rejects(".github/workflows/copied.yml", workflow);
+  rejects(".github/workflows/cloudpainter-ci.yml", workflow.replace("PORT: " + String(4173) + "\n          CLOUDPAINTER_TEST_URL", "PORT: " + String(4174) + "\n          CLOUDPAINTER_TEST_URL"));
+  rejects(".github/workflows/cloudpainter-ci.yml", workflow + "\n          run: curl " + url);
+  const fakeDatabase = "postgresql://" + "fixture:fixture@poe-fixture.invalid:" + "1/fixture";
+  const placeholder = `process.env.DATABASE_URL = "${fakeDatabase}";`;
+  accepts("scripts/failure-gate/poe-fixture-env.mjs", placeholder);
+  rejects("scripts/failure-gate/poe-fixture-env.mjs", placeholder + `\nfetch("${fakeDatabase}");`);
+  rejects("scripts/copied-fixture.mjs", placeholder);
   const data = "http://" + "127.0.0.1:" + String(4173) + "/api/images/generate?prompt=private";
   accepts("scripts/tests/browser-safety-lanes.test.mjs", `request: () => ({ url: () => '${data}' }),`);
   rejects("scripts/tests/browser-safety-lanes.test.mjs", `fetch('${data}');`);

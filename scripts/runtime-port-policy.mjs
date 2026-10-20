@@ -13,6 +13,18 @@ const DATA_LITERALS = [
     reason: "Synthetic request.url() data passed to the provider-request guard; no network dispatch.",
   },
   {
+    file: "scripts/failure-gate/poe-fixture-env.mjs",
+    text: "postgresql://" + "fixture:fixture@poe-fixture.invalid:" + "1/fixture",
+    line: text => `process.env.DATABASE_URL = "${text}";`,
+    reason: "Exact gate-owned import placeholder; existing gate fixture asserts Pool/Client/Connection denial before transport. Not a database listener or connection.",
+  },
+  {
+    file: "scripts/tests/failure-gate.test.mjs",
+    text: "postgresql://" + "fixture:fixture@poe-fixture.invalid:" + "1/fixture",
+    line: text => `assert.equal(process.env.DATABASE_URL, '${text}');`,
+    reason: "Exact expected import placeholder in the existing executable zero-transport assertion; not a network target.",
+  },
+  {
     file: "scripts/ci/api-test-coverage.test.mjs",
     text: "postgresql://" + "postgres:ci-test-password@127.0.0.1:" + "5432/cloudpainter_test",
     line: text => `const disposableDatabaseUrl = '${text}';`,
@@ -63,7 +75,21 @@ function maskedComments(text) {
   return result + text.slice(end);
 }
 
-function platformConfiguration(file, line) {
+function platformConfiguration(file, line, text) {
+  // Exact CI service declarations, not executable shell assignments. Keep
+  // pairing with the actual service/step stanza: an adjacent curl/fetch or a
+  // copied literal in another file is still a finding.
+  if (file === ".github/workflows/cloudpainter-ci.yml") {
+    const webUrl = "http://" + "127.0.0.1:" + String(4173) + "/";
+    const databaseUrl = "postgresql://" + "postgres:ci-test-password@127.0.0.1:" + String(5432) + "/cloudpainter_test";
+    const browser = "          PORT: 4173\n          CLOUDPAINTER_TEST_URL: " + webUrl;
+    if (line === browser.split("\n")[1] && text.includes("      - name: Run browser checks against a CI-started local server\n        env:\n" + browser + "\n")) return true;
+    if (line === "          DATABASE_URL: " + databaseUrl &&
+        text.includes("    services:\n      postgres:\n") &&
+        text.includes("          POSTGRES_DB: cloudpainter_test\n") &&
+        text.includes("        ports:\n          - 5432:5432\n") &&
+        text.includes("      - name: Run database tests against the disposable PostgreSQL service\n        env:\n" + line + "\n")) return true;
+  }
   // Artifact manifests own their service routing and service.env PORT. This
   // does not exempt run/build commands embedded in those same manifests.
   return /^artifacts\/[^/]+\/\.replit-artifact\/artifact\.toml$/.test(file) &&
@@ -86,7 +112,6 @@ function markdownLines(text) {
     if (fence) return executable && !example ? line : "";
     // Historical result records and an explicitly labelled example are not
     // executable instructions. Other command spans remain scanned.
-    if (/\bthat example port\b/i.test(line)) return "";
     if (/^\s*-\s+`[^`]+`(?:\s+—|\s*:)\s+(?:passed\b|\d+\/\d+\s+passed\b)/i.test(line)) return "";
     return [...line.matchAll(/`([^`]+)`/g)].map(m => m[1]).join(" ");
   });
@@ -99,8 +124,8 @@ export function scanText(file, text) {
   };
   const lines = file.endsWith(".md") ? markdownLines(text) : (SOURCE_EXT.test(file) ? maskedComments(text) : text).split("\n");
   for (const [i, line] of lines.entries()) {
-    if (platformConfiguration(file, line)) {
-      exceptions.push({ file, line: i + 1, reason: "Host-owned artifact service port configuration." });
+    if (platformConfiguration(file, line, text)) {
+      exceptions.push({ file, line: i + 1, reason: "Explicit platform service port/endpoint metadata; embedded commands remain scanned." });
       continue;
     }
     for (const match of line.matchAll(URL_PORT)) {

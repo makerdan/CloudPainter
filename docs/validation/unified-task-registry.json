@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
-  "revision": 103,
+  "revision": 117,
   "records": {
     "FGU-81af9606-cc13-465c-99a0-820e95ec1e03": {
       "id": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
@@ -1491,6 +1491,226 @@
         "state": "PASS",
         "runId": "caacd2c4-133f-4631-8aed-aadad8d227f9",
         "at": "2026-10-19T20:32:12.024Z"
+      }
+    },
+    "FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3": {
+      "id": "FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3",
+      "status": "provisioned",
+      "tier": "test-standard",
+      "tierHash": "6c00f6acd84534a2e81f0dbaf268594f22c864d66a827b3582da8e5fa0c21cb3",
+      "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3.md",
+      "spec": {
+        "title": "Apply CloudPainter Runtime Safety",
+        "nativeTaskRef": "#60",
+        "tier": "test-standard",
+        "what": "Apply only Runtime Safety to existing API and both Vite services and actual photo/outline test harness callers, preserving original native scope and all C01–C12 obligations.",
+        "why": "Reject wrong ports, eliminate unsafe readiness and TERM-only cleanup, and prove real caller activation without disrupting managed services.",
+        "done": [
+          "API, CloudPainter and development sandbox listeners use the configured environment/platform port, reject invalid values before listening, and never silently switch to a different port when the configured one is busy. Existing artifact routes, base paths and managed service ownership remain intact.",
+          "Actual self-starting CloudPainter test harnesses share a canonical owned-server lifecycle with collision handling, finite service-specific readiness, bounded output and verified termination of their owned wrappers/descendants. Concurrent independent tests do not receive the same live reservation or stop unrelated listeners; externally supplied previews are treated as unowned.",
+          "The delivered repository scanner passes with narrowly evidenced classifications, not blanket fixture/documentation exclusions. Actual startup/health/cleanup callers are covered by required executable assertions, rather than only unused helpers or package fixtures.",
+          "Newly activated controls pass two complete consecutive runs of the one admitted existing tier without manual port, process or lease clearing between runs. Unknown ownership, surviving children, cancellation or missing evidence remain non-successful and do not authorize takeover or premature release.",
+          "A requirement-to-delivery handoff records capabilities, canonical source/input identities, actual wiring, tests, both run outcomes and remaining limitations. The absent safe development-restart capability is evidenced as ineligible; no outage/restart UI, Help, Admin Analytics, deployment or live-service disruption is introduced."
+        ],
+        "outOfScope": [
+          "Help/onboarding, Admin Analytics, product design/features, new artifacts, image/provider changes, user data/auth/quota/backups, a new outage/restart API or UI, and deployment/production operations. No existing listener reclaim, uncertain lease deletion, broad process-name killing, live service stop/restart, paid/external provider calls or remote CI operations. No new tier, parallel validation runner, removed checks, altered inheritance/prerequisites, raised budgets or hand-edited historical IDs/bindings/ledgers. No canonical skill edits, mirror writes, independent application reviewer or implementation of Task #53/#56/#57. Narrow runtime-port documentation/configuration corrections are allowed; unrelated CI/application refactoring is not."
+        ],
+        "steps": [
+          "Reconcile actual delivered prerequisites and current state; prepare/provision this normal plan, reconcile exact native payload and preflight under existing owner-selected scope before edits.",
+          "Implement bounded configured PORT validation and strict development/preview binding in existing API and both Vite configs without changing artifact routing or restarting live services.",
+          "Integrate one canonical owned-server adapter into actual photo export and outline harnesses with ephemeral allocation, collision denial/retry, service-specific finite readiness, independent supervision, bounded output and verified wrapper/descendant teardown.",
+          "Connect inventory diagnostics to canonical read-only discovery; extend registered owning suites for real callers, negative readiness and cleanup, sentinel protection and scanner classification.",
+          "Execute two complete sequential full standard-tier runs on the delivered snapshot with no manual process/port/lease intervention, preserve raw outcomes and publish requirement-to-delivery handoff with C01–C12 and capability gates."
+        ],
+        "relevantFiles": [
+          "artifacts/api-server/src/index.ts",
+          "artifacts/cloudpainter/vite.config.ts",
+          "artifacts/mockup-sandbox/vite.config.ts",
+          "artifacts/cloudpainter/tests/photo-export.browser.test.mjs",
+          "artifacts/cloudpainter/tests/outline-subject-regression.browser.mjs",
+          "scripts/runtime",
+          "scripts/runtime-port-policy.mjs",
+          "scripts/tests/runtime-port-policy.test.mjs",
+          "scripts/tests/runtime-lifecycle.test.mjs",
+          "docs/validation/app-support-runtime-application-handoff.md",
+          "replit.md"
+        ],
+        "coverageEvidence": "docs/validation/unified-tiers.json current SHA-256 6ccd5a5300f75e7bc0bb4a26ba3e80adfe8d7d8478c8319c1f20a264a76ba2de directly includes runtime-port-policy, runtime-lifecycle and runtime-port-scan, all inherited fast checks, workspace typecheck, drawing, API outline, three CI contracts and three provider-mocked checks. No prerequisites, 300000 ms step / 900000 ms total / 10000 ms cleanup. Invoke pnpm run test-standard -- generated-ID with exact TASK_PLAN_FILE and observed UNIFIED_CONTEXT_FILE twice sequentially. No tier or workload changes; DB/browser not needed for local process/Vite/health route assertions.",
+        "regression": {
+          "mode": "normal",
+          "covers": "Invalid PORT or occupied configured port is presented to the actual service configuration. Photo and outline adapters start concurrently and encounter a held bind collision. Intended Vite base path and actual API health route are checked alongside hanging redirect HTML and wrong JSON responses. Positive dispatch and ready descendants precede failed cancelled or expired startup and teardown. Executable binds and URLs occur adjacent to allowed platform examples and fixtures.",
+          "testLocation": "scripts/tests/runtime-port-policy.test.mjs; scripts/tests/runtime-lifecycle.test.mjs",
+          "checks": "Assert missing fractional infinite nondecimal and out-of-range ports refuse before listening; valid ports and base routes persist and strict dev and preview bindings deny collisions. Assert distinct ready endpoints, bounded retry or denial, confirmed release and unrelated sentinel survival; prove both harnesses call this adapter. Assert actual routed identity and JSON status media type body contract; cancel each request and bound the entire startup, never accepting an arbitrary HTTP 200. Assert independently supervised exact owned descendants stop and listeners close before success; retain non-success for unknown discovery or surviving children and preserve an unrelated listener. Assert real executable fixture and documentation violations remain findings while evidenced platform metadata and explicitly labelled examples pass; run the real repository scanner as a required step."
+        },
+        "regressionAssessment": {
+          "classification": "material",
+          "rationale": "Existing startup/configuration and harness readiness cleanup behavior materially changes; normal same-layer coverage is required.",
+          "scopeReview": "All eight categories reviewed: bug-fix, behavior-change, error-handling, concurrency-lifecycle, performance-reliability and compatibility-contract apply. No auth/privacy/data/provider or product UI behavior changes. Installed definitions and accepted prerequisites are reused; safe restart capability absent, no restart surface or separate reviewer selected.",
+          "coverageReview": "Owning port/scanner and lifecycle suites are explicit required standard steps. Extend these suites to execute actual adapters and real Vite and API health route boundaries without browser database or providers, retaining all later CI/Poe steps and budgets.",
+          "risks": [
+            {
+              "id": "ports",
+              "category": "compatibility-contract",
+              "change": "Managed service port validation and exact binding",
+              "layer": "service configuration and observable caller boundary"
+            },
+            {
+              "id": "allocation",
+              "category": "concurrency-lifecycle",
+              "change": "Actual self-starting harness allocation and ownership",
+              "layer": "owned server adapter and observable caller boundary"
+            },
+            {
+              "id": "health",
+              "category": "performance-reliability",
+              "change": "Finite intended-service readiness",
+              "layer": "HTTP readiness adapter and observable caller boundary"
+            },
+            {
+              "id": "cleanup",
+              "category": "concurrency-lifecycle",
+              "change": "Failed cancelled and expired owned server teardown",
+              "layer": "owned server adapter and observable caller boundary"
+            },
+            {
+              "id": "scan",
+              "category": "error-handling",
+              "change": "Narrow scanner classifications at executable boundaries",
+              "layer": "repository scanner and observable caller boundary"
+            }
+          ],
+          "coverage": [
+            {
+              "risk": "ports",
+              "scenario": "Invalid PORT or occupied configured port is presented to the actual service configuration.",
+              "testLocation": "scripts/tests/runtime-port-policy.test.mjs",
+              "assertion": "Assert missing fractional infinite nondecimal and out-of-range ports refuse before listening; valid ports and base routes persist and strict dev and preview bindings deny collisions.",
+              "layer": "service configuration and observable caller boundary"
+            },
+            {
+              "risk": "allocation",
+              "scenario": "Photo and outline adapters start concurrently and encounter a held bind collision.",
+              "testLocation": "scripts/tests/runtime-lifecycle.test.mjs",
+              "assertion": "Assert distinct ready endpoints, bounded retry or denial, confirmed release and unrelated sentinel survival; prove both harnesses call this adapter.",
+              "layer": "owned server adapter and observable caller boundary"
+            },
+            {
+              "risk": "health",
+              "scenario": "Intended Vite base path and actual API health route are checked alongside hanging redirect HTML and wrong JSON responses.",
+              "testLocation": "scripts/tests/runtime-lifecycle.test.mjs",
+              "assertion": "Assert actual routed identity and JSON status media type body contract; cancel each request and bound the entire startup, never accepting an arbitrary HTTP 200.",
+              "layer": "HTTP readiness adapter and observable caller boundary"
+            },
+            {
+              "risk": "cleanup",
+              "scenario": "Positive dispatch and ready descendants precede failed cancelled or expired startup and teardown.",
+              "testLocation": "scripts/tests/runtime-lifecycle.test.mjs",
+              "assertion": "Assert independently supervised exact owned descendants stop and listeners close before success; retain non-success for unknown discovery or surviving children and preserve an unrelated listener.",
+              "layer": "owned server adapter and observable caller boundary"
+            },
+            {
+              "risk": "scan",
+              "scenario": "Executable binds and URLs occur adjacent to allowed platform examples and fixtures.",
+              "testLocation": "scripts/tests/runtime-port-policy.test.mjs",
+              "assertion": "Assert real executable fixture and documentation violations remain findings while evidenced platform metadata and explicitly labelled examples pass; run the real repository scanner as a required step.",
+              "layer": "repository scanner and observable caller boundary"
+            }
+          ]
+        }
+      },
+      "planTemplate": "unified-v4",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-19T20:51:07.538Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-19T20:51:07.570Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "fe45d2f4-d9b3-4d13-957f-22d7cf9f519e",
+          "state": "FAIL",
+          "at": "2026-10-19T20:59:25.370Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "4d5572e2-917e-4845-bfce-2d72fe5beb28",
+          "state": "PASS",
+          "at": "2026-10-19T21:01:23.475Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "2854faaf-2bb8-490d-9a5d-2db9d2420914",
+          "state": "FAIL",
+          "at": "2026-10-19T21:01:46.248Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "3258db62-d0da-4b2f-af2d-57e68e19ddd0",
+          "state": "FAIL",
+          "at": "2026-10-19T21:06:21.318Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "281f3de0-e465-4290-83ae-e349c517d979",
+          "state": "PASS",
+          "at": "2026-10-19T21:10:41.156Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "fdc53c8a-84aa-4b56-ba50-c8c785e7209c",
+          "state": "PASS",
+          "at": "2026-10-19T21:13:37.004Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "fe45d2f4-d9b3-4d13-957f-22d7cf9f519e",
+          "reportPath": ".local/failure-gate/runs/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3/fe45d2f4-d9b3-4d13-957f-22d7cf9f519e/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T20:57:18.266Z"
+        },
+        {
+          "runId": "4d5572e2-917e-4845-bfce-2d72fe5beb28",
+          "reportPath": ".local/failure-gate/runs/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3/4d5572e2-917e-4845-bfce-2d72fe5beb28/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T21:01:16.839Z"
+        },
+        {
+          "runId": "2854faaf-2bb8-490d-9a5d-2db9d2420914",
+          "reportPath": ".local/failure-gate/runs/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3/2854faaf-2bb8-490d-9a5d-2db9d2420914/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T21:01:45.560Z"
+        },
+        {
+          "runId": "3258db62-d0da-4b2f-af2d-57e68e19ddd0",
+          "reportPath": ".local/failure-gate/runs/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3/3258db62-d0da-4b2f-af2d-57e68e19ddd0/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T21:03:47.193Z"
+        },
+        {
+          "runId": "281f3de0-e465-4290-83ae-e349c517d979",
+          "reportPath": ".local/failure-gate/runs/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3/281f3de0-e465-4290-83ae-e349c517d979/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T21:08:04.866Z"
+        },
+        {
+          "runId": "fdc53c8a-84aa-4b56-ba50-c8c785e7209c",
+          "reportPath": ".local/failure-gate/runs/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3/fdc53c8a-84aa-4b56-ba50-c8c785e7209c/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T21:11:05.190Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "69efd7e4760e33869b12566e81c22122558573104939cce70e424da078318330",
+      "assessment": {
+        "state": "PASS",
+        "runId": "fdc53c8a-84aa-4b56-ba50-c8c785e7209c",
+        "at": "2026-10-19T21:13:37.004Z"
       }
     }
   }

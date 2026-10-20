@@ -34,3 +34,4 @@
 - [Exact pnpm protocol output](pnpm-protocol-output.md) — lifecycle banners follow the reporter setting, not loglevel; test the documented root command.
 - [Validation scan ordering](validation-scan-order.md) — keep out-of-scope source findings from hiding substantive checks in fail-fast validation.
 - [Workload delta fixtures](workload-delta-fixtures.md) — chain full-table preservation through pinned delivery snapshots when later authorized coverage is added.
+- [Runtime context classification](runtime-context-classification.md) — isolated task runtimes can carry production indicators; never strip them to pass activation checks.

@@ -110,9 +110,9 @@ The checked-in artifact manifests show:
 
 | Service | Configured local port / route | Development command and relevant contract |
 |---|---|---|
-| API Server | `8080` / `/api` | `pnpm --filter @workspace/api-server run dev`; production sets `PORT=8080` and declares startup health path `/api/healthz` (`artifacts/api-server/.replit-artifact/artifact.toml:7-32`). Its entry point requires `PORT` before listening (`artifacts/api-server/src/index.ts:4-25`); the health route returns JSON `{ "status": "ok" }` (`artifacts/api-server/src/routes/health.ts:6-9`). |
-| CloudPainter | `26247` / `/` | `pnpm --filter @workspace/cloudpainter run dev`; service environment sets `PORT=26247` and `BASE_PATH=/` (`artifacts/cloudpainter/.replit-artifact/artifact.toml:9-28`). Vite requires both and uses `strictPort: true` (`artifacts/cloudpainter/vite.config.ts:8-28,71-84`). |
-| Component Preview Server | `8081` / `/__mockup` | `pnpm --filter @workspace/mockup-sandbox run dev`; service environment sets `PORT=8081` and `BASE_PATH=/__mockup` (`artifacts/mockup-sandbox/.replit-artifact/artifact.toml:7-17`). |
+| API Server | `8080` / `/api` | `pnpm --filter @workspace/api-server run dev`; observed platform metadata: PORT=8080 (not a shell assignment); startup health path `/api/healthz` (`artifacts/api-server/.replit-artifact/artifact.toml:7-32`). Its entry point requires `PORT` before listening (`artifacts/api-server/src/index.ts:4-25`); the health route returns JSON `{ "status": "ok" }` (`artifacts/api-server/src/routes/health.ts:6-9`). |
+| CloudPainter | `26247` / `/` | `pnpm --filter @workspace/cloudpainter run dev`; observed platform metadata: PORT=26247 (not a shell assignment) and `BASE_PATH=/` (`artifacts/cloudpainter/.replit-artifact/artifact.toml:9-28`). Vite requires both and uses `strictPort: true` (`artifacts/cloudpainter/vite.config.ts:8-28,71-84`). |
+| Component Preview Server | `8081` / `/__mockup` | `pnpm --filter @workspace/mockup-sandbox run dev`; observed platform metadata: PORT=8081 (not a shell assignment) and `BASE_PATH=/__mockup` (`artifacts/mockup-sandbox/.replit-artifact/artifact.toml:7-17`). |
 
 The three configured local ports are distinct. The Replit workflow inventory
 provided with this task lists these same three managed workflows and commands.

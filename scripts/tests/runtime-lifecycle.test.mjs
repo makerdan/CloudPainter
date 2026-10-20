@@ -5,12 +5,16 @@ import os from "node:os";
 import path from "node:path";
 import net from "node:net";
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { supervise, run } from "../failure-gate/runner.mjs";
 import { provision } from "../failure-gate/plans.mjs";
 import { atomicJson, sha, TIERS, lease } from "../failure-gate/store.mjs";
+import http from "node:http";
+import { startOwnedServer, startCloudPainterTestServer } from "../runtime/owned-server.mjs";
+import { checkReady, waitReady } from "../runtime/readiness.mjs";
 
 const SOURCE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const ownedWorker = path.join(SOURCE, "scripts/tests/fixtures/owned-service.mjs");
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function bounded(promise, ms, message) {
   let timer;
@@ -30,6 +34,185 @@ const identity = pid => {
   }
 };
 const survives = record => identity(record.pid)?.start === record.start;
+
+test("actual harness adapters allocate concurrently and handle held collisions", async t => {
+  const servers = [];
+  t.after(async () => { await Promise.all(servers.map(s => s.stop())); });
+  const results = await Promise.allSettled([
+    startCloudPainterTestServer({ options: { basePath: "/runtime-proof/" } }),
+    startCloudPainterTestServer(),
+  ]);
+  for (const result of results) if (result.status === "fulfilled") servers.push(result.value);
+  assert.equal(servers.length, 2, JSON.stringify(results.map(r => r.reason?.message)));
+  assert.notEqual(servers[0].port, servers[1].port);
+  for (const server of servers) {
+    assert.ok(server.registered.start);
+    await checkReady(server.url, {
+      kind: "cloudpainter", basePath: new URL(server.url).pathname,
+    });
+  }
+  const holder = http.createServer((_req, res) => res.end("sentinel"));
+  const port = await listen(holder);
+  try {
+    for (const app of ["cloudpainter", "mockup-sandbox"]) for (const preview of [false, true]) {
+      // No inline strictPort override: this must be enforced by each real config.
+      await assert.rejects(startOwnedServer({
+        options: { appDirectory: path.join(SOURCE, "artifacts", app), heldPort: port, preview },
+        startupMs: 8000,
+      }));
+    }
+    assert.equal(await (await fetch(`http://127.0.0.1:${port}`, { signal: AbortSignal.timeout(1000) })).text(), "sentinel");
+    // Canonical inventory is read-only and must identify this as busy, not FREE.
+    const inventory = spawn(process.execPath, [".agents/skills/port-authority/scripts/free-ports.mjs", String(port)], {
+      cwd: SOURCE, stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    inventory.stdout.on("data", data => { output += data; });
+    assert.equal(await new Promise(resolve => inventory.once("close", resolve)), 3);
+    assert.equal(JSON.parse(output).state, "PROTECTED_BUSY");
+    assert.ok(JSON.parse(output).holders.some(p => p.pid === process.pid));
+    assert.equal(await (await fetch(`http://127.0.0.1:${port}`, { signal: AbortSignal.timeout(1000) })).text(), "sentinel");
+  } finally { await close(holder); }
+  for (const file of ["photo-export.browser.test.mjs", "outline-subject-regression.browser.mjs"]) {
+    const source = fs.readFileSync(path.join(SOURCE, "artifacts/cloudpainter/tests", file), "utf8");
+    assert.match(source, /import \{ startCloudPainterTestServer \} from '\.\.\/\.\.\/\.\.\/scripts\/runtime\/owned-server.mjs'/);
+    assert.match(source, /ownedServer = await startCloudPainterTestServer\(\)/);
+    assert.match(source, /finally \{ await ownedServer\?\.stop\(\); \}/);
+    assert.doesNotMatch(source, /findAvailablePort|waitForApp|process\.kill|spawn\(/);
+  }
+  const external = fs.readFileSync(path.join(SOURCE, "artifacts/cloudpainter/playwright.config.ts"), "utf8");
+  assert.match(external, /process\.env\.CLOUDPAINTER_TEST_URL/);
+  assert.doesNotMatch(external, /webServer:|startOwned|process\.kill/);
+  for (const server of servers) {
+    const report = await server.stop();
+    assert.equal(report.quiescent, true);
+    assert.equal(survives(server.registered), false);
+    await assertReleased(server.port);
+  }
+});
+
+test("real service readiness rejects hangs redirects and wrong responses", async () => {
+  const api = await startOwnedServer({ worker: ownedWorker, options: { mode: "api" }, kind: "api" });
+  try {
+    assert.equal(new URL(api.url).pathname, "/api/healthz");
+    await checkReady(api.url, { kind: "api" });
+    await assert.rejects(checkReady(api.url, { kind: "cloudpainter" }));
+  } finally { assert.equal((await api.stop()).quiescent, true); }
+  for (const mode of ["hang", "redirect", "wrong", "json"]) {
+    const server = http.createServer((_req, res) => {
+      if (mode === "hang") return;
+      if (mode === "redirect") { res.writeHead(302, { Location: "/" }); res.end(); return; }
+      res.setHeader("content-type", mode === "json" ? "application/json" : "text/html");
+      res.end(mode === "json" ? '{"status":"other"}' : "<html>not this service</html>");
+    });
+    const port = await listen(server);
+    const url = `http://127.0.0.1:${port}/api/healthz`;
+    const started = performance.now();
+    try {
+      for (const kind of ["api", "cloudpainter"]) {
+        await assert.rejects(waitReady(url, { kind, startupMs: 450, requestMs: 100 }));
+      }
+      assert.ok(performance.now() - started < 2200);
+    } finally { server.closeAllConnections(); await close(server); }
+  }
+  // Every response component matters independently; wrong status and extra JSON
+  // cannot be hidden by a valid-looking body or application/json header.
+  for (const [status, type, body] of [
+    [503, "application/json", '{"status":"ok"}'],
+    [200, "text/html", '{"status":"ok"}'],
+    [200, "application/json", '{"status":"ok","other":true}'],
+    [200, "application/json", "not-json"],
+  ]) {
+    const server = http.createServer((_req, res) => { res.writeHead(status, { "content-type": type }); res.end(body); });
+    const port = await listen(server);
+    try { await assert.rejects(checkReady(`http://127.0.0.1:${port}/api/healthz`, { kind: "api" })); }
+    finally { await close(server); }
+  }
+});
+
+test("actual owned lifecycle cleans failed cancelled and timed-out descendants", async t => {
+  const unrelated = http.createServer((_req, res) => res.end("unrelated"));
+  const port = await listen(unrelated);
+  t.after(() => close(unrelated));
+  for (const mode of ["descendant", "late-descendant", "fail-after-ready", "cancel", "timeout"]) {
+    const controller = new AbortController();
+    const service = await startOwnedServer({
+      worker: ownedWorker, signal: controller.signal,
+      options: { mode: ["cancel", "timeout"].includes(mode) ? "descendant" : mode },
+      lifetimeMs: mode === "timeout" ? 4000 : 20000, startupMs: 3000, cleanupMs: 1600,
+    });
+    assert.ok(service.events.find(e => e.event === "registered"));
+    const ready = service.events.find(e => e.event === "listening");
+    assert.ok(ready.pid && ready.start);
+    await checkReady(service.url, { kind: "cloudpainter" }); // Actual dispatch before failure.
+    if (mode === "fail-after-ready" || mode === "timeout") {
+      await until(() => service.events.some(e => e.event === "finished"), 8000);
+      await assert.rejects(service.stop());
+      const report = service.events.find(e => e.event === "finished");
+      assert.equal(report.reason, mode === "timeout" ? "execution-timeout" : "child-exit");
+      if (mode === "fail-after-ready") assert.equal(report.rawExit, 7);
+    } else if (mode === "cancel") {
+      controller.abort();
+      await assert.rejects(service.stop());
+    } else assert.equal((await service.stop()).quiescent, true);
+    assert.equal(service.events.find(e => e.event === "finished").quiescent, true);
+    assert.equal(survives(ready), false);
+    assert.equal(survives(service.registered), false);
+    await assertReleased(service.port);
+    assert.equal(await (await fetch(`http://127.0.0.1:${port}`, { signal: AbortSignal.timeout(1000) })).text(), "unrelated");
+  }
+  await assert.rejects(startOwnedServer({ worker: ownedWorker, options: { mode: "fail-before-listen" }, startupMs: 3000, lifetimeMs: 8000 }));
+  const aborted = new AbortController();
+  aborted.abort();
+  await assert.rejects(startOwnedServer({ signal: aborted.signal }));
+});
+
+test("actual adapter owner loss stops registered work and discovery errors never authorize release", async t => {
+  const root = fixture(t);
+  const unrelated = await sentinel(t, root);
+  const manifest = path.join(root, "adapter-owner.json");
+  const moduleUrl = pathToFileURL(path.join(SOURCE, "scripts/runtime/owned-server.mjs")).href;
+  const wrapper = spawn(process.execPath, ["--input-type=module", "-e", `
+    import fs from "node:fs";
+    const {startOwnedServer}=await import(${JSON.stringify(moduleUrl)});
+    const s=await startOwnedServer({worker:${JSON.stringify(ownedWorker)}, options:{mode:"descendant"}});
+    fs.writeFileSync(${JSON.stringify(manifest)}, JSON.stringify({registered:s.registered,ready:s.events.find(e=>e.event==="listening"),port:s.port}));
+  `], { cwd: SOURCE, env: { PATH: process.env.PATH, NODE_ENV: "test" }, stdio: "ignore" });
+  t.after(() => { if (identity(wrapper.pid)) wrapper.kill("SIGKILL"); });
+  await until(() => fs.existsSync(manifest));
+  const observed = JSON.parse(fs.readFileSync(manifest));
+  assert.equal(await (await fetch(`http://127.0.0.1:${observed.port}`, { signal: AbortSignal.timeout(1000) })).status, 200);
+  wrapper.kill("SIGTERM"); // Exact intentionally created owner, never a live app.
+  await until(() => !survives(observed.registered.supervisor), 6000);
+  assert.equal(survives(observed.registered), false);
+  assert.equal(survives(observed.ready), false);
+  await assertReleased(observed.port);
+  assert.equal(await request(unrelated.port), "runtime-fixture\n");
+
+  // The real adapter/supervisor executes unchanged in a private root; its
+  // imported discovery provider encounters an actual post-readiness I/O error.
+  fs.cpSync(path.join(SOURCE, "scripts/runtime"), path.join(root, "scripts/runtime"), { recursive: true });
+  const marker = path.join(root, "discovery-marker");
+  const provider = path.join(root, "scripts/failure-gate/supervisor.py");
+  fs.writeFileSync(provider, fs.readFileSync(provider, "utf8").replace(
+    "def descendants():", `def descendants():\n    if Path(${JSON.stringify(marker)}).exists():\n        Path(${JSON.stringify(root)}).read_text()`,
+  ));
+  const { startOwnedServer: isolated } = await import(pathToFileURL(path.join(root, "scripts/runtime/owned-server.mjs")));
+  const service = await isolated({
+    worker: ownedWorker, options: { discoveryMarker: marker }, cleanupMs: 1500,
+  });
+  const ready = service.events.find(e => e.event === "listening");
+  await checkReady(service.url, { kind: "cloudpainter" }); // Before injecting failure.
+  await until(() => service.events.some(e => e.event === "finished"));
+  await assert.rejects(service.stop(), /non-success/);
+  const finished = service.events.find(e => e.event === "finished");
+  assert.equal(finished.reason, "discovery-or-protocol-error");
+  assert.equal(finished.quiescent, false);
+  assert.equal(fs.existsSync(service.directory), true);
+  assert.equal(survives(ready), false); // Known-owned best-effort cleanup is not healthy release.
+  await assertReleased(service.port);
+  assert.equal(await request(unrelated.port), "runtime-fixture\n");
+});
 async function until(check, limit = 8000) {
   const end = performance.now() + limit;
   while (!check()) {

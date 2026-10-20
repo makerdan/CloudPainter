@@ -176,12 +176,13 @@ jobs:
 
       - name: Run browser checks against a CI-started local server
         env:
+          PORT: 4173
           CLOUDPAINTER_TEST_URL: http://127.0.0.1:4173/
           VITE_CLERK_PUBLISHABLE_KEY: pk_test_cGFsZXR0ZS10ZXN0LmNsZXJrLmFjY291bnRzLmRldiQ=
         run: |
           set -euo pipefail
           log_file="$RUNNER_TEMP/cloudpainter-vite.log"
-          setsid env PORT=4173 BASE_PATH=/ NODE_ENV=development \
+          setsid env PORT="$PORT" BASE_PATH=/ NODE_ENV=development \
             pnpm --filter @workspace/cloudpainter run dev >"$log_file" 2>&1 &
           server_pid=$!
           cleanup() {

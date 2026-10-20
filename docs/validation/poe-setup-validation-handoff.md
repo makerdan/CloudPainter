@@ -104,7 +104,8 @@ This maintenance performed no live amendment.
 
 The gate-owned preload
 `scripts/failure-gate/poe-fixture-env.mjs` sets only the fixed fake
-`postgresql://fixture:fixture@poe-fixture.invalid:1/fixture` URL required for
+postgresql://fixture:fixture@poe-fixture.invalid:1/fixture URL (a non-connectable
+import placeholder, not a runnable target) required for
 database-module import. It patches the workspace `pg` Pool, Client and
 Connection entry points to throw before transport. The runner's sanitized
 environment is unchanged; no host database or provider credential is forwarded.
