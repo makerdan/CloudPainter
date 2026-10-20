@@ -1,0 +1,38 @@
+Perform a read-only Failure Gate migration inventory of this application.
+Use the backup record from Phase 0; do not create another Remix if that backup
+is already confirmed. If the backup is missing or recovery readiness is
+blocked, resolve that prerequisite before any migration edits.
+
+Discover the app, repository, branch/revision, commands, configuration, and
+task system yourself. Do not ask me to supply app names, file paths, task IDs,
+historical receipts, or information you can retrieve.
+
+Locate and read the approved canonical Failure Gate Unified skill under
+.agents/skills/failure-gate-unified/SKILL.md. Use only canonical skill sources
+under .agents as authoritative skill definitions. If the approved Unified
+source is not available, identify the smallest supported step needed to make
+it available; do not reconstruct it from older variants or copied definitions.
+You may finish independent read-only discovery while that source is missing,
+but do not claim a Unified comparison is complete.
+
+Learn the approved Unified contract before evaluating compatibility. Search
+other locations only for active references, conflicting instructions, and
+copied definitions; do not import their policy text into Unified.
+
+Inspect relevant skill sources and activation instructions; plan templates and
+provisioning scripts; task-ID allocation and tier binding; registered tiers and
+validation commands; timeout, process-cleanup, and single-flight controls; the
+baseline catalog and its consumers; CI, hooks, wrappers, and docs; and in-flight
+task plans, IDs, tiers, and completion records.
+
+Do not edit, delete, rename, disable, or install anything during this inventory.
+For each finding, cite its location and concise evidence. Label it Confirmed,
+Absent within inspected scope, or Unknown. Classify artifacts Keep, Adapt,
+Supersede, Retire/archive candidate, or Unknown/blocker. Presence alone does
+not prove activation; one search does not prove an artifact is unused.
+
+Complete the per-app record and return it here with inspected scope/revision,
+canonical source status, inventory, conflicting policies, enforcement gaps,
+in-flight IDs that must not be rebound, and a recommended cutover boundary.
+Do not propose indiscriminate deletion. Ask only for an unavoidable owner
+decision, not for historical receipts or technical facts you can discover.

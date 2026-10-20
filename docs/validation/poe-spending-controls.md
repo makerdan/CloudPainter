@@ -1,12 +1,13 @@
 # Poe spending controls
 
-## Approved policy
+## Current access and spending policy
 
-- Signed-in, explicitly approved Clerk accounts only. Signing up does not grant access.
+- Any verified, signed-in Clerk identity is provisioned the existing normal account on first Poe-budget check. Explicitly disabled accounts remain denied; an existing admin role and usage history are preserved.
 - Normal accounts: 2 attempts per UTC calendar day. Admin accounts: 15.
 - All accounts together: 20 attempts per UTC day and 5 per rolling ten minutes.
 - At most 2 active generation leases, shared across server instances.
 - The supplied account is initially approved as an admin by the idempotent setup script.
+- Logo generation now reserves from these same durable account/global budgets, with its existing process-local IP, total-request, and concurrency protections retained as additional limits.
 - These are **request budgets, not a guarantee of a specific number of Poe points**.
   Model prices can differ. No paid inference was needed for these checks.
 
@@ -34,43 +35,77 @@ For development, apply the existing schema with
 The post-merge script performs these operations too. The setup script uses
 `ON CONFLICT DO NOTHING`: rerunning it never changes a current account's role.
 
-Approve additional accounts only after owner authorization. In the appropriate
-database, insert a verified Clerk user ID with `role = 'normal'` or `'admin'`.
-Change a role by updating that row; revoke access by setting `enabled = false`.
+New signed-in identities do not need manual membership provisioning. In the
+appropriate database, assign `role = 'admin'` only with owner authorization;
+normal access is provisioned automatically. Revoke access by setting
+`enabled = false`.
 Keep the disabled row so the idempotent initial setup cannot restore access
 on a later merge. Never delete
 attempts to refund a potentially transmitted request. Role changes within a day
 reuse the same attempt history rather than resetting usage. Revocation prevents
 new reservations but does not recall an already transmitted request.
 
-Development and production Clerk accounts can have different IDs. Before public
-sharing, apply the schema through the existing deployment process and explicitly
-approve the intended production Clerk identity. Do not copy development palettes
-or assume a production user will match a development ID. Missing tables or
-unapproved production accounts fail closed. This task does not deploy the app.
+Development and production Clerk accounts can have different IDs. Do not copy
+development palettes or assume a production user will match a development ID.
+Missing tables and database errors fail closed. A new production identity that
+passes verified Clerk authentication receives normal access, subject to the same
+disabled-account check and durable limits. This task does not deploy the app.
 
 ## Regression checks
 
 - `pnpm --filter @workspace/api-server test:image-access` — real PostgreSQL transactions
-  in an isolated disposable schema; stub provider only. Covers anonymous/unapproved
+  in an isolated disposable schema; stub provider only. Covers anonymous/revoked
   denial, role limits, account and global exhaustion, rolling bursts, parallel
   reservations, revocation, crash leases, fresh worker instances, midnight reset,
   database outage, config status, and no retries after ambiguous failure.
 - `pnpm --filter @workspace/integrations-openai-ai-server test:poe` — unchanged four-model
   registry and provider-contract checks using fake credentials/stub transport.
 - `pnpm run typecheck` — canonical workspace typecheck.
-- `CLOUDPAINTER_TEST_URL=<running-preview> CLOUDPAINTER_AUTH_STATE=<signed-in-state-file>
-  pnpm --filter @workspace/cloudpainter test:poe-images` — browser checks with mocked
-  generation/config responses. Clerk sign-in is real; no Poe request is sent.
-  Keep session-state files only in ignored `generated-artifacts/`, never commit them.
-  The suite fails explicitly when its signed-in fixture is missing.
+- `CLOUDPAINTER_TEST_URL=<running-preview>
+  pnpm --filter @workspace/cloudpainter test:anonymous-photo-and-images` — anonymous
+  browser lane with an empty session and local API fixtures. Missing provider-capable
+  route fixtures are blocked before dispatch and fail the test.
+- `CLOUDPAINTER_TEST_URL=<running-preview>
+  CLOUDPAINTER_AUTH_STATE=generated-artifacts/<owner-approved-state-file>
+  pnpm --filter @workspace/cloudpainter test:poe-images` — signed-in lane with mocked
+  generation/config responses. Run only when an owner-approved disposable Clerk test
+  identity is already provisioned; no identity is created or substituted, and no Poe
+  request is sent. Keep state files in ignored `generated-artifacts/`, never commit
+  them. The suite fails explicitly when its signed-in fixture is missing.
+- `timeout --signal=TERM --kill-after=5s 60s node --test --test-timeout=10000
+  scripts/tests/browser-safety-lanes.test.mjs` — local regression checks for lane
+  isolation and fail-closed provider-route interception.
 
-The browser covers signed-out drawing, sign-in gating, unapproved access, account
+The Playwright lane command is currently blocked before test execution because
+`artifacts/cloudpainter/src/PanLimits.test.ts` has a syntax error. Repair that test
+before treating the anonymous browser suite as validated. The signed-in lane also
+remains gated on an owner-approved disposable Clerk state file; do not fabricate one.
+
+The browser covers signed-out drawing, sign-in gating, disabled access, account
 and shared exhaustion, exact model choices, explicit reference-image application,
 sketch preservation on failure, and missing provider configuration. Mocked config
 is UI test data, not an application authorization override.
 
 ## Verification results
+
+The following results are historical and predate automatic standard-account
+provisioning and shared logo-route budgeting. They do not validate the current
+changes described above.
+
+### Current account-policy checks — 2026-10-11
+
+- Passed with provider calls stubbed: API image access (22 tests), logo API (18),
+  upscale (10), hosted outline (8), palette and settings persistence APIs (1 each),
+  CloudPainter logo UI (44), upscale UI (20), outline UI (6), Settings UI (2),
+  and client palette/settings persistence (5 and 4).
+- The workspace typecheck passed. No live Poe generation was performed.
+- The anonymous photo/editor browser suite completed 28 of 60 tests and reported
+  32 failures in existing local-editor persistence, layout, and copy assertions.
+  The affected editor implementation was unchanged by this account-access work;
+  treat that browser run as failing, not as a passing account-storage check.
+- Cloud project/photo persistence and sign-in migration were not implemented or
+  validated. See `docs/cloud-project-storage-blocker.md` for the deployment and
+  request-size evidence required before that work can resume.
 
 The canonical workspace typecheck passed. All 18 spending-control tests, 17
 Poe provider-contract tests, and the existing palette authorization test passed.

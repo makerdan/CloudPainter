@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
  * Linux/local-filesystem cooperative validation lease v2.
- * node validation-lock.mjs [--resource lowercase-name] [--priority 1-9] -- CMD...
+ * Core: node validation-lock.mjs -- CMD...
+ * Advanced: node validation-lock.mjs --advanced [--resource lowercase-name]
+ *           [--priority 1-9] -- CMD...
+ * The advanced switch selects features, not approval. Core rejects nesting.
  * Named locks (including "global") are independent, not hierarchical.
  * Env: VALIDATION_LOCK_FILE, VALIDATION_LOCK_WAITERS_DIR, *_POLL_MS,
  * *_TIMEOUT_MS (queue only), *_HEARTBEAT_MS, *_STALE_HEARTBEAT_MS,
@@ -168,7 +171,8 @@ const fail = (message, code = 4, details = {}) => {
   process.exit(code);
 };
 if (process.platform !== "linux") fail("Linux process-incarnation discovery required", 2);
-const admission = await classifyRuntimeEnvironment();
+const advanced = process.argv[2] === "--advanced";
+const admission = await classifyRuntimeEnvironment(process.env, { advanced });
 if (!admission.allowed) fail(admission.reason, 2);
 if (admission.classification === "verified-development") {
   console.error(JSON.stringify({ tool: "validation-lock", incident: "verified-development-context-admission" }));
@@ -187,8 +191,12 @@ const graceMs = ms("STOP_GRACE_MS", 3000);
 const killMs = ms("STOP_KILL_MS", 5000);
 const priorityGraceMs = ms("PRIORITY_GRACE_MS", 2000);
 if (staleMs <= heartbeatMs) fail("stale heartbeat must exceed heartbeat interval", 2);
-const args = process.argv.slice(2), sep = args.indexOf("--");
+const args = process.argv.slice(advanced ? 3 : 2), sep = args.indexOf("--");
 if (sep < 0 || sep === args.length - 1) fail("command after -- required", 2);
+if (!advanced && (sep !== 0 || Object.entries(process.env).some(([k, v]) =>
+  v && (k.startsWith("VALIDATION_LOCK_CONTEXT_") || k.startsWith("VALIDATION_LOCK_HELD_PID"))))) {
+  fail("core requires a single outer lease and unwrapped inner commands; resource/priority/reentry features require the advanced profile", 2);
+}
 let resource = "global", priority = 5;
 for (let i = 0; i < sep; i++) {
   if (args[i] === "--resource" && i + 1 < sep) resource = args[++i];
@@ -467,14 +475,14 @@ try {
   const legacyKey = `VALIDATION_LOCK_HELD_PID_${resource.toUpperCase().replaceAll("-", "_")}`;
   delete env[legacyKey];
   if (resource === "global") delete env.VALIDATION_LOCK_HELD_PID;
-  const dispatchAdmission = await classifyRuntimeEnvironment();
+  const dispatchAdmission = await classifyRuntimeEnvironment(process.env, { advanced });
   if (!dispatchAdmission.allowed) throw new Error(`runtime guard blocked before dispatch: ${dispatchAdmission.reason}`);
   lease.phase = "launching"; await mutate(); // crash in launch gap must remain blocked
   console.log(JSON.stringify({ tool: "validation-lock", state: "ACQUIRED", resource,
     nested: Boolean(context), token: lease.token, queueWaitMs: Math.round(performance.now() - enqueuedMono),
     queueLimitMs: queueMs, executionLimitMs: maxHoldMs, stopGraceMs: graceMs,
     stopVerificationMs: killMs, clock: "monotonic", authority: "local-supervision-not-checked-approval" }));
-  const launchAdmission = await classifyRuntimeEnvironment();
+  const launchAdmission = await classifyRuntimeEnvironment(process.env, { advanced });
   if (!launchAdmission.allowed) throw new Error(`runtime guard blocked before launch: ${launchAdmission.reason}`);
   if (cancelled || performance.now() - acquiredMono >= maxHoldMs) {
     throw new Error(cancelled ? "cancelled before launch" : "execution-budget expired before launch");

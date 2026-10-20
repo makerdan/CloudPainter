@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /**
  * Linux-only, cooperative TCP cleanup. No PID is authorized by its port/name.
- * Usage: node free-ports.mjs [--dry-run] [--ownership-manifest FILE]
- *        [--authorized-cleanup] [--include-own-tree] PORT...
+ * Default: node free-ports.mjs [--dry-run] PORT... (read-only).
+ * Advanced: node free-ports.mjs --advanced [--dry-run] [--ownership-manifest FILE]
+ *           [--authorized-cleanup] [--include-own-tree] PORT...
+ * --advanced selects a feature profile, never supplies authorization.
  * Ownership manifest v2 additionally binds task/approved-plan/run.
- * Host attests runtime; Failure Gate verifies and claims reclaim authorization.
+ * Host attests runtime; the authorized reclaim provider verifies and claims scope.
  * Neither a local manifest nor an action flag authenticates approval.
  * States: FREE=0, failed=1, invalid/production=2, busy/skipped=3, unknown=4.
  * Adapt host wiring/manifest generation with approval; do not weaken guards.
@@ -22,7 +24,8 @@ const output = (state, code, details = {}) => {
   process.exit(code);
 };
 if (process.platform !== "linux") output("UNKNOWN", 4, { reason: "Linux /proc required" });
-const admission = await classifyRuntimeEnvironment();
+const advanced = process.argv[2] === "--advanced";
+const admission = await classifyRuntimeEnvironment(process.env, { advanced });
 if (!admission.allowed) output("PROHIBITED", 2, { reason: admission.reason });
 if (admission.classification === "verified-development") {
   console.error(JSON.stringify({ tool: "free-ports", incident: "verified-development-context-admission" }));
@@ -30,7 +33,10 @@ if (admission.classification === "verified-development") {
 if (process.env.FREE_PORTS_DISABLE === "1" || process.env.FREE_PORTS_RUNNING === "1") {
   output("SKIPPED", 3, { reason: "disabled/recursive; no free-port claim" });
 }
-const args = process.argv.slice(2);
+const args = process.argv.slice(advanced ? 3 : 2);
+if (!advanced && args.some(a => a.startsWith("--") && a !== "--dry-run")) {
+  output("INVALID", 2, { reason: "core inventory is read-only; reclaim/manifest options require the separately authorized advanced profile" });
+}
 let manifestPath, dryRun = false, action = false, includeOwn = false;
 const ports = [];
 for (let i = 0; i < args.length; i++) {
@@ -193,7 +199,7 @@ let authorization, outcomeAttempted = false, signalsAttempted = false;
 const signalOutcomes = [];
 const verificationObservations = [];
 async function signalTargets(signal) {
-  const guard = await classifyRuntimeEnvironment();
+  const guard = await classifyRuntimeEnvironment(process.env, { advanced });
   if (!guard.allowed) throw new Error(`runtime guard blocked before signal: ${guard.reason}`);
   const attestation = guard.attestation ?? await verifiedHostAttestation();
   if (attestation.attestationId !== authorization.attestationId) throw new Error("operation attestation changed; renewed authorization required");

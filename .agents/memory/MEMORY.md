@@ -4,8 +4,8 @@
 - [Tooltip keyboard checks](tooltip-keyboard-checks.md) — wait for dismissed content to close and use real focus transitions when checking changed Radix descriptions.
 - [Linked secret visibility](linked-secret-visibility.md) — account-linked secrets may reach the runtime even when secret-status metadata reports them absent.
 - [Vite dependency cache](vite-dependency-cache.md) — after React upgrades, stale prebundled dependencies can cause a false version-mismatch overlay.
-- [Poe spending approval](poe-spending-policy.md) — owner-approved accounts only; signup does not authorize spending, and request limits are not exact point budgets.
-- [Browser state baselines](browser-state-baselines.md) — settle initial autosave before snapshot comparisons; use keyboard modality for focus-ring assertions.
+- [Poe account access](poe-spending-policy.md) — verified signed-in users get normal quota; preserve revocations, admin roles/history, and shared budgets.
+- [Browser state baselines](browser-state-baselines.md) — settle autosave, compare like-for-like persistence snapshots, and use keyboard modality for focus-ring assertions.
 - [Completion reconciliation](completion-reconciliation.md) — a rejected completion may still commit integrated changes; inspect current source when feedback differs from the earlier diff.
 - [Logo exploration boundaries](logo-exploration.md) — image editing, photo conditioning and generation inside the sketch workspace need an explicit scope change.
 - [Poe-only logo generation](poe-only-logos.md) — the user chose Poe as the sole runtime image connection; no managed OpenAI fallback for logo creation.
@@ -15,3 +15,23 @@
 - [Local storage quota estimates](local-storage-quota-estimates.md) — StorageManager estimates the origin's shared storage, not localStorage's specific cap; use both signals conservatively.
 - [Poe Assistant upscaling](topaz-poe-route.md) — use the user's exact 4x/8x prompt with fixed Assistant; Poe chooses the provider.
 - [Poe mask semantics and privacy](poe-mask-privacy.md) — generated masks need review; “use mask” and ignored storage flags do not prove exact segmentation or zero retention.
+- [Markdown line-field parsing](markdown-line-field-parsing.md) — use horizontal whitespace in line-oriented Markdown field regexes; `\s*` can cross into the next field.
+- [On-device outline fixtures](on-device-outline-fixtures.md) — validate public animal fixtures against the actual local model; labels and photo contents alone do not guarantee usable masks.
+- [Pointer pressure precision](pointer-pressure-precision.md) — browser pointer pressure is floating-point input; test it approximately without rounding persisted samples.
+- [Disposable Postgres on Nix](nix-disposable-postgres.md) — local ephemeral clusters may need a temporary Unix-socket directory because `/run/postgresql` may not exist.
+- [Long-stroke browser tests](long-stroke-browser-tests.md) — pace synthetic continuous pointer events across tasks so React commits drafts before pointer-up.
+- [Playwright touch actions](playwright-touch-actions.md) — prefer locator.tap for mobile controls; raw touchscreen.tap can emit no events on the target in this Chromium harness.
+- [PDF export browser fixtures](pdf-export-browser-fixtures.md) — object-URL capture hooks should preserve non-PDF URLs and wait specifically for PDF blobs.
+- [Extreme-ratio print previews](pdf-preview-extreme-ratios.md) — preserve a one-pixel short side when downsampling very wide or tall artwork, even if the thumbnail exceeds its usual cap.
+- [Node test timeout supervision](node-test-timeouts.md) — inject test deadlines through CLI arguments, not NODE_OPTIONS, including tsx-launched children.
+- [CI process-tree timeouts](ci-process-tree-timeouts.md) — keep the deadline supervisor outside each suite’s isolated process group so escalation cannot strand descendants.
+- [Postgres timestamp cursors](postgres-timestamp-cursors.md) — preserve microsecond timestamp precision in keyset cursors; JavaScript `Date` truncates it.
+- [Node failure reporters](node-failure-reporters.md) — select structured reporters explicitly; piped Node output is not necessarily TAP.
+- [CloudPainter account data](cloudpainter-account-data.md) — users expect account-owned data on the server; preserve explicit consent before uploading sketches.
+- [Follow-up description limits](follow-up-description-limits.md) — proposals reject descriptions over 4,000 characters; measure before submitting evidence-heavy plans.
+- [Clock deadline fixtures](clock-deadline-fixtures.md) — prove startup expiry and dispatched timeout separately; require actual clock reversal during each tested phase.
+- [Rendered plan classification](rendered-plan-classification.md) — test full rendered exclusions; generated metadata can contaminate scope signals.
+- [Exact pnpm protocol output](pnpm-protocol-output.md) — lifecycle banners follow the reporter setting, not loglevel; test the documented root command.
+- [Validation scan ordering](validation-scan-order.md) — keep out-of-scope source findings from hiding substantive checks in fail-fast validation.
+- [Workload delta fixtures](workload-delta-fixtures.md) — chain full-table preservation through pinned delivery snapshots when later authorized coverage is added.
+- [Runtime context classification](runtime-context-classification.md) — isolated task runtimes can carry production indicators; never strip them to pass activation checks.

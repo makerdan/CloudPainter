@@ -14,7 +14,154 @@ tags:
     description: Poe-only image generation
   - name: logos
     description: Exploratory logo concepts
+  - name: admin
+    description: Protected account oversight
+  - name: projects
+    description: Account-owned editable sketch backups
 paths:
+  /admin/overview:
+    get:
+      operationId: getAdminOverview
+      tags: [admin]
+      summary: Read the account count for authorized CloudPainter administrators
+      parameters:
+        - in: header
+          name: X-Admin-Session
+          required: true
+          schema: { type: string, maxLength: 256 }
+      responses:
+        "200":
+          description: Bounded account overview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminOverview" }
+        "401": { description: Sign in required or session changed }
+        "404": { description: Page not found for accounts without dashboard access }
+        "503": { description: Account administration is temporarily unavailable }
+  /admin/accounts:
+    get:
+      operationId: listAdminAccounts
+      tags: [admin]
+      summary: Search and page through CloudPainter accounts
+      parameters:
+        - in: header
+          name: X-Admin-Session
+          required: true
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 25 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, maximum: 10000, default: 0 }
+        - in: query
+          name: query
+          schema: { type: string, maxLength: 100 }
+      responses:
+        "200":
+          description: Account page with limited identifying metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminAccountPage" }
+        "400": { description: Invalid search or pagination }
+        "401": { description: Sign in required or session changed }
+        "404": { description: Page not found for accounts without dashboard access }
+        "503": { description: Account information is temporarily unavailable }
+  /admin/audit-events:
+    get:
+      operationId: listAdminAuditEvents
+      tags: [admin]
+      summary: Page through account status changes for authorized CloudPainter administrators
+      parameters:
+        - in: header
+          name: X-Admin-Session
+          required: true
+          schema: { type: string, maxLength: 256 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50, default: 25 }
+        - in: query
+          name: cursor
+          schema: { type: string, maxLength: 512 }
+        - in: query
+          name: action
+          description: Restrict history to one account status action
+          schema: { type: string, enum: [suspend, reactivate] }
+        - in: query
+          name: outcome
+          description: Restrict history to one audit outcome
+          schema: { type: string, enum: [pending, succeeded, failed] }
+      responses:
+        "200":
+          description: Bounded status-change history containing only actor, target, action, outcome, and time
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminAuditEventPage" }
+        "400": { description: Invalid pagination or audit filter }
+        "401": { description: Sign in required or session changed }
+        "404": { description: Page not found for accounts without dashboard access }
+        "503": { description: Account history is temporarily unavailable }
+  /admin/accounts/{userId}/status:
+    put:
+      operationId: setAdminAccountStatus
+      tags: [admin]
+      summary: Suspend or reactivate a CloudPainter account
+      parameters:
+        - in: header
+          name: X-Admin-Session
+          required: true
+          schema: { type: string, maxLength: 256 }
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string, pattern: "^user_[A-Za-z0-9]{5,}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminAccountStatus" }
+      responses:
+        "200":
+          description: The account status was changed and audited
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminAccountStatusResult" }
+        "400": { description: Invalid account status request }
+        "401": { description: Sign in required or session changed }
+        "403": { description: Cross-site mutation denied }
+        "404": { description: Page not found for accounts without dashboard access }
+        "503": { description: Account status could not be changed }
+  /admin/generation-access/{userId}:
+    put:
+      operationId: setAdminGenerationAccess
+      tags: [admin]
+      summary: Approve or revoke image-generation access for a CloudPainter account
+      parameters:
+        - in: header
+          name: X-Admin-Session
+          required: true
+          schema: { type: string, maxLength: 256 }
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string, pattern: "^user_[A-Za-z0-9]{5,}$" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminGenerationAccess" }
+      responses:
+        "200":
+          description: Generation membership updated without changing attempt history
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminGenerationAccessResult" }
+        "400": { description: Invalid account or generation access request }
+        "401": { description: Sign in required or session changed }
+        "403": { description: Cross-site mutation denied }
+        "404": { description: Page not found for accounts without dashboard access }
+        "409": { description: Self-elevation is not allowed }
+        "503": { description: Generation access could not be changed }
   /outlines/config:
     get:
       operationId: getOutlineConfig
@@ -67,7 +214,13 @@ paths:
     post:
       operationId: generateLogoImage
       tags: [logos]
-      summary: Generate one exploratory logo PNG from text only
+      summary: Generate one account-budgeted exploratory logo PNG from text only
+      parameters:
+        - in: header
+          name: X-Logo-Session
+          required: true
+          schema: { type: string, maxLength: 256 }
+          description: Must match the verified current Clerk session to prevent delayed requests crossing accounts.
       requestBody:
         required: true
         content:
@@ -83,6 +236,10 @@ paths:
                 $ref: "#/components/schemas/LogoImageResult"
         "400":
           $ref: "#/components/responses/LogoImageError"
+        "401":
+          description: Sign in required or session changed
+        "403":
+          description: Account disabled or request origin denied
         "413":
           $ref: "#/components/responses/LogoImageError"
         "422":
@@ -139,6 +296,156 @@ paths:
           description: Palette changed on another device; reload before editing
         "503":
           description: Palette storage temporarily unavailable
+  /settings:
+    parameters:
+      - in: header
+        name: X-Settings-Session
+        required: true
+        schema: { type: string }
+        description: Must match the verified current session so delayed requests cannot cross accounts.
+    get:
+      operationId: getSettings
+      tags: [settings]
+      responses:
+        "200":
+          description: Current account settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountSettingsSnapshot" }
+        "401":
+          description: Sign in required or session changed
+        "503":
+          description: Settings storage temporarily unavailable
+    put:
+      operationId: saveSettings
+      tags: [settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AccountSettingsSnapshot" }
+      responses:
+        "200":
+          description: Saved account settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountSettingsSnapshot" }
+        "400":
+          description: Invalid settings
+        "401":
+          description: Sign in required or session changed
+        "403":
+          description: Cross-site mutation denied
+        "409":
+          description: Settings changed on another device; the latest revision is returned
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error, current]
+                properties:
+                  error: { type: string }
+                  current: { $ref: "#/components/schemas/AccountSettingsSnapshot" }
+        "503":
+          description: Settings storage temporarily unavailable
+  /project-backups:
+    parameters:
+      - in: header
+        name: X-Project-Session
+        required: true
+        schema: { type: string, maxLength: 256 }
+        description: Must match the verified current Clerk session to prevent delayed requests crossing accounts.
+    get:
+      operationId: listProjectBackups
+      tags: [projects]
+      summary: List bounded sketch backups for the signed-in account
+      responses:
+        "200":
+          description: Account-owned backup metadata and current quota use
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectBackupList" }
+        "401": { description: Sign in required or session changed }
+        "503": { description: Project backups are temporarily unavailable }
+    post:
+      operationId: createProjectBackup
+      tags: [projects]
+      summary: Explicitly copy one editable sketch into the signed-in account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectBackupInput" }
+      responses:
+        "201":
+          description: New account backup created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectBackupSummary" }
+        "200":
+          description: Idempotent retry returned the previously created backup
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectBackupSummary" }
+        "400": { description: Invalid backup request or unsupported sketch format }
+        "401": { description: Sign in required or session changed }
+        "403": { description: Cross-site backup mutation denied }
+        "409": { description: Request identifier reused with different content or account quota reached }
+        "413": { description: Sketch exceeds the 2 MiB backup limit }
+        "503": { description: Project backup storage is temporarily unavailable }
+  /project-backups/{backupId}:
+    parameters:
+      - in: header
+        name: X-Project-Session
+        required: true
+        schema: { type: string, maxLength: 256 }
+        description: Must match the verified current Clerk session to prevent delayed requests crossing accounts.
+      - in: path
+        name: backupId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getProjectBackup
+      tags: [projects]
+      summary: Read one account-owned sketch backup
+      responses:
+        "200":
+          description: Full account-owned project backup
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectBackup" }
+        "401": { description: Sign in required or session changed }
+        "404": { description: Backup not found for this account }
+        "503": { description: Project backup storage is temporarily unavailable }
+    delete:
+      operationId: deleteProjectBackup
+      tags: [projects]
+      summary: Delete one account-owned sketch backup
+      responses:
+        "204": { description: Backup deleted }
+        "401": { description: Sign in required or session changed }
+        "404": { description: Backup not found for this account }
+        "503": { description: Project backup storage is temporarily unavailable }
+  /project-backups/export:
+    parameters:
+      - in: header
+        name: X-Project-Session
+        required: true
+        schema: { type: string, maxLength: 256 }
+        description: Must match the verified current Clerk session to prevent delayed requests crossing accounts.
+    get:
+      operationId: exportProjectBackups
+      tags: [projects]
+      summary: Download a bounded archive of the signed-in account's uploaded sketch backups
+      responses:
+        "200":
+          description: ZIP archive containing only account-owned backups and a manifest
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        "401": { description: Sign in required or session changed }
+        "413": { description: Account backup count or size exceeds the export limit }
+        "503": { description: Project backups are temporarily unavailable }
   /healthz:
     get:
       operationId: healthCheck
@@ -308,6 +615,85 @@ components:
           schema:
             $ref: "#/components/schemas/LogoImageError"
   schemas:
+    AdminOverview:
+      type: object
+      additionalProperties: false
+      required: [totalAccounts]
+      properties:
+        totalAccounts: { type: integer, minimum: 0 }
+    AdminAccount:
+      type: object
+      additionalProperties: false
+      required: [id, name, email, createdAt, status, generationAccess]
+      properties:
+        id: { type: string }
+        name: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        status: { type: string, enum: [active, suspended] }
+        generationAccess: { $ref: "#/components/schemas/AdminGenerationAccess" }
+    AdminGenerationAccess:
+      type: object
+      additionalProperties: false
+      required: [role, enabled]
+      properties:
+        role: { type: string, enum: [normal, admin] }
+        enabled: { type: boolean }
+    AdminGenerationAccessResult:
+      type: object
+      additionalProperties: false
+      required: [id, role, enabled]
+      properties:
+        id: { type: string }
+        role: { type: string, enum: [normal, admin] }
+        enabled: { type: boolean }
+    AdminAccountPage:
+      type: object
+      additionalProperties: false
+      required: [accounts, totalCount, limit, offset]
+      properties:
+        accounts:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/AdminAccount" }
+        totalCount: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1, maximum: 50 }
+        offset: { type: integer, minimum: 0, maximum: 10000 }
+    AdminAuditEvent:
+      type: object
+      additionalProperties: false
+      required: [actorId, targetId, action, outcome, createdAt]
+      properties:
+        actorId: { type: string }
+        targetId: { type: string }
+        action: { type: string, enum: [suspend, reactivate] }
+        outcome: { type: string, enum: [pending, succeeded, failed] }
+        createdAt: { type: string, format: date-time }
+    AdminAuditEventPage:
+      type: object
+      additionalProperties: false
+      required: [events, totalCount, limit, nextCursor]
+      properties:
+        events:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/AdminAuditEvent" }
+        totalCount: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1, maximum: 50 }
+        nextCursor: { type: ["string", "null"], maxLength: 512 }
+    AdminAccountStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [active, suspended] }
+    AdminAccountStatusResult:
+      type: object
+      additionalProperties: false
+      required: [id, status]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [active, suspended] }
     OutlineInput:
       type: object
       additionalProperties: false
@@ -389,7 +775,7 @@ components:
       properties:
         code:
           type: string
-          enum: [INVALID_INPUT, BODY_TOO_LARGE, REFUSED, RATE_LIMITED, BUSY, UNAVAILABLE, PROVIDER_FAILED, INVALID_IMAGE, TIMEOUT]
+          enum: [INVALID_INPUT, BODY_TOO_LARGE, REFUSED, RATE_LIMITED, BUSY, UNAVAILABLE, PROVIDER_FAILED, INVALID_IMAGE, TIMEOUT, unauthorized, authorization_denied, quota_exhausted, rate_limited, budget_unavailable]
         message:
           type: string
         retryable:
@@ -412,6 +798,69 @@ components:
         id: { type: string, pattern: "^[a-zA-Z0-9_-]{1,64}$" }
         name: { type: string, minLength: 1, maxLength: 40 }
         hex: { type: string, pattern: "^#[0-9a-fA-F]{6}$" }
+    CloudPainterSettings:
+      type: object
+      additionalProperties: false
+      required: [textSize, drawingTool, brushStyle, brushSize]
+      properties:
+        textSize: { type: integer, minimum: 80, maximum: 140, multipleOf: 10 }
+        drawingTool: { type: string, enum: [brush, pencil, pen] }
+        brushStyle: { type: string, enum: [round, chisel, soft, dry] }
+        brushSize: { type: integer, minimum: 1, maximum: 48 }
+    AccountSettingsSnapshot:
+      type: object
+      additionalProperties: false
+      required: [revision, settings]
+      properties:
+        revision: { type: integer, minimum: 0, maximum: 2147483647 }
+        settings: { $ref: "#/components/schemas/CloudPainterSettings" }
+    ProjectBackupInput:
+      type: object
+      additionalProperties: false
+      required: [requestId, backup]
+      properties:
+        requestId: { type: string, format: uuid }
+        backup:
+          type: string
+          minLength: 1
+          maxLength: 2097152
+          description: Versioned CloudPainter project JSON; server enforces the UTF-8 byte limit.
+    ProjectBackupSummary:
+      type: object
+      additionalProperties: false
+      required: [id, title, sizeBytes, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 120 }
+        sizeBytes: { type: integer, minimum: 1, maximum: 2097152 }
+        createdAt: { type: string, format: date-time }
+    ProjectBackup:
+      type: object
+      additionalProperties: false
+      required: [id, title, sizeBytes, createdAt, backup]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, minLength: 1, maxLength: 120 }
+        sizeBytes: { type: integer, minimum: 1, maximum: 2097152 }
+        createdAt: { type: string, format: date-time }
+        backup: { type: string, minLength: 1, maxLength: 2097152 }
+    ProjectBackupList:
+      type: object
+      additionalProperties: false
+      required: [backups, totalBytes, accountLimitBytes]
+      properties:
+        backups:
+          type: array
+          maxItems: 20
+          items: { $ref: "#/components/schemas/ProjectBackupSummary" }
+        totalBytes: { type: integer, minimum: 0, maximum: 33554432 }
+        accountLimitBytes: { type: integer, enum: [33554432] }
+    ProjectBackupError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { type: string, maxLength: 256 }
     HealthStatus:
       type: object
       properties:

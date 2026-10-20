@@ -4,7 +4,7 @@
  * sources, under applicable approval, and test the real checked route.
  *
  * Host owns attestRuntime({binding, developmentRecord?, deadlineAt, abortSignal}).
- * Failure Gate owns beginReclaim({operationId, operation, manifest, binding,
+ * The project's authorized reclaim provider owns beginReclaim({operationId, operation, manifest, binding,
  *   requestedScope, scopeDigest, attestation, deadlineAt, abortSignal}).
  * beginReclaim must atomically verify and claim a one-operation grant and return:
  * {protocolVersion:1, authorizationId, operationId, scopeDigest, attestationId, expiresAt,
@@ -16,6 +16,9 @@
  * reference strings, booleans, environment variables or caller-written records.
  * No dynamic verifier path, executable or unsigned fixture fallback is allowed.
  * These hooks do NOT create an approval/attestation source.
+ * Failure Gate Unified alone supplies neither reclaim capability nor permission.
+ * The FAILURE_GATE_AUTHORIZATION_UNAVAILABLE error identifier is retained for
+ * adapter compatibility; it does not require a Failure Gate provider.
  */
 export async function attestRuntime() {
   throw new Error("HOST_ATTESTATION_UNAVAILABLE: verified host attestation adapter not configured");

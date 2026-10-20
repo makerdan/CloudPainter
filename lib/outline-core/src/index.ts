@@ -3,6 +3,7 @@ export type OutlineRegion = { x: number; y: number; width: number; height: numbe
 export type OutlineCandidate = { label: string; points: Point[] };
 export const MAX_OUTLINE_POINTS = 1024;
 export const MAX_CANDIDATES = 8;
+export const PHOTO_WIDE_SPAN = 0.9;
 
 export function validRegion(region: OutlineRegion): boolean {
   return Object.values(region).every(Number.isFinite) && region.x >= 0 && region.y >= 0
@@ -12,6 +13,17 @@ export function validRegion(region: OutlineRegion): boolean {
 export function validOutline(points: Point[]): boolean {
   return points.length >= 3 && points.length <= MAX_OUTLINE_POINTS
     && points.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1);
+}
+export function isPhotoWideOutline(points: Point[]): boolean {
+  if (!validOutline(points)) return false;
+  let minX = 1, minY = 1, maxX = 0, maxY = 0;
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+  return maxX - minX >= PHOTO_WIDE_SPAN && maxY - minY >= PHOTO_WIDE_SPAN;
 }
 export function samplePath(points: Point[]): Point[] {
   if (points.length <= MAX_OUTLINE_POINTS) return points;

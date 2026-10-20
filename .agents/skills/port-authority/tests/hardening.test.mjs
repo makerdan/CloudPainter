@@ -108,7 +108,16 @@ function setup(t, { host = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "port-authority-regression-"));
   const scripts = join(dir, "runtime-fixture"); mkdirSync(scripts);
   for (const name of ["free-ports.mjs", "validation-lock.mjs", "runtime-environment.mjs", "host-capabilities.mjs"]) {
-    copyFileSync(join(root, "scripts", name), join(scripts, name));
+    const consumer = ["free-ports.mjs", "validation-lock.mjs"].includes(name);
+    const destination = join(scripts, name);
+    copyFileSync(join(root, "scripts", name), destination);
+    if (consumer) {
+      // Private advanced-profile fixture only; preserves source fault-injection
+      // points and IPC-only workers. This prefix is NEVER shipped to a host.
+      const source = readFileSync(destination, "utf8");
+      writeFileSync(destination, source.replace("#!/usr/bin/env node",
+        `#!/usr/bin/env node\nif (!["--pa-watchdog", "--pa-workload-gate"].includes(process.argv[2])) process.argv.splice(2, 0, "--advanced");`));
+    }
   }
   const hostState = join(dir, "fixture-host-state");
   writeFileSync(hostState, JSON.stringify({
@@ -270,118 +279,104 @@ if (process.argv.includes("--supervised")) {
   process.exit(result.code ?? 1);
 }
 
-test("skill: interfaces, independent budgets, conflict map, Failure Gate boundaries", () => {
+// Default-profile behavior is tested separately; retained advanced runtime cases
+// below use private explicit-profile shims, never shipped authority integrations.
+await import("./core.test.mjs");
+
+test("contract: one identity, reduced defaults and explicit optional features", () => {
   const skill = readFileSync(join(root, "SKILL.md"), "utf8");
   assert.match(skill, /^---\nname: port-authority\n/);
   assert(skill.split("\n").length < 500);
   assert(skill.split("\n")[2].slice("description: ".length).length <= 1024);
-  for (let i = 0; i <= 9; i++) assert(skill.includes(`## Phase ${i} (`));
-  assert(skill.includes("## Independent gate — ALL validation execution budgets"));
-  assert(skill.includes("even a SINGLE non-conflicting suite"));
-  assert(skill.includes("caller-to-resource conflict map"));
-  assert(skill.includes("A composite lock does not conflict with its constituent names."));
-  assert(skill.includes("necessary safety/lifecycle changes are allowed only"));
-  assert(skill.includes("The adversarial acceptance matrix is mandatory"));
-  assert(skill.includes("perform exactly three authorized isolation retries"));
-  assert(skill.includes("A passing retry proves intermittency, not pre-existing provenance."));
-  assert(skill.includes("Quarantine is a coverage change, not an ignore"));
-  assert(skill.includes("Closed by owner direction—not validation passed."));
-  assert(skill.includes("both runs use its checked route"));
-  assert(!skill.includes("preserved byte-for-byte"));
+  assert(skill.includes("Core Runtime Hygiene"));
+  assert(skill.includes("**read-only inventory**"));
+  assert(skill.includes("one outer local lease"));
+  assert(!skill.includes("perform exactly three authorized isolation retries"));
+  assert(!skill.includes("ACCEPTABLE_WITH_IGNORED_FAILURES"));
   for (const p of ["scripts/free-ports.mjs", "scripts/validation-lock.mjs",
     "scripts/runtime-environment.mjs", "scripts/host-capabilities.mjs", "reference/runtime-contract.md",
-    "tests/hardening.test.mjs"]) assert(existsSync(join(root, p)));
-  assert(skill.includes("exactly seven files"));
-  assert(skill.includes("NODE_ENV=production"));
-  assert(skill.includes("audited, fresh, root/boot/ancestor-bound evidence"));
+    "reference/advanced-controls.md", "reference/symptom-guidance.md",
+    "tests/hardening.test.mjs", "tests/core.test.mjs"]) assert(existsSync(join(root, p)));
 });
 
-test("policy text: staging is separate without weakening approval or activation gates", () => {
+test("contract: stages retain authority and actual host acceptance", () => {
   const guide = readFileSync(join(root, "SKILL.md"), "utf8").replace(/\s+/g, " ");
   const contract = readFileSync(join(root, "reference/runtime-contract.md"), "utf8").replace(/\s+/g, " ");
-  for (const state of ["STAGED", "NON_RECLAIM_VERIFIED", "LIVE_RECLAIM_ENABLED"]) {
-    assert(guide.includes(state), state); assert(contract.includes(state), state);
+  for (const state of ["STAGED", "CORE_VERIFIED"]) {
+    assert(guide.includes(state)); assert(contract.includes(state));
   }
-  for (const text of [
-    "Never overwrite active scripts or wire callers during staging.",
-    "A stricter approved task or Failure Gate policy still governs",
-    "Fixture coverage is isolated evidence, not host validation or task completion.",
-    "Phase 9's two host runs apply to activated controls, not file-only staging.",
-    "both runs use its checked route",
-  ]) assert(guide.includes(text), text);
-  for (const text of [
-    "STAGED with checks BLOCKED",
-    "obtain an authorized staged-task revision",
-    "Do not install a fixture adapter in a genuine runtime or strip real production flags",
-    "unknown applicability cannot be treated as inactive or independently approved",
-    "Do not silently remove an existing safety dependency",
-    "keeps reclaim and the development exception BLOCKED",
-    "staged templates do not repair it",
-    "blocks dependent activation/readiness, not otherwise authorized inert staging",
-  ]) assert(contract.includes(text), text);
-  assert(contract.includes("When Failure Gate is verified active, required-tier runs use its checked"));
-  assert(contract.includes("When verified inactive, use verified existing host policy"));
-  assert(!contract.includes("Required-tier runs use Failure Gate's checked"));
+  assert(guide.includes("two consecutive authorized host acceptance runs"));
+  assert(contract.includes("without overwriting live scripts/callers"));
+  assert(contract.includes("do not silently remove that dependency"));
+  assert(contract.includes("fixture proof alone does not"));
+  assert(guide.includes("Unknown governing policy blocks dependent execution"));
 });
 
-test("policy: project implementation requires genuine integration rather than source parity", () => {
-  const guide = readFileSync(join(root, "SKILL.md"), "utf8").replace(/\s+/g, " ");
-  const contract = readFileSync(join(root, "reference/runtime-contract.md"), "utf8").replace(/\s+/g, " ");
-  assert(guide.includes("before staging/adapting or project-specific implementation/acceptance"));
-  for (const text of [
-    "Source/archive parity proves integrity, not trusted authorization integration",
-    "Updating this skill does not authorize changing a project.",
-    "Do not finish a project implementation task at file placement",
-    "A local manifest, boolean, mock or invented API is not a trusted authorization integration.",
-    "keep dependent cleanup BLOCKED",
-    "Continue only independently authorized work",
-    "For live reclaim being enabled",
-    "Isolated bundle tests cannot replace these real project runs.",
-    "unknown applicability blocks the affected decision",
-    "without manual port/process/lock cleanup between runs",
-  ]) assert(contract.includes(text), text);
+test("contract: advanced reclaim requires genuine providers and is not supplied by Unified", () => {
+  const contract = readFileSync(join(root, "reference/advanced-controls.md"), "utf8").replace(/\s+/g, " ");
+  assert(contract.includes("Failure Gate Unified does not provide pre-existing-process reclaim authority"));
+  assert(contract.includes("never attestation or authorization"));
+  assert(contract.includes("No ordinary Port Authority installation requires this extension"));
+  assert(contract.includes("Never install test adapters"));
+  assert(contract.includes("atomically claims one operation"));
+  assert(contract.includes("reconcile through the actual authorized read/recovery route"));
   const adapter = readFileSync(join(root, "scripts/host-capabilities.mjs"), "utf8");
   assert(adapter.includes("HOST_ATTESTATION_UNAVAILABLE"));
   assert(adapter.includes("FAILURE_GATE_AUTHORIZATION_UNAVAILABLE"));
 });
 
-test("policy: lock adoption wires conflicts without imposing locks on independent callers", () => {
-  const contract = readFileSync(join(root, "reference/runtime-contract.md"), "utf8").replace(/\s+/g, " ");
-  for (const text of [
-    "only where actual conflicts require serialization",
-    "a staged lock file is not installed lock wiring",
-    "Map every conflicting alias, hook, nested runner and workflow",
-    "same canonical lock identity or verified common acquisition order",
-    "Non-conflicting callers need no invented lock but still need finite transitive supervision.",
-    "For applicable serialization, prove wired conflicting callers cannot overlap.",
-    "uncovered/unwrapped conflicting alias or alternate lock path fails wiring acceptance",
-    "Do not change production without its separate explicit authorization.",
-  ]) assert(contract.includes(text), text);
-});
-
-test("policy: health acceptance rejects HTML-200 and validates actual API/browser JSON contract", () => {
+test("contract: Unified integration preserves tier, recovery and process identity boundaries", () => {
   const guide = readFileSync(join(root, "SKILL.md"), "utf8").replace(/\s+/g, " ");
   const contract = readFileSync(join(root, "reference/runtime-contract.md"), "utf8").replace(/\s+/g, " ");
-  for (const text of ["JSON media type, parseable JSON and healthy fields",
-    "Reject HTML", "even with HTTP 200", "Browser callers must test their actual routed request path",
-    "positive/negative regressions", "Static-only apps do not need an invented backend endpoint"]) {
-    assert(guide.includes(text), text);
-  }
-  for (const text of [
-    "including a Studio probe when present",
-    "rather than just a direct backend curl or a fixture-only helper",
-    "exact required fields/types/values indicating healthy service",
-    "Do not invent universal",
-    "JSON alone proves health",
-    "Reject HTML with HTTP 200",
-    "missing or incorrect content type",
-    "malformed JSON, unexpected redirects, unhealthy values and wrong-shape/wrong-service",
-    "separately approved compatible endpoint/probe change",
-    "Require automated positive and negative regressions against the actual probe.",
-    "HTML with HTTP 200 through the same frontend routing",
-    "network failure/timeout", "verify abort/cancellation",
-    "Do not disrupt production or stop a live service just to generate a negative response.",
-  ]) assert(contract.includes(text), text);
+  const advanced = readFileSync(join(root, "reference/advanced-controls.md"), "utf8").replace(/\s+/g, " ");
+  assert(guide.includes("exactly one adequate assigned tier"));
+  assert(guide.includes("not prerequisites for unrelated plan publication") ||
+    guide.includes("or prerequisites for unrelated plan publication"));
+  assert(guide.includes("they do not authorize task planning or execution"));
+  assert(guide.includes("does not authorize uncertain-lease deletion"));
+  assert(contract.includes("not two more approvals or a publication gate for unrelated plans"));
+  assert(contract.includes("no separate reviewer or recovery specification is universally required"));
+  assert(contract.includes("not unrelated task planning"));
+  assert(advanced.includes("Unified task approval alone does not supply this capability"));
+});
+
+test("contract: optional review preserves runtime evidence and post-Start safety", () => {
+  const guide = readFileSync(join(root, "SKILL.md"), "utf8").replace(/\s+/g, " ");
+  const contract = readFileSync(join(root, "reference/runtime-contract.md"), "utf8").replace(/\s+/g, " ");
+  const prompt = readFileSync(join(root, "usage-prompt.txt"), "utf8").replace(/\s+/g, " ");
+  assert(guide.includes("Separate independent review is optional"));
+  assert(guide.includes('record review as "not selected," not pending or blocked'));
+  assert(guide.includes("authorized implementer may obtain"));
+  assert(guide.includes("two consecutive authorized host acceptance runs"));
+  assert(guide.includes("adds no Start interceptor, plan editor or admission authority"));
+  assert(guide.includes("A plan amendment is not permission to restart services"));
+  assert(contract.includes("independent watchdog and cleanup acknowledgement"));
+  assert(contract.includes("their safety contract is unchanged"));
+  assert(contract.includes("before changing an active run's binding"));
+  assert(prompt.includes("Separate review is not selected by this prompt"));
+  assert(!prompt.includes("Create an implementation task and a real dependent independent"));
+});
+
+test("contract: complete core criteria preserve installed wiring and independent review", () => {
+  const contract = readFileSync(join(root, "reference/runtime-contract.md"), "utf8").replace(/\s+/g, " ");
+  for (let i = 1; i <= 12; i++) assert(contract.includes(`C${String(i).padStart(2, "0")}`));
+  assert(contract.includes("All conflict participants must resolve the same canonical file"));
+  assert(contract.includes("scope, starting observations and expected proof"));
+  assert(contract.includes("fresh independent post-repair proof"));
+  assert(contract.includes("Definition-only confirmation, resource verification and app integration are distinct"));
+  assert(contract.includes("no age-only unlink"));
+});
+
+test("contract: health remains actual-route proof; unrelated symptoms are conditional", () => {
+  const guide = readFileSync(join(root, "SKILL.md"), "utf8").replace(/\s+/g, " ");
+  const contract = readFileSync(join(root, "reference/runtime-contract.md"), "utf8").replace(/\s+/g, " ");
+  assert(guide.includes("test the real routed request"));
+  assert(guide.includes("Reject HTML-200"));
+  assert(guide.includes("Static-only apps need no invented backend"));
+  assert(contract.includes("real browser/proxy path"));
+  assert(contract.includes("never stop a live service merely to create an outage fixture"));
+  const symptoms = readFileSync(join(root, "reference/symptom-guidance.md"), "utf8");
+  assert(symptoms.includes("not universal installation"));
 });
 
 test("invalid inputs and production flags win over development/disable markers", async t => {
@@ -830,12 +825,21 @@ test("PID-only and forged token/path reentry cannot bypass the lease", async t =
 
 test("deep sequential reentry finishes; inherited-context parallel siblings serialize", async t => {
   const s = setup(t);
-  const deep = s.launch(lock, ["--", process.execPath, lock, "--", process.execPath, lock,
+  // Surface the exact private fixture path and descriptor metadata if a safe
+  // regular-file rejection recurs. Keep the same checks and fail-closed result.
+  const environment = join(s.scripts, "runtime-environment.mjs");
+  const environmentSource = readFileSync(environment, "utf8");
+  const guard = 'throw new Error("unsafe or oversized JSON file");';
+  assert.equal(environmentSource.split(guard).length, 2);
+  writeFileSync(environment, environmentSource.replace(guard,
+    'throw new Error("unsafe or oversized JSON file: " + path + " (size=" + stat.size + ", links=" + stat.nlink + ", mode=" + stat.mode + ")");'));
+  const fixtureLock = join(s.scripts, "validation-lock.mjs");
+  const deep = s.launch(lock, ["--", process.execPath, fixtureLock, "--", process.execPath, fixtureLock,
     "--", process.execPath, "-e", "process.exit(0)"]);
   const deepResult = await deep.done;
   assert.equal(deepResult.code, 0, deepResult.text); assert.match(deepResult.text, /"nested":true/);
   const log = join(s.dir, "siblings");
-  const commands = ["a", "b"].map(label => [lock, "--", process.execPath, "-e", overlapCode(log, label, 250)]);
+  const commands = ["a", "b"].map(label => [fixtureLock, "--", process.execPath, "-e", overlapCode(log, label, 250)]);
   const parent = `const {spawn}=require('node:child_process');
     Promise.all(${JSON.stringify(commands)}.map(args=>new Promise(r=>{
       const c=spawn(process.execPath,args,{env:process.env,stdio:'inherit'});c.on('exit',r);
@@ -879,9 +883,14 @@ test("cancellation holds exclusion until resistant child stops", async t => {
 
 test("execution budget stops owned work before replacement", async t => {
   const s = setup(t), pidFile = join(s.dir, "budget-child");
+  // Separate process startup from the runtime timeout assertion: 250 ms may
+  // expire before the watchdog/gate is launched on a loaded host. This case
+  // proves the command actually started, then proves bounded cleanup and
+  // serialized replacement. Exit 4 before the marker cannot satisfy it.
   const first = s.wrapped(`process.on('SIGTERM',()=>{});setInterval(()=>{},1000);
-    require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));`, { VALIDATION_LOCK_MAX_HOLD_MS: "250" });
-  const p = await until(() => existsSync(pidFile) && identity(Number(readFileSync(pidFile, "utf8"))));
+    require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));`, { VALIDATION_LOCK_MAX_HOLD_MS: "5000" });
+  const p = await until(() => existsSync(pidFile) && identity(Number(readFileSync(pidFile, "utf8"))), 7000);
+  assert(first.text.includes('"executionLimitMs":5000'), first.text);
   s.extras.push(p);
   const next = s.wrapped(`try {const f=require('node:fs').readFileSync('/proc/${p.pid}/stat','utf8').split(') ')[1].split(' ');
     if(f[19]===${JSON.stringify(p.startTime)}&&!['Z','X'].includes(f[0]))throw new Error('OVERLAP');
@@ -912,27 +921,35 @@ test("all validation budgets are explicit, finite and timer-safe before dispatch
 
 test("direct package-script dispatcher fixture cannot bypass outer execution deadline", async t => {
   const s = setup(t), packageFile = join(s.dir, "package.json"), script = join(s.dir, "hang.cjs");
-  writeFileSync(script, "process.on('SIGTERM',()=>{});setInterval(()=>{},1000);");
+  const marker = join(s.dir, "direct-script-dispatched");
+  writeFileSync(script, `require('node:fs').writeFileSync(${JSON.stringify(marker)},'started');
+    process.on('SIGTERM',()=>{});setInterval(()=>{},1000);`);
   writeFileSync(packageFile, JSON.stringify({ scripts: { "test-direct": script } }));
   const dispatcher = `const script=JSON.parse(require('node:fs').readFileSync(${JSON.stringify(packageFile)},'utf8')).scripts['test-direct'];
     const c=require('node:child_process').spawn(process.execPath,[script],{stdio:'inherit'});
     c.on('exit',(code,signal)=>process.exit(signal?1:code));`;
-  const result = await s.wrapped(dispatcher, { VALIDATION_LOCK_MAX_HOLD_MS: "400" }).done;
+  const result = await s.wrapped(dispatcher, { VALIDATION_LOCK_MAX_HOLD_MS: "5000" }).done;
+  assert(existsSync(marker), result.text);
+  assert.match(result.text, /"executionLimitMs":5000/);
   assert.equal(result.code, 1, result.text); assert.match(result.text, /execution-budget/);
   assert.match(result.text, /"workloadStopped":true/); assert(!existsSync(s.env.VALIDATION_LOCK_FILE));
 });
 
 test("async test and hanging hook report finite timeout; outer wrapper stops remaining handles", async t => {
-  const s = setup(t);
+  const s = setup(t), marker = join(s.dir, "node-test-callback");
   const cases = [
-    `const test=require('node:test');setInterval(()=>{},1000);
-      test('async hang',{timeout:40},async()=>await new Promise(()=>{}));`,
-    `const test=require('node:test');setInterval(()=>{},1000);
-      test('hook hang',{timeout:200},t=>{
+    `const fs=require('node:fs'),test=require('node:test');setInterval(()=>{},1000);
+      test('async hang',{timeout:40},async()=>{fs.writeFileSync(${JSON.stringify(marker)},'started');
+        await new Promise(()=>{});});`,
+    `const fs=require('node:fs'),test=require('node:test');setInterval(()=>{},1000);
+      test('hook hang',{timeout:200},t=>{fs.writeFileSync(${JSON.stringify(marker)},'started');
         t.after(async()=>await new Promise(()=>{}),{timeout:40});});`,
   ];
   for (const code of cases) {
-    const result = await s.wrapped(code, { VALIDATION_LOCK_MAX_HOLD_MS: "400" }).done;
+    rmSync(marker, { force: true });
+    const result = await s.wrapped(code, { VALIDATION_LOCK_MAX_HOLD_MS: "5000" }).done;
+    assert(existsSync(marker), result.text);
+    assert.match(result.text, /"executionLimitMs":5000/);
     assert.notEqual(result.code, 0, result.text);
     assert.match(result.text, /timed out after 40ms/); assert.match(result.text, /execution-budget/);
     assert.match(result.text, /"workloadStopped":true/);
@@ -941,39 +958,133 @@ test("async test and hanging hook report finite timeout; outer wrapper stops rem
 });
 
 test("outer supervisor stops synchronous test despite its blocked per-test timer", async t => {
-  const s = setup(t);
-  const result = await s.wrapped(`require('node:test')('sync hang',{timeout:40},()=>{while(true){}});`,
-    { VALIDATION_LOCK_MAX_HOLD_MS: "250" }).done;
+  const s = setup(t), marker = join(s.dir, "sync-test-dispatched");
+  const result = await s.wrapped(`require('node:fs').writeFileSync(${JSON.stringify(marker)},'started');
+    require('node:test')('sync hang',{timeout:40},()=>{while(true){}});`,
+    { VALIDATION_LOCK_MAX_HOLD_MS: "5000" }).done;
+  assert(existsSync(marker), result.text);
+  assert.match(result.text, /"executionLimitMs":5000/);
   assert.equal(result.code, 1, result.text); assert.match(result.text, /execution-budget/);
   assert.match(result.text, /"workloadStopped":true/); assert(!existsSync(s.env.VALIDATION_LOCK_FILE));
 });
 
-test("wall-clock reversal cannot extend queue or execution elapsed limits", async t => {
-  const s = setup(t);
-  const injected = `const realNow=Date.now;let calls=0;Date.now=()=>realNow()-(++calls>3?3600000:0);
+// All clock controls and source injections below are PRIVATE test fixtures.
+// They change Date.now only, never performance.now/hrtime or runtime budgets.
+function clockReversalScript(s, command, reverseWhenFileExists = null) {
+  return `const fs=require('node:fs'),realNow=Date.now.bind(Date);let offset=0;
+    globalThis.__paReverseWallClock=()=>{
+      if(offset)return;
+      const before=realNow();offset=3600000;
+      console.log(JSON.stringify({fixture:'wall-clock-reversed',before,after:realNow()-offset}));
+    };
+    Date.now=()=>{
+      if(${JSON.stringify(reverseWhenFileExists)}&&fs.existsSync(${JSON.stringify(reverseWhenFileExists)}))
+        globalThis.__paReverseWallClock();
+      return realNow()-offset;
+    };
     process.argv=[process.execPath,${JSON.stringify(join(s.scripts, "validation-lock.mjs"))},'--',
-      process.execPath,'-e','setInterval(()=>{},1000)'];
+      process.execPath,'-e',${JSON.stringify(command)}];
     import(${JSON.stringify(join(s.scripts, "validation-lock.mjs"))});`;
-  const execution = await s.run("-e", [injected], { VALIDATION_LOCK_MAX_HOLD_MS: "200" });
-  assert.equal(execution.code, 1, execution.text); assert.match(execution.text, /execution-budget/);
+}
+function injectPrivateClockFixture(s, point, before) {
+  const file = join(s.scripts, "validation-lock.mjs"), source = readFileSync(file, "utf8");
+  assert.equal(source.split(point).length, 2, "private fixture injection must identify one exact boundary");
+  writeFileSync(file, source.replace(point, before + point));
+}
+function assertWallClockReversed(text) {
+  const line = text.split("\n").find(line => line.startsWith('{"fixture":"wall-clock-reversed"'));
+  assert(line, "the wall-clock reversal must actually occur\n" + text);
+  const event = JSON.parse(line);
+  assert(event.before - event.after >= 3599000, "fixture must move wall time back approximately one hour");
+}
+
+test("wall-clock reversal: expiry before dispatch returns 4 and retains the unfinalized lease", async t => {
+  const s = setup(t), marker = join(s.dir, "must-not-dispatch");
+  // Establish expiry at the pre-worker boundary, rather than assuming a slow
+  // machine finishes watchdog/gate startup inside a 200 ms execution window.
+  injectPrivateClockFixture(s,
+    '  if (cancelled || performance.now() - acquiredMono >= maxHoldMs) {',
+    '  globalThis.__paReverseWallClock(); await sleep(maxHoldMs);\n');
+  const started = process.hrtime.bigint();
+  const result = await s.run("-e", [clockReversalScript(s,
+    `require('node:fs').writeFileSync(${JSON.stringify(marker)},'unexpected dispatch')`)],
+    { VALIDATION_LOCK_MAX_HOLD_MS: "200" });
+  assert.equal(result.code, 4, result.text);
+  assertWallClockReversed(result.text);
+  assert.match(result.text, /execution-budget expired before launch/);
+  assert(!existsSync(marker), "no workload may run before denied dispatch");
+  assert(!result.text.includes("independent-watchdog-registered"));
+  const lease = JSON.parse(readFileSync(s.env.VALIDATION_LOCK_FILE, "utf8"));
+  assert.equal(lease.phase, "launching");
+  assert.equal(lease.recoveryRequired, true);
+  assert.equal(lease.group, null);
+  assert.deepEqual(lease.observed, []);
+  assert(!isAlive(lease.owner), "the fixture owner must have exited");
+  assert(Number(process.hrtime.bigint() - started) / 1e6 < 10000, "startup denial must remain bounded");
+});
+
+test("wall-clock reversal: confirmed dispatched work times out with exit 1 and verified cleanup", async t => {
+  const s = setup(t), marker = join(s.dir, "dispatched-workload");
+  const command = `const fs=require('node:fs');
+    const raw=fs.readFileSync('/proc/'+process.pid+'/stat','utf8');
+    fs.writeFileSync(${JSON.stringify(marker)},JSON.stringify({
+      pid:process.pid,startTime:raw.slice(raw.lastIndexOf(')')+2).trim().split(/\\s+/)[19]}));
+    setInterval(()=>{},1000);`;
+  // A declared finite five-second window separates this case from startup
+  // expiry. The workload marker is mandatory: exit 4 is NOT accepted here.
+  // The wall clock reverses only after user work has actually been dispatched.
+  const started = process.hrtime.bigint();
+  const job = s.launch("-e", [clockReversalScript(s, command, marker)],
+    { VALIDATION_LOCK_MAX_HOLD_MS: "5000" });
+  const owned = await until(() => existsSync(marker) && JSON.parse(readFileSync(marker, "utf8")), 7000);
+  s.extras.push(owned);
+  const result = await job.done;
+  assert.equal(result.code, 1, result.text);
+  assertWallClockReversed(result.text);
+  assert.match(result.text, /"executionLimitMs":5000/);
+  assert.match(result.text, /"state":"FAILED".*"reason":"execution-budget".*"workloadStopped":true/);
+  assert.match(result.text, /independent-watchdog-registered/);
+  assert(!isAlive(owned), "the dispatched workload incarnation must be stopped");
+  assert(!existsSync(s.env.VALIDATION_LOCK_FILE), "confirmed quiescence must permit normal lease release");
+  assert(Number(process.hrtime.bigint() - started) / 1e6 < 10000, "wall-clock reversal must not extend the execution deadline");
+});
+
+test("wall-clock reversal: queue expiry returns 3 without dispatch or changing the live owner's lease", async t => {
+  const s = setup(t), marker = join(s.dir, "queued-must-not-dispatch");
   seedLease(s, identity(process.pid));
-  const queued = await s.run("-e", [injected], { VALIDATION_LOCK_TIMEOUT_MS: "150" });
-  assert.equal(queued.code, 3, queued.text); assert.match(queued.text, /queue timeout/);
+  const originalLease = readFileSync(s.env.VALIDATION_LOCK_FILE, "utf8");
+  // Reverse after enqueuedMono/enqueuedAt are captured, even when no lease
+  // writes occur while waiting. A call-count clock stub did not prove that.
+  injectPrivateClockFixture(s,
+    "  while (!cancelled && performance.now() - enqueuedMono < queueMs) {",
+    "  globalThis.__paReverseWallClock();\n");
+  const started = process.hrtime.bigint();
+  const result = await s.run("-e", [clockReversalScript(s,
+    `require('node:fs').writeFileSync(${JSON.stringify(marker)},'unexpected dispatch')`)],
+    { VALIDATION_LOCK_TIMEOUT_MS: "500" });
+  assert.equal(result.code, 3, result.text);
+  assertWallClockReversed(result.text);
+  assert.match(result.text, /queue timeout/);
+  assert(!existsSync(marker));
+  assert(!result.text.includes('"state":"ACQUIRED"'));
+  assert.equal(readFileSync(s.env.VALIDATION_LOCK_FILE, "utf8"), originalLease);
+  assert(Number(process.hrtime.bigint() - started) / 1e6 < 10000, "wall-clock reversal must not extend the queue deadline");
 });
 
 test("late raw zero cannot win the execution deadline race", async t => {
   const s = setup(t), marker = join(s.dir, "late-zero");
   const injected = `const fs=require('node:fs'),original=fs.readdirSync;let delayed=false;
     fs.readdirSync=function(path,...args){if(path==='/proc'&&!delayed&&fs.existsSync(${JSON.stringify(marker)})){
-      delayed=true;Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,650);}
+      delayed=true;Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,5500);}
       return original.call(this,path,...args);};
     require('node:module').syncBuiltinESMExports();
     process.argv=[process.execPath,${JSON.stringify(join(s.scripts, "validation-lock.mjs"))},'--',
       process.execPath,'-e',${JSON.stringify(`require('node:fs').writeFileSync(${JSON.stringify(marker)},'ready');setTimeout(()=>process.exit(0),30);`)}];
     import(${JSON.stringify(join(s.scripts, "validation-lock.mjs"))});`;
-  // Keep the same late-zero race, with room for the new gate/watchdog startup.
-  // This is a private fixture limit, not a change to any host-approved budget.
-  const result = await s.run("-e", [injected], { VALIDATION_LOCK_MAX_HOLD_MS: "500" });
+  // The child must finish before the owner resumes, after the independent
+  // finite deadline. A five-second startup window separates that stage from
+  // the 5.5-second deliberate observation pause.
+  const result = await s.run("-e", [injected], { VALIDATION_LOCK_MAX_HOLD_MS: "5000" });
   assert.equal(result.code, 1, result.text); assert.match(result.text, /"rawExitCode":0/);
   assert.match(result.text, /execution-budget/); assert(!existsSync(s.env.VALIDATION_LOCK_FILE));
 });
@@ -1019,12 +1130,13 @@ test("descendant spawned on SIGTERM is discovered and receives termination", asy
     const f=require('node:fs'),fields=f.readFileSync('/proc/'+c.pid+'/stat','utf8').split(') ')[1].split(' ');
     f.writeFileSync(${JSON.stringify(latePid)},JSON.stringify({pid:c.pid,startTime:fields[19]}));}});
     require('node:fs').writeFileSync(${JSON.stringify(rootPid)},String(process.pid));setInterval(()=>{},1000);`;
-  const job = s.wrapped(parent, { VALIDATION_LOCK_MAX_HOLD_MS: "300", VALIDATION_LOCK_STOP_GRACE_MS: "350" });
+  const job = s.wrapped(parent, { VALIDATION_LOCK_MAX_HOLD_MS: "5000", VALIDATION_LOCK_STOP_GRACE_MS: "350" });
   const rootIdentity = await until(() => existsSync(rootPid) && identity(Number(readFileSync(rootPid, "utf8"))));
   s.extras.push(rootIdentity);
   const lateIdentity = await until(() => existsSync(latePid) && JSON.parse(readFileSync(latePid, "utf8")));
   s.extras.push(lateIdentity);
   const result = await job.done;
+  assert.match(result.text, /"executionLimitMs":5000/);
   assert.equal(result.code, 1, result.text); assert(!isAlive(rootIdentity)); assert(!isAlive(lateIdentity));
   assert(result.text.includes(`"pid":${lateIdentity.pid}`)); assert(!existsSync(s.env.VALIDATION_LOCK_FILE));
 });

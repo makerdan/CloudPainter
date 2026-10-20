@@ -105,12 +105,16 @@ function verifiedDevelopment(env) {
   }
   throw new Error("verified development supervisor is not a live caller ancestor");
 }
-export async function classifyRuntimeEnvironment(env = process.env) {
+export async function classifyRuntimeEnvironment(env = process.env, { advanced = false } = {}) {
   if (env.NODE_ENV === "production" || env.REPLIT_DEPLOYMENT === "1") {
     return { allowed: false, classification: "production", reason: "hard production/deployment indicator takes precedence" };
   }
   if (env.REPLIT_ENVIRONMENT !== "production") {
     return { allowed: true, classification: "unmarked", reason: "no configured production indicator" };
+  }
+  if (!advanced) {
+    return { allowed: false, classification: "production",
+      reason: "core has no development-workspace exception; production indicator blocks" };
   }
   try {
     const record = verifiedDevelopment(env);

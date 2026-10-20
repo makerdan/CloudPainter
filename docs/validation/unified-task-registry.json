@@ -1,0 +1,1822 @@
+{
+  "schemaVersion": 1,
+  "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
+  "revision": 121,
+  "records": {
+    "FGU-81af9606-cc13-465c-99a0-820e95ec1e03": {
+      "id": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "f2718cf9f0ec3351b14ebfeecfb3181a930bc1dffed813b0ffafb6415dfd3478",
+      "contract": "f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12",
+      "bootstrapTask": true,
+      "planPath": ".local/tasks/FGU-81af9606-cc13-465c-99a0-820e95ec1e03.md",
+      "spec": {
+        "title": "Narrow local Failure Gate Unified migration",
+        "tier": "test-fast",
+        "why": "Gate-only JavaScript policy and control changes are covered by gate integration fixtures and Regression Guard without application database or browser changes.",
+        "what": "Verify a filesystem-bound authoritative workspace, restrict pre-cutover admission to this migration, preserve permanent IDs and original contracts, and condition activation on observed bound-tier PASS and independent acceptance.",
+        "regression": {
+          "covers": "Copied-workspace admission, wrong-tier execution, context loss, concurrent allocation and activation without acceptance.",
+          "testLocation": "scripts/tests/failure-gate.test.mjs",
+          "checks": "Real subprocess fixtures exercise provisioning and plan guards, copied receipts fail closed, and activation rejects missing or stale evidence."
+        },
+        "baselines": []
+      },
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-14T04:28:32.597Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-14T04:28:32.722Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "664621dd-a244-4522-8e6f-47bd631fcc01",
+          "state": "PASS",
+          "at": "2026-10-14T04:29:07.420Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "664621dd-a244-4522-8e6f-47bd631fcc01",
+          "reportPath": ".local/failure-gate/runs/FGU-81af9606-cc13-465c-99a0-820e95ec1e03/664621dd-a244-4522-8e6f-47bd631fcc01/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-14T04:28:54.880Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "fc79fe01a04a16b7162ae6dfa3112ca340c9ea660c9b17c8e3d87ef71b4bdc9f",
+      "assessment": {
+        "state": "PASS",
+        "runId": "664621dd-a244-4522-8e6f-47bd631fcc01",
+        "at": "2026-10-14T04:29:07.420Z"
+      }
+    },
+    "FGU-f04fbe19-d141-41c9-92c4-e0e54bbb2ac5": {
+      "id": "FGU-f04fbe19-d141-41c9-92c4-e0e54bbb2ac5",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "f2718cf9f0ec3351b14ebfeecfb3181a930bc1dffed813b0ffafb6415dfd3478",
+      "contract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-f04fbe19-d141-41c9-92c4-e0e54bbb2ac5.md",
+      "spec": {
+        "title": "Document Unified lifecycle readiness",
+        "tier": "test-fast",
+        "why": "This documentation-only addition describes existing gate behavior without changing code, policy, workloads or resources; the lightest registered tier exercises the gate lifecycle and plan guards.",
+        "coverageEvidence": "docs/validation/unified-tiers.json tiers.test-fast runs scripts/tests/failure-gate.test.mjs and scripts/tests/check-regression-guard.test.mjs, including portable checkout/restart fixtures, sealed revisions and wrong-tier rejection; supported invocation is pnpm run test-fast -- followed by this plan's generated Unified ID.",
+        "what": "Add exactly one Lifecycle readiness section to docs/validation/unified-local-execution.md and cite docs/validation/unified-gate-repair.md. State that ordinary tasks provision with node scripts/new-plan.mjs, amend with node scripts/amend-plan.mjs, and guard/validate with node scripts/validate-task-plans.mjs and their bound-tier runner in their own main-workspace or task checkout, using that environment's repository root, recorded Unified ID and exact sealed plan. Explain that normal restarts and different checkout paths do not invalidate admission because no machine identity enrollment is used, citing the bounded lifecycle evidence without claiming a live reboot or actual platform task-agent test. List remaining admission blockers: canonical-pin drift, missing or malformed policy/registry/baseline, unknown contract template, missing or changed sealed plan/context, wrong tier or changed workload definition, retained locks/uncertain runs, and unavailable required capabilities. State that owner-instructed gate repairs follow the canonical skill's Installing, updating and repairing the gate section; task-specific amendments still use normal supported admission. Preserve all other documentation, historical contracts, gate code, registry bindings, baseline, workloads, application code and resources. At execution, confirm the same generated ID and sealed plan are available and eligible inside the task environment; do not re-provision or fabricate a replacement if context is missing. Review the added prose against the cited repair evidence, then run only the full bound test-fast tier inside that task environment with UNIFIED_TASK_ID and TASK_PLAN_FILE set to this record and plan path. Do not substitute main-workspace results, direct unguarded tests or another tier. Planning approval is not implementation permission.",
+        "regression": {
+          "covers": "Existing portable admission, sealed-plan preservation and single-tier enforcement remain unchanged by this documentation-only addition.",
+          "testLocation": "scripts/tests/failure-gate.test.mjs and scripts/tests/check-regression-guard.test.mjs",
+          "checks": "The bound tier retains coverage for lifecycle and copied-checkout admission, historical sealed revisions, wrong-tier and edited-plan rejection; implementation also checks the new prose against the repair record and changes no runtime behavior."
+        },
+        "baselines": []
+      },
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-16T20:15:36.697Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-16T20:15:36.721Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "da1ca297-df2c-479d-9f0a-4f68fc1ec40b",
+          "state": "PASS",
+          "at": "2026-10-16T20:26:41.261Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "da1ca297-df2c-479d-9f0a-4f68fc1ec40b",
+          "reportPath": ".local/failure-gate/runs/FGU-f04fbe19-d141-41c9-92c4-e0e54bbb2ac5/da1ca297-df2c-479d-9f0a-4f68fc1ec40b/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-16T20:26:27.334Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "0f041cf5b1e2c88147754e352a278fab6f22d42650197a5ce66923233dd02eb7",
+      "assessment": {
+        "state": "PASS",
+        "runId": "da1ca297-df2c-479d-9f0a-4f68fc1ec40b",
+        "at": "2026-10-16T20:26:41.261Z"
+      }
+    },
+    "FGU-13e2aa7f-da2e-4e71-bf00-293a626b9026": {
+      "id": "FGU-13e2aa7f-da2e-4e71-bf00-293a626b9026",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "f2718cf9f0ec3351b14ebfeecfb3181a930bc1dffed813b0ffafb6415dfd3478",
+      "contract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-13e2aa7f-da2e-4e71-bf00-293a626b9026.md",
+      "spec": {
+        "nativeTaskRef": "#14",
+        "title": "Independently verify Port Authority delivery and runtime readiness",
+        "tier": "test-fast",
+        "why": "This task is a read-only repository inspection and tracked evidence report. The lightest registered tier checks Failure Gate provisioning and plan guards without executing Port Authority package code or claiming its runtime readiness.",
+        "coverageEvidence": "docs/validation/unified-tiers.json defines test-fast as scripts/tests/failure-gate.test.mjs and scripts/tests/check-regression-guard.test.mjs under bounded supervision; the supported invocation is pnpm run test-fast -- followed by the ID recorded by the provisioner.",
+        "what": "Independently inspect the current canonical Port Authority source inventory, compare it with the pinned October 11 archive and historical installation handoff without restoring or executing missing package members, and inspect actual project callers plus managed-service configuration read-only. Write one tracked evidence-linked verification report that separates canonical source availability, project delivery and wiring, runtime capability, and native task state; scope searches and classify findings Confirmed, Absent within inspected scope, or Unknown. Preserve native task #14 and its existing dependency on merged task #7; associate this generated Unified record with nativeTaskRef #14 without rebinding the numeric task ID. Keep all listed out-of-scope changes prohibited.",
+        "baselines": [],
+        "regression": {
+          "covers": "The report must not infer complete delivery, runtime activation, operational readiness, or native task completion from historical documents or task labels; it must not restore or execute the missing package.",
+          "testLocation": "scripts/tests/failure-gate.test.mjs and scripts/tests/check-regression-guard.test.mjs",
+          "checks": "The bound gate tier verifies the sealed plan and task context while preserving tier binding and Regression Guard enforcement; report-specific claims must be supported by fresh, scoped source and caller evidence."
+        }
+      },
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-16T20:56:31.134Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-16T20:56:31.161Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "44fca6b3-2e21-4584-a5e1-01752370bda6",
+          "state": "PASS",
+          "at": "2026-10-16T20:56:53.324Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "44fca6b3-2e21-4584-a5e1-01752370bda6",
+          "reportPath": ".local/failure-gate/runs/FGU-13e2aa7f-da2e-4e71-bf00-293a626b9026/44fca6b3-2e21-4584-a5e1-01752370bda6/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-16T20:56:38.728Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "3d323320727c39d5c0b25179e1b03fc4f2a8a1c2f9de108adcc5a90f07007fc6",
+      "assessment": {
+        "state": "PASS",
+        "runId": "44fca6b3-2e21-4584-a5e1-01752370bda6",
+        "at": "2026-10-16T20:56:53.324Z"
+      }
+    },
+    "FGU-ff97b68f-69f8-4660-a77c-86cf08d72048": {
+      "id": "FGU-ff97b68f-69f8-4660-a77c-86cf08d72048",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "f2718cf9f0ec3351b14ebfeecfb3181a930bc1dffed813b0ffafb6415dfd3478",
+      "contract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-ff97b68f-69f8-4660-a77c-86cf08d72048.md",
+      "spec": {
+        "title": "Confirm Port Authority and remove missing-document references",
+        "nativeTaskRef": "#13",
+        "tier": "test-fast",
+        "why": "Owner requests removal of missing document references; preserve safety requirements and report approved archive deviation.",
+        "coverageEvidence": "docs/validation/unified-tiers.json test-fast runs gate-unit and regression-guard under finite supervision; supported invocation is pnpm run test-fast -- FGU-ff97b68f-69f8-4660-a77c-86cf08d72048 with its recorded UNIFIED_TASK_ID and TASK_PLAN_FILE.",
+        "what": "Preserve the canonical Port Authority entry point restored from owner-approved attached_assets/port-authority-unified-compatible_1792279619075.zip (archive SHA-256 d17fec4280ac00940eb3e58a5a15b92eae1a4704d5b57da1aaa470f9c18a2a77, original member SHA-256 669b3eda957903b0dbba2ae1dd21ba3206682051618382bd1fa9526f126228a4). The owner now explicitly requests: remove all missing reference documents. The three named reference documents do not exist canonically, so remove their broken Markdown links and mandatory reading instructions from .agents/skills/port-authority/SKILL.md; remove the associated unavailable reference-closure prerequisite. Retain canonical-source authority and explicit host ownership, authorization, finite execution, cleanup and acceptance requirements, blocking only controls whose requirements remain unknown. List the exact gap and edit before applying it. Do not delete existing documents, install support files, edit mirrors, adjacent package material or app/runtime/workflow/CI code, or activate controls. Keep the six sections, identity and all other supplied instructions unchanged. Original checks retained subject to this explicit owner amendment: canonical entry point and port-authority YAML identity; every supplied section and instruction preserved except the approved missing-document removal; any correction is separately listed and is NOT represented as unchanged archive parity; no section vague, self-referential or deferred; future Planner can follow the explicit host-dependent safety boundaries without broken local document links. Verify exact expected diff from the approved archive, count materially changed nonblank body lines against the canonical confirmation escalation threshold, verify no remaining local Markdown links to absent documents, and report final hash separately from original member hash. Preserve all existing Unified IDs, histories, bindings and incoming main-branch records. Rebase conflict resolution retained the four exact immutable records from both branches, checked by merge guards. Use the existing Unified identity and supported same-tier amendment, not a replacement task ID. Run only its full bound test-fast tier; no packaged Port Authority behavior tests or live acceptance. Report definition confirmation separately from package or app readiness; removing links does not supply runtime modules or prove readiness.",
+        "baselines": [],
+        "regression": {
+          "covers": "Owner-requested removal of broken document dependencies must preserve all six Port Authority sections and explicit safety boundaries; current file becomes an approved wording deviation, not false archive parity.",
+          "testLocation": "Direct source-only exact diff and missing-link checks against the approved archive member; scripts/tests/failure-gate.test.mjs and scripts/tests/check-regression-guard.test.mjs through assigned test-fast.",
+          "checks": "Exactly the three missing document links and their reading/closure prerequisite are replaced by explicit host-contract verification; YAML identity and all remaining source lines remain unchanged. Count changed nonblank body lines below the greater-than-half rewrite threshold; preserve all registry records and run the bound guarded tier."
+        }
+      },
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-17T23:28:51.576Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-17T23:28:51.602Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "9679c188-558c-4520-8ebf-9ad06913562f",
+          "state": "PASS",
+          "at": "2026-10-17T23:30:09.131Z"
+        },
+        {
+          "kind": "amendment-start",
+          "from": "test-fast",
+          "to": "test-fast",
+          "fromDefinition": "f2718cf9f0ec3351b14ebfeecfb3181a930bc1dffed813b0ffafb6415dfd3478",
+          "toDefinition": "f2718cf9f0ec3351b14ebfeecfb3181a930bc1dffed813b0ffafb6415dfd3478",
+          "fromContract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+          "toContract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+          "coverageEvidence": "docs/validation/unified-tiers.json test-fast runs gate-unit and regression-guard under finite supervision; supported invocation is pnpm run test-fast -- FGU-ff97b68f-69f8-4660-a77c-86cf08d72048 with its recorded UNIFIED_TASK_ID and TASK_PLAN_FILE.",
+          "why": "Owner requests removal of missing document references; preserve safety requirements and report approved archive deviation.",
+          "at": "2026-10-17T23:33:36.404Z"
+        },
+        {
+          "kind": "amended",
+          "from": "test-fast",
+          "to": "test-fast",
+          "fromContract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+          "toContract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+          "coverageEvidence": "docs/validation/unified-tiers.json test-fast runs gate-unit and regression-guard under finite supervision; supported invocation is pnpm run test-fast -- FGU-ff97b68f-69f8-4660-a77c-86cf08d72048 with its recorded UNIFIED_TASK_ID and TASK_PLAN_FILE.",
+          "why": "Owner requests removal of missing document references; preserve safety requirements and report approved archive deviation.",
+          "at": "2026-10-17T23:33:36.430Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "b7f249f0-5de2-4857-bb14-05ffc81b4e69",
+          "state": "PASS",
+          "at": "2026-10-17T23:34:13.642Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "9679c188-558c-4520-8ebf-9ad06913562f",
+          "reportPath": ".local/failure-gate/runs/FGU-ff97b68f-69f8-4660-a77c-86cf08d72048/9679c188-558c-4520-8ebf-9ad06913562f/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-17T23:29:55.606Z"
+        },
+        {
+          "runId": "b7f249f0-5de2-4857-bb14-05ffc81b4e69",
+          "reportPath": ".local/failure-gate/runs/FGU-ff97b68f-69f8-4660-a77c-86cf08d72048/b7f249f0-5de2-4857-bb14-05ffc81b4e69/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-17T23:34:00.017Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "cdef552afdb45cdfcac020e6da94977a75985db21400c4d3d05471ad34768715",
+      "assessment": {
+        "state": "PASS",
+        "runId": "b7f249f0-5de2-4857-bb14-05ffc81b4e69",
+        "at": "2026-10-17T23:34:13.642Z"
+      }
+    },
+    "FGU-881d0f95-e85a-4aec-a3f5-5ab30d8b213a": {
+      "id": "FGU-881d0f95-e85a-4aec-a3f5-5ab30d8b213a",
+      "status": "incomplete",
+      "tier": "test-fast",
+      "tierHash": "3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc",
+      "contract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-881d0f95-e85a-4aec-a3f5-5ab30d8b213a.md",
+      "spec": {
+        "title": "Determine and repair Port Authority clock fixture timing",
+        "nativeTaskRef": "#41",
+        "what": "Diagnose the approved archive's clock-reversal failure using private phase-specific fixtures and repair only its ambiguous test, without installing supporting runtime controls.",
+        "tier": "test-fast",
+        "why": "The owner-approved added focused workload exercises the packaged runtime in private fixtures alongside existing gate and regression checks.",
+        "coverageEvidence": "docs/validation/unified-tiers.json test-fast: gate-unit, regression-guard, port-authority-clock; pnpm run test-fast -- GENERATED_ID; 60000ms step, 120000ms total, 5000ms cleanup.",
+        "done": [
+          "Recorded archive evidence is distinguished from fresh focused proof and full-package acceptance.",
+          "Forced startup expiry reproduces exit 4, rejects the old exit-1 assertion, confirms stopped owned work and retained exclusion.",
+          "Dispatched reversal requires exit 1 and quiescent release; independent queue reversal requires exit 3 and no dispatch.",
+          "The original archive and canonical supporting package remain untouched; repaired private test snapshot is retained."
+        ],
+        "outOfScope": [
+          "Installing canonical supporting package files, enabling live controls, app process changes, deployment and production access.",
+          "Full 75-test package acceptance, host activation and repeated runs until passing."
+        ],
+        "steps": [
+          "Add the explicitly approved focused gate workload as gate maintenance, without editing existing ledger bindings.",
+          "Provision a sealed task using the revised workload and validate its plan through the supported route.",
+          "Run the bounded tier once, preserve raw case evidence and repair only a diagnosed fixture defect.",
+          "Document observed cause, phase-specific assertions, budgets, retained evidence and remaining acceptance limits."
+        ],
+        "regression": {
+          "mode": "self",
+          "deliverable": "scripts/fixtures/port-authority-clock-cases.mjs.txt executed by scripts/port-authority-clock-proof.mjs: startup exit 4 and retained exclusion, dispatched exit 1 and quiescence, independent queue exit 3; the old unconditional assertion is explicitly rejected."
+        },
+        "baselines": [],
+        "relevantFiles": [
+          "attached_assets/port-authority-unified-compatible_1792279619075.zip",
+          "scripts/port-authority-clock-proof.mjs",
+          "scripts/fixtures/port-authority-clock-cases.mjs.txt",
+          "docs/validation/unified-tiers.json"
+        ]
+      },
+      "planTemplate": "unified-v3",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-18T00:04:22.368Z"
+        },
+        {
+          "kind": "generation-failed",
+          "at": "2026-10-18T00:04:22.485Z"
+        }
+      ],
+      "runs": [],
+      "preexistingNotes": []
+    },
+    "FGU-cc015bab-422b-40f8-83af-fdff4c07c58e": {
+      "id": "FGU-cc015bab-422b-40f8-83af-fdff4c07c58e",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc",
+      "contract": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-cc015bab-422b-40f8-83af-fdff4c07c58e.md",
+      "spec": {
+        "title": "Determine and repair Port Authority clock fixture timing",
+        "nativeTaskRef": "#41",
+        "what": "Diagnose the approved archive's clock-reversal failure using private phase-specific fixtures and repair only its ambiguous test, without installing supporting runtime controls.",
+        "tier": "test-fast",
+        "why": "The owner-approved added focused workload exercises the packaged runtime in private fixtures alongside existing gate and regression checks.",
+        "coverageEvidence": "docs/validation/unified-tiers.json test-fast: gate-unit, regression-guard, port-authority-clock; pnpm run test-fast -- GENERATED_ID; 60000ms step, 120000ms total, 5000ms cleanup.",
+        "done": [
+          "Recorded archive evidence is distinguished from fresh focused proof and full-package acceptance.",
+          "Forced startup expiry reproduces exit 4, rejects the old exit-1 assertion, confirms stopped owned work and retained exclusion.",
+          "Dispatched reversal requires exit 1 and quiescent release; independent queue reversal requires exit 3 and no dispatch.",
+          "The original archive and canonical supporting package remain untouched; repaired private test snapshot is retained."
+        ],
+        "outOfScope": [
+          "Installing canonical supporting package files, enabling live controls, app process changes, deployment and production access.",
+          "Full 75-test package acceptance, host activation and repeated runs until passing."
+        ],
+        "steps": [
+          "Add the explicitly approved focused gate workload as gate maintenance, without editing existing ledger bindings.",
+          "Provision a sealed task using the revised workload and validate its plan through the supported route.",
+          "Run the bounded tier once, preserve raw case evidence and repair only a diagnosed fixture defect.",
+          "Document observed cause, phase-specific assertions, budgets, retained evidence and remaining acceptance limits."
+        ],
+        "regression": {
+          "mode": "normal",
+          "covers": "The clock-reversal fixture incorrectly requires a post-dispatch exit when its startup budget expires before dispatch, preventing the later queue assertion.",
+          "testLocation": "scripts/fixtures/port-authority-clock-cases.mjs.txt via scripts/port-authority-clock-proof.mjs",
+          "checks": "Forces the startup failure and rejects the old exit-1 assertion; independently requires exit 1 after dispatch with stopped owned work, exit 3 for queue timeout, and retained uncertain exclusion."
+        },
+        "baselines": [],
+        "relevantFiles": [
+          "attached_assets/port-authority-unified-compatible_1792279619075.zip",
+          "scripts/port-authority-clock-proof.mjs",
+          "scripts/fixtures/port-authority-clock-cases.mjs.txt",
+          "docs/validation/unified-tiers.json"
+        ]
+      },
+      "planTemplate": "unified-v3",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-18T00:04:48.760Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-18T00:04:48.890Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "7af491c3-2509-4c4a-91e8-50bc508bc4c6",
+          "state": "FAIL",
+          "at": "2026-10-18T00:05:25.891Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "bbd09dda-b2bd-422a-ab2c-d69c84a0709e",
+          "state": "PASS",
+          "at": "2026-10-18T00:07:10.183Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "7af491c3-2509-4c4a-91e8-50bc508bc4c6",
+          "reportPath": ".local/failure-gate/runs/FGU-cc015bab-422b-40f8-83af-fdff4c07c58e/7af491c3-2509-4c4a-91e8-50bc508bc4c6/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-18T00:04:55.203Z"
+        },
+        {
+          "runId": "bbd09dda-b2bd-422a-ab2c-d69c84a0709e",
+          "reportPath": ".local/failure-gate/runs/FGU-cc015bab-422b-40f8-83af-fdff4c07c58e/bbd09dda-b2bd-422a-ab2c-d69c84a0709e/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-18T00:06:39.571Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "d601a799d1b0d67a12620f0fac7269e927df152883354535e0a6b3f1da0d0fbe",
+      "assessment": {
+        "state": "PASS",
+        "runId": "bbd09dda-b2bd-422a-ab2c-d69c84a0709e",
+        "at": "2026-10-18T00:07:10.183Z"
+      }
+    },
+    "FGU-d889655a-2deb-421c-98bf-a5141e2d04d3": {
+      "id": "FGU-d889655a-2deb-421c-98bf-a5141e2d04d3",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc",
+      "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-d889655a-2deb-421c-98bf-a5141e2d04d3.md",
+      "spec": {
+        "title": "Integrate Port Authority Clock Repair",
+        "nativeTaskRef": "#50",
+        "what": "Install exactly the approved Port Authority clock-test-repair ZIP under the canonical .agents skill directory and repair only the existing supervised focused proof. This fixes wrong-phase timeout classification and skipped independent queue evidence at the private package-test execution boundary. The owner additionally approved changing only the private replacement waiter's queue limit to 8000ms, preserving installed package bytes, first-workload limits and all exit/cleanup assertions; no live controls are activated.",
+        "tier": "test-fast",
+        "why": "Owner-approved private replacement-waiter queue headroom correction only; same complete focused workload and unchanged host limits.",
+        "coverageEvidence": "Inspected docs/validation/unified-tiers.json via the project tier reader: definition hash 3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc. Update only scripts/port-authority-clock-proof.mjs within its existing step, verifying the new ZIP and installed manifest bytes and syntax, and running exact package cases through node test-name filtering without replacement bodies. Three independent wall-clock reversal cases plus repaired expired-admission, execution-budget, direct-dispatcher, async/hook, synchronous-supervisor, late-zero and core execution-budget cases fit the focused route; no author full suite. Supported execution is pnpm run test-fast -- with this generated ID and observed native sealed context. The current Unified pin is 2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22 and Regression Guard is adopted as unified-v4; preserve both.",
+        "done": [
+          "Verify ZIP attached_assets/port-authority-clock-test-repair_1792370288101.zip digest 9ea10f440242655f9a0bfa800e7cf803602186365de243ed2356c191111f3098, CRC, safe unique regular paths, all 33 manifest entries and sole manifest self-exclusion before installing exactly its 34 members.",
+          "Installed .agents/skills/port-authority/SKILL.md hash is b495c93a5fe9495d396fb8615a1cca6eaf66d01244072f05ff58790406102717; all installed members match archive bytes and no older variant or runtime mirror supplies source.",
+          "The existing admitted proof checks archive and installed manifest bytes, syntax-checks all four runtime and both test modules, and executes the three exact phase cases and smallest related repaired budget cases without weakening assertions, raising host limits or substituting local fixtures. The sole owner-approved private test-body correction gives the execution-budget replacement waiter 8000ms queue headroom instead of its inherited 5000ms; installed bytes and all detecting assertions remain exact.",
+          "Separate startup expiry proves exit 4 with no dispatch and retained recovery-required lease; dispatched expiry proves exit 1 with workload identity, reversal after dispatch and verified exact-incarnation cleanup; independent queue expiry proves exit 3, reversal while queued and byte-identical live-owner lease.",
+          "Preserve historical records, IDs, reservations, seals, bindings and runs for all prior identities including native tasks #13 and #41; preserve current Unified and Regression Guard sources, pins, baseline, tier definitions, adjacent skills, inactive wiring and unrelated files.",
+          "Publish docs/validation/port-authority-clock-repair-delivery.md with generated identity, seal, single tier, exact changed files and fingerprints, commands/results, recurrence map and honest limitations. No live process, port, database, CI, deployment or runtime activation."
+        ],
+        "outOfScope": [
+          "Application code, live services/processes, ports, databases, hooks, CI, deployment, production controls and runtime mirror installation.",
+          "Unified or Regression Guard source/pin changes, tier-definition edits, baseline edits, historical reopening/rebinding or ledger edits outside normal provisioner/amendment/runner writes.",
+          "New tiers, raised budgets, direct/unbound package checks, full-package acceptance under insufficient bounds, retries until lucky, generic authority restoration or extra reviewer requirements."
+        ],
+        "steps": [
+          "Inspect current source, archive, schema, baseline, workload and host task records; prepare the complete current-contract plan, provision a new identity and reconcile its exact seal into the native payload. Present scope, identity, coverage and Regression Guard; pass admission and current host authorization before implementation.",
+          "Record historical and protected fingerprints, reverify package safety and digest and copy only exact canonical package members, preserving adjacent sources and inactive wiring.",
+          "Update only the existing supervised proof to compare archive and installed manifest bytes, syntax-check the package and run exact independent phase and repaired budget cases, with only the approved private replacement-waiter 8000ms queue correction. Keep positive dispatch, actual clock reversal, exact exit and cleanup assertions, and preserve uncertain fixture leases.",
+          "Reassess scope and workload against the seal; use a supported same-ID amendment and renewed native reconciliation only for a material change before execution. Run the entire single bound tier without skipped original steps or direct package invocations.",
+          "Reconcile actual regression assertions and preservation fingerprints and publish revision-bound delivery with commands, observed results, exact diff and limitations; distinguish focused proof from author logs, optional review and activation."
+        ],
+        "baselines": [],
+        "regression": {
+          "mode": "normal",
+          "covers": "Startup-inclusive expiry is misclassified as dispatched timeout. Dispatched timeout is asserted without positive workload evidence. Queue expiry is skipped after a failing execution assertion. Related short-budget cases confuse startup denial with post-dispatch cleanup.",
+          "testLocation": "scripts/port-authority-clock-proof.mjs orchestrates the unchanged exact package tests in .agents/skills/port-authority/tests/hardening.test.mjs (three wall-clock reversal cases and related repaired budgets) and .agents/skills/port-authority/tests/core.test.mjs (execution-budget case); old scripts/fixtures/port-authority-clock-cases.mjs.txt is preserved but not used as replacement proof.",
+          "checks": "Assert exact startup exit 4, absent dispatch and retained recovery-required lease. Assert exact dispatched exit 1, workload incarnation, actual reversal and quiescent release. Assert independent queue exit 3, queued reversal, absent dispatch/acquisition and byte-identical owner lease. Assert positive dispatch before related post-dispatch timeout and cleanup expectations. Verify exact package source, selected case execution counts, zero failures/skips/cancellations and syntax inside the bound step; inspect old combined/wrong-phase assertions against these detecting conditions."
+        },
+        "regressionAssessment": {
+          "classification": "material",
+          "rationale": "The focused proof governs existing timeout classification, finite execution and cleanup evidence, so normal coverage applies despite package-installation wording.",
+          "scopeReview": "Reviewed all eight categories; affected material components are bug-fix, error-handling, concurrency-lifecycle and performance-reliability in private package proof, not application or live runtime changes.",
+          "coverageReview": "The explicit bound proof script executes package-level fixtures at the affected boundary, with immutable archive and installed-byte verification. Only the approved private replacement-waiter queue override changes a case body; first-workload timing, all exact assertions and the three phase bodies remain unchanged. Initial failed run is retained, the corrected full tier must renew evidence, and negative detection is established by inspecting exact prior combined assertions.",
+          "risks": [
+            {
+              "id": "startup",
+              "category": "bug-fix",
+              "change": "Wrong-phase classification accepts or expects post-dispatch status after startup expiry.",
+              "layer": "private package timeout and cleanup proof boundary"
+            },
+            {
+              "id": "dispatch",
+              "category": "error-handling",
+              "change": "Timeout cleanup expectations lack proof of actual dispatched workload identity.",
+              "layer": "private package timeout and cleanup proof boundary"
+            },
+            {
+              "id": "queue",
+              "category": "concurrency-lifecycle",
+              "change": "Execution assertion failure suppresses independent queue expiry evidence.",
+              "layer": "private package timeout and cleanup proof boundary"
+            },
+            {
+              "id": "budgets",
+              "category": "performance-reliability",
+              "change": "Related startup-inclusive budget fixtures assume dispatch before cleanup assertions.",
+              "layer": "private package timeout and cleanup proof boundary"
+            }
+          ],
+          "coverage": [
+            {
+              "risk": "startup",
+              "scenario": "Startup-inclusive expiry is misclassified as dispatched timeout.",
+              "testLocation": "scripts/port-authority-clock-proof.mjs",
+              "assertion": "Assert exact startup exit 4, absent dispatch and retained recovery-required lease.",
+              "layer": "private package timeout and cleanup proof boundary"
+            },
+            {
+              "risk": "dispatch",
+              "scenario": "Dispatched timeout is asserted without positive workload evidence.",
+              "testLocation": "scripts/port-authority-clock-proof.mjs",
+              "assertion": "Assert exact dispatched exit 1, workload incarnation, actual reversal and quiescent release.",
+              "layer": "private package timeout and cleanup proof boundary"
+            },
+            {
+              "risk": "queue",
+              "scenario": "Queue expiry is skipped after a failing execution assertion.",
+              "testLocation": "scripts/port-authority-clock-proof.mjs",
+              "assertion": "Assert independent queue exit 3, queued reversal, absent dispatch/acquisition and byte-identical owner lease.",
+              "layer": "private package timeout and cleanup proof boundary"
+            },
+            {
+              "risk": "budgets",
+              "scenario": "Related short-budget cases confuse startup denial with post-dispatch cleanup.",
+              "testLocation": "scripts/port-authority-clock-proof.mjs",
+              "assertion": "Assert positive dispatch before related post-dispatch timeout and cleanup expectations.",
+              "layer": "private package timeout and cleanup proof boundary"
+            }
+          ]
+        },
+        "relevantFiles": [
+          "attached_assets/port-authority-clock-test-repair_1792370288101.zip",
+          ".agents/skills/port-authority/SKILL.md",
+          ".agents/skills/failure-gate-unified/SKILL.md",
+          ".agents/skills/regression-guard/SKILL.md",
+          "scripts/new-plan.mjs",
+          "scripts/amend-plan.mjs",
+          "scripts/failure-gate/plans.mjs",
+          "scripts/failure-gate/store.mjs",
+          "scripts/validate-task-plans.mjs",
+          "scripts/port-authority-clock-proof.mjs",
+          "scripts/fixtures/port-authority-clock-cases.mjs.txt",
+          "docs/validation/unified-local-execution.md",
+          "docs/validation/unified-policy.json",
+          "docs/validation/unified-tiers.json",
+          "docs/validation/failure-baseline.json",
+          "docs/validation/regression-guard-authoring.md",
+          "docs/validation/port-authority-clock-investigation.md"
+        ]
+      },
+      "planTemplate": "unified-v4",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-19T01:35:39.164Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-19T01:35:39.206Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "9631abaa-aecd-4e14-990e-0ff11f878e8d",
+          "state": "FAIL",
+          "at": "2026-10-19T01:38:46.995Z"
+        },
+        {
+          "kind": "amendment-start",
+          "from": "test-fast",
+          "to": "test-fast",
+          "fromDefinition": "3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc",
+          "toDefinition": "3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc",
+          "fromContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "toContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "coverageEvidence": "Inspected docs/validation/unified-tiers.json via the project tier reader: definition hash 3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc. Update only scripts/port-authority-clock-proof.mjs within its existing step, verifying the new ZIP and installed manifest bytes and syntax, and running exact package cases through node test-name filtering without replacement bodies. Three independent wall-clock reversal cases plus repaired expired-admission, execution-budget, direct-dispatcher, async/hook, synchronous-supervisor, late-zero and core execution-budget cases fit the focused route; no author full suite. Supported execution is pnpm run test-fast -- with this generated ID and observed native sealed context. The current Unified pin is 2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22 and Regression Guard is adopted as unified-v4; preserve both.",
+          "why": "Owner-approved private replacement-waiter queue headroom correction only; same complete focused workload and unchanged host limits.",
+          "at": "2026-10-19T01:51:12.562Z",
+          "coordination": {
+            "authorizationApplicability": "The owner answered Approve the private fixture correction to the explicit proposal of an 8-second private replacement-waiter queue budget with installed package bytes, host limits and all exit/cleanup assertions unchanged. This amendment applies only to that supported extension of task #50, using the existing generated ID and same test-fast tier.",
+            "evidenceImpact": "Initial admitted integration is preserved, including exact installed package bytes and full failed run 9631abaa-aecd-4e14-990e-0ff11f878e8d. Its failure was the replacement waiter returning 3 instead of 0. No active or uncertain run remains; the supervisor reported all steps quiescent. The private harness correction and full same-tier rerun require new evidence; no prior failed result is relabeled or retroactively certified."
+          },
+          "hostAuthorization": "AGENT_CHECK_NOT_MACHINE_VERIFIED"
+        },
+        {
+          "kind": "amended",
+          "from": "test-fast",
+          "to": "test-fast",
+          "fromContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "toContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "coverageEvidence": "Inspected docs/validation/unified-tiers.json via the project tier reader: definition hash 3654894ad3528e331f7167659674db3f102e5b20c4a2fb77a69531f021f16afc. Update only scripts/port-authority-clock-proof.mjs within its existing step, verifying the new ZIP and installed manifest bytes and syntax, and running exact package cases through node test-name filtering without replacement bodies. Three independent wall-clock reversal cases plus repaired expired-admission, execution-budget, direct-dispatcher, async/hook, synchronous-supervisor, late-zero and core execution-budget cases fit the focused route; no author full suite. Supported execution is pnpm run test-fast -- with this generated ID and observed native sealed context. The current Unified pin is 2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22 and Regression Guard is adopted as unified-v4; preserve both.",
+          "why": "Owner-approved private replacement-waiter queue headroom correction only; same complete focused workload and unchanged host limits.",
+          "at": "2026-10-19T01:51:12.587Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "a3100529-1e7e-4b19-b3e7-b61ea538d536",
+          "state": "PASS",
+          "at": "2026-10-19T01:53:35.852Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "9631abaa-aecd-4e14-990e-0ff11f878e8d",
+          "reportPath": ".local/failure-gate/runs/FGU-d889655a-2deb-421c-98bf-a5141e2d04d3/9631abaa-aecd-4e14-990e-0ff11f878e8d/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T01:37:26.950Z"
+        },
+        {
+          "runId": "a3100529-1e7e-4b19-b3e7-b61ea538d536",
+          "reportPath": ".local/failure-gate/runs/FGU-d889655a-2deb-421c-98bf-a5141e2d04d3/a3100529-1e7e-4b19-b3e7-b61ea538d536/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T01:52:11.080Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "7030101d712c89b4c3d739443ff034346fb49de43d63f6ff3720004e423c5ec2",
+      "assessment": {
+        "state": "PASS",
+        "runId": "a3100529-1e7e-4b19-b3e7-b61ea538d536",
+        "at": "2026-10-19T01:53:35.852Z"
+      }
+    },
+    "FGU-06f4e83c-1fc9-423e-a111-28840a38948e": {
+      "id": "FGU-06f4e83c-1fc9-423e-a111-28840a38948e",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "96320bc7e7cfbb05ac37418bdbb3f90f4c4e8ce8dccf31da859ab089437ea644",
+      "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-06f4e83c-1fc9-423e-a111-28840a38948e.md",
+      "spec": {
+        "title": "Apply Skill Mirror Sync",
+        "nativeTaskRef": "#53",
+        "tier": "test-fast",
+        "what": "Implement the complete canonical workspace-skill/v1 CLI, source inventory, projection, Linux locking and recovery, read-only status and fail-closed loading contract without changing definitions or writing runtime mirrors.",
+        "why": "The approved test-fast workload includes the disposable skill-sync protocol and adversarial suite plus existing gate checks without database, browser or provider operations.",
+        "coverageEvidence": "docs/validation/unified-tiers.json test-fast workspace-skill-sync step directly runs scripts/tests/workspace-skill-sync.test.mjs under node-tap; invoke pnpm run test-fast with the provisioned identity and observed sealed native context.",
+        "done": [
+          "Both root pnpm refresh/status commands satisfy exact version, argument, JSON, reason-code and exit contracts.",
+          "Explicit source only, complete safe inventory, opaque revision and normative length-framed SHA-256 manifest are validated twice.",
+          "Refresh checks actual Git/deployment exclusions and uses persistent Linux flock, structured process ownership, transactional staging, guarded renames, recovery, rollback and flushes.",
+          "Status is non-mutating and requires authoritative platform metadata; unavailable publication guarantees or attestation fail closed.",
+          "Loading validates and reads only requested manifested regular files under the same lock, never executing support files or using stale content.",
+          "Disposable tests cover hostile trees, drift, recovery, rollback, immutable status and fixture-only writes; tracked handoff maps requirements to evidence and platform limits."
+        ],
+        "outOfScope": [
+          "No skill definition changes, uploaded archives, mirror sources, runtime provisioning or writes to runtime mirrors.",
+          "No registry reconstruction, unrelated gate/product changes, production deployment or platform-wide enforcement claims.",
+          "Only the explicitly approved focused skill-sync workload addition changes validation; preserve existing checks, budgets, identities and historical bindings."
+        ],
+        "steps": [
+          "Verify current task and canonical contracts, inspect baseline and workload, provision one fresh identity, publish/read back exact native seal and run admission before edits.",
+          "Implement source, metadata, CLI and projection primitives with non-sensitive failures and explicit trusted-platform capability boundaries.",
+          "Implement ownership-aware locking, durable transactions, recovery, rollback, read-only status and locked loading.",
+          "Add isolated regression scenarios and run the complete bound tier plus required checks through supported routes.",
+          "Write requirement/evidence handoff, source snapshot, tested outcomes and platform limits without private instructions or source locations."
+        ],
+        "baselines": [],
+        "regression": {
+          "mode": "normal",
+          "covers": "Hostile trees or source drift are presented to refresh, status and loading. Interrupted installation or uncertain ownership is presented to recovery.",
+          "testLocation": "scripts/tests/workspace-skill-sync.test.mjs",
+          "checks": "Assert strict protocol and fingerprints, no outside writes or stale loads, immutable status and unavailable unattested metadata. Assert persistent lock exclusion, preserved artifacts and last-valid-backup restoration across failures."
+        },
+        "regressionAssessment": {
+          "classification": "material",
+          "rationale": "Private-instruction isolation and safe projection publication require security and filesystem lifecycle guards even though the helpers are new.",
+          "scopeReview": "Reviewed the entire canonical contract including argument parsing, complete inventory, metadata authority, persistent lock inode, recovery and fail-closed loading.",
+          "coverageReview": "The approved focused workload directly executes isolated Python-backed fixtures through a Node test entry, covering observable protocol and filesystem boundaries.",
+          "risks": [
+            {
+              "id": "isolation",
+              "category": "security-privacy",
+              "change": "Reject hostile source or metadata and prevent private instruction exposure, stale loading and writes beyond generated boundaries.",
+              "layer": "helper protocol and filesystem isolation boundary"
+            },
+            {
+              "id": "recovery",
+              "category": "concurrency-lifecycle",
+              "change": "Preserve last valid projections and uncertain artifacts across concurrent refresh, interrupted transactions and rollback failures.",
+              "layer": "helper lock and transactional filesystem boundary"
+            }
+          ],
+          "coverage": [
+            {
+              "risk": "isolation",
+              "scenario": "Hostile trees or source drift are presented to refresh, status and loading.",
+              "testLocation": "scripts/tests/workspace-skill-sync.test.mjs",
+              "assertion": "Assert strict protocol and fingerprints, no outside writes or stale loads, immutable status and unavailable unattested metadata.",
+              "layer": "helper protocol and filesystem isolation boundary"
+            },
+            {
+              "risk": "recovery",
+              "scenario": "Interrupted installation or uncertain ownership is presented to recovery.",
+              "testLocation": "scripts/tests/workspace-skill-sync.test.mjs",
+              "assertion": "Assert persistent lock exclusion, preserved artifacts and last-valid-backup restoration across failures.",
+              "layer": "helper lock and transactional filesystem boundary"
+            }
+          ]
+        },
+        "relevantFiles": [
+          "package.json",
+          ".gitignore",
+          ".replitignore",
+          "scripts/workspace_skill_sync",
+          "scripts/tests/workspace-skill-sync.test.mjs",
+          "docs/validation/workspace-skill-sync-application-handoff.md"
+        ]
+      },
+      "planTemplate": "unified-v4",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-19T02:04:52.416Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-19T02:04:52.470Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "9d4dc46e-ae44-47a2-8609-80b062d4ed45",
+          "state": "FAIL",
+          "at": "2026-10-19T02:11:35.748Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "8761b45e-6d9d-4334-bc7a-d2347534228a",
+          "state": "PASS",
+          "at": "2026-10-19T02:12:58.321Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "aad772dd-cd6a-47db-b964-271152dc9a34",
+          "state": "FAIL",
+          "at": "2026-10-19T02:15:29.068Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "79f50584-e00e-4b7b-80be-2b0ba889e588",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:48.618Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "54c5129e-09fe-4421-9c28-8c8fbe7859ad",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:50.110Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "5bb09e33-470a-4a24-8f5b-3722ce225e04",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:51.047Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "7a2cf3a4-9cba-415d-9478-5bde35e6c4a7",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:52.317Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "5e973484-2bb6-443a-a862-191200147d0a",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:54.128Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "5baf9db2-2037-4446-9430-3379d8b1caa9",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:55.917Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "135b251b-ba2f-411b-a216-59b6c6e842b1",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:57.389Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "7472c9a9-d3c1-4bd9-9df6-31455368234b",
+          "state": "PASS",
+          "at": "2026-10-19T02:15:58.566Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "d2a7ea1d-9c63-4c9e-8176-a3029238f6ab",
+          "state": "PASS",
+          "at": "2026-10-19T02:17:49.007Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "3c9b469a-d31b-405c-bad3-df2ac8b65487",
+          "state": "FAIL",
+          "at": "2026-10-19T02:21:54.253Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "2fda9384-54f8-4131-af64-abd7d2c20b25",
+          "state": "PASS",
+          "at": "2026-10-19T02:23:11.804Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "b4efb63f-9985-4a3a-89d1-bc6672dfdcec",
+          "state": "PASS",
+          "at": "2026-10-19T02:24:51.951Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "9d4dc46e-ae44-47a2-8609-80b062d4ed45",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/9d4dc46e-ae44-47a2-8609-80b062d4ed45/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T02:11:25.330Z"
+        },
+        {
+          "runId": "8761b45e-6d9d-4334-bc7a-d2347534228a",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/8761b45e-6d9d-4334-bc7a-d2347534228a/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:12:57.646Z"
+        },
+        {
+          "runId": "aad772dd-cd6a-47db-b964-271152dc9a34",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/aad772dd-cd6a-47db-b964-271152dc9a34/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T02:15:22.191Z"
+        },
+        {
+          "runId": "79f50584-e00e-4b7b-80be-2b0ba889e588",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/79f50584-e00e-4b7b-80be-2b0ba889e588/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:47.641Z"
+        },
+        {
+          "runId": "54c5129e-09fe-4421-9c28-8c8fbe7859ad",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/54c5129e-09fe-4421-9c28-8c8fbe7859ad/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:48.847Z"
+        },
+        {
+          "runId": "5bb09e33-470a-4a24-8f5b-3722ce225e04",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/5bb09e33-470a-4a24-8f5b-3722ce225e04/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:50.324Z"
+        },
+        {
+          "runId": "7a2cf3a4-9cba-415d-9478-5bde35e6c4a7",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/7a2cf3a4-9cba-415d-9478-5bde35e6c4a7/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:51.243Z"
+        },
+        {
+          "runId": "5e973484-2bb6-443a-a862-191200147d0a",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/5e973484-2bb6-443a-a862-191200147d0a/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:52.543Z"
+        },
+        {
+          "runId": "5baf9db2-2037-4446-9430-3379d8b1caa9",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/5baf9db2-2037-4446-9430-3379d8b1caa9/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:54.357Z"
+        },
+        {
+          "runId": "135b251b-ba2f-411b-a216-59b6c6e842b1",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/135b251b-ba2f-411b-a216-59b6c6e842b1/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:56.131Z"
+        },
+        {
+          "runId": "7472c9a9-d3c1-4bd9-9df6-31455368234b",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/7472c9a9-d3c1-4bd9-9df6-31455368234b/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:15:57.606Z"
+        },
+        {
+          "runId": "d2a7ea1d-9c63-4c9e-8176-a3029238f6ab",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/d2a7ea1d-9c63-4c9e-8176-a3029238f6ab/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T02:16:09.345Z"
+        },
+        {
+          "runId": "3c9b469a-d31b-405c-bad3-df2ac8b65487",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/3c9b469a-d31b-405c-bad3-df2ac8b65487/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T02:21:43.211Z"
+        },
+        {
+          "runId": "2fda9384-54f8-4131-af64-abd7d2c20b25",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/2fda9384-54f8-4131-af64-abd7d2c20b25/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T02:23:10.027Z"
+        },
+        {
+          "runId": "b4efb63f-9985-4a3a-89d1-bc6672dfdcec",
+          "reportPath": ".local/failure-gate/runs/FGU-06f4e83c-1fc9-423e-a111-28840a38948e/b4efb63f-9985-4a3a-89d1-bc6672dfdcec/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T02:23:12.318Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "321d66e0e086987c87be3ea0e1078ab656d33560ee87d4e11f33d9c19c06907c",
+      "assessment": {
+        "state": "PASS",
+        "runId": "b4efb63f-9985-4a3a-89d1-bc6672dfdcec",
+        "at": "2026-10-19T02:24:51.951Z"
+      }
+    },
+    "FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90": {
+      "id": "FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90",
+      "status": "provisioned",
+      "tier": "test-standard",
+      "tierHash": "58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea",
+      "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90.md",
+      "spec": {
+        "title": "Implement Runtime Safety validation utilities",
+        "nativeTaskRef": "#56",
+        "tier": "test-standard",
+        "what": "Deliver the authorized Runtime Safety repository scanner and isolated owned-process regression suites after the completed gate-only registration phase. Product behavior and live runtime controls remain unchanged.",
+        "why": "Retain every required command while observing runtime scan last under the existing fail-fast runner",
+        "coverageEvidence": "docs/validation/unified-tiers.json definition hash 58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea explicitly runs scripts/tests/runtime-port-policy.test.mjs and scripts/tests/runtime-lifecycle.test.mjs before the prior standard checks, runs scripts/check-runtime-ports.mjs last so real findings cannot hide remaining tests, and inherits scripts/tests/failure-gate.test.mjs. All prior checks retain their relative order. Invoke pnpm run test-standard -- the provisioned ID with TASK_PLAN_FILE and observed UNIFIED_CONTEXT_FILE.",
+        "done": [
+          "The repository scan reports hardcoded binds, executable/test URLs and executable documentation across service, Vite/config, workflow and script boundaries, with explicit narrow fixture/example/platform-owned exceptions and a separate real repository result.",
+          "Scanner fixtures reject synthetic hardcoded binds and URLs while accepting environment-driven equivalents and actual live ephemeral reservations.",
+          "Owned lifecycle fixtures prove distinct simultaneous reservations, observed readiness, collision denial without takeover, confirmed close/release, failed/timed-out/cancelled descendant cleanup, unrelated-process preservation and conservative uncertainty.",
+          "Two sequential complete authorized bound-tier runs preserve raw results and cleanup evidence without manual listener, process or lease intervention; required failures are reported honestly with owning files.",
+          "The tracked handoff maps requirements, exact table delta, authorization, historical disposition, seal, snapshots, assertions and observed results without claiming live control readiness."
+        ],
+        "outOfScope": [
+          "No application fixes for scanner findings, product UI, authentication/data changes, outage/restart surface or live runtime control activation.",
+          "No skill definition changes, live service restart, pre-existing listener takeover, uncertain live lease deletion, deployment, paid provider, production or remote-CI operation.",
+          "No tier switching, fifth tier, removed checks, raised limits, database/browser capability provisioning or historical binding retrofit.",
+          "No separate independent reviewer; gate maintenance results are not an implementation tier PASS."
+        ],
+        "steps": [
+          "Inspect current native scope and authorization, recheck quiescence and baseline, provision one fresh standard-tier identity, reconcile exact sealed native payload and run supported pre-implementation preflight.",
+          "Implement a repository-aware scanner and narrow documented exclusions with synthetic failure/acceptance cases at the scanner boundary.",
+          "Implement live ephemeral socket and owned-child lifecycle tests using actual existing local supervision and isolated fixtures with finite cleanup and readiness evidence.",
+          "Execute the full bound standard tier twice sequentially, preserve results, classify failures using actual provenance and report source findings without out-of-scope application repair.",
+          "Complete the revision-bound handoff and report maintenance, admission, delivered tests, assigned-tier outcomes and control readiness separately."
+        ],
+        "relevantFiles": [
+          "scripts/check-runtime-ports.mjs",
+          "scripts/runtime-port-policy.mjs",
+          "scripts/tests/runtime-port-policy.test.mjs",
+          "scripts/tests/runtime-lifecycle.test.mjs",
+          "scripts/tests/fixtures/runtime-child.mjs",
+          "docs/validation/app-support-runtime-workload-handoff.md"
+        ],
+        "baselines": [],
+        "regression": {
+          "mode": "normal",
+          "covers": "RG-RUNTIME-01: Synthetic hardcoded service binds or executable/test URLs are offered to the scanner; environment-driven ports and live ephemeral reservations are compared. RG-RUNTIME-02: Concurrent owned listeners and a colliding bind attempt exercise reservation and release. RG-RUNTIME-03: Failed, execution-expired and cancelled owned child trees and incomplete discovery exercise actual supervision. RG-RUNTIME-04: Changed workloads, alias/subset replacement or wrong tiers are offered to gate admission.",
+          "testLocation": "scripts/tests/runtime-port-policy.test.mjs; scripts/tests/runtime-lifecycle.test.mjs; scripts/tests/failure-gate.test.mjs",
+          "checks": "Assert scanner findings with file/line and reject hardcoded binds/URLs, accepting environment equivalents and actual listen(0). Assert distinct ready live sockets, EADDRINUSE without takeover and release only after confirmed close. Assert positive dispatch/readiness then bounded termination of owned descendants, closed listeners and unrelated fixture survival; actual discovery failure retains the target lease and denies reuse. Assert the complete prior table is unchanged after removing exactly the three commands, inherited additions occur once and stale/wrong/alias/subset context refuses before dispatch until supported amendment, preserving historical bytes."
+        },
+        "regressionAssessment": {
+          "classification": "material",
+          "rationale": "The combined authorized task changes the existing required validation execution contract and introduces a required repository policy check. Normal coverage is required even though implementation deliverables are checks and tests.",
+          "scopeReview": "Reviewed all eight Regression Guard categories against scanner inputs, socket ownership, actual supervisor lifecycle, whole-table hashing and supported gate admission. No product, auth, persistence or provider boundary changes are included.",
+          "coverageReview": "Every material risk has an affected-layer assertion explicitly included by the standard workload; gate cases are already delivered maintenance fixtures and the runtime cases are future concrete deliverables, not claimed executed tests.",
+          "risks": [
+            {
+              "id": "RG-RUNTIME-01",
+              "category": "compatibility-contract",
+              "change": "A required repository policy check must distinguish hardcoded runtime ports from legitimate environment, ephemeral, fixture, example and platform-owned cases without concealing real findings.",
+              "layer": "repository scanner boundary"
+            },
+            {
+              "id": "RG-RUNTIME-02",
+              "category": "concurrency-lifecycle",
+              "change": "Parallel owned listeners must reserve distinct live ports and collision handling must not take over unrelated work or report a free observation as a reservation.",
+              "layer": "local socket reservation boundary"
+            },
+            {
+              "id": "RG-RUNTIME-03",
+              "category": "performance-reliability",
+              "change": "Owned failed, expired and cancelled process trees must stop within finite limits; uncertain discovery must not release protection.",
+              "layer": "existing local supervisor and target lease boundary"
+            },
+            {
+              "id": "RG-RUNTIME-04",
+              "category": "compatibility-contract",
+              "change": "Required Runtime Safety commands must not be bypassed by stale workload context, aliases, subsets or wrong tiers; historical bindings must remain intact.",
+              "layer": "gate tier loader and admission boundary"
+            }
+          ],
+          "coverage": [
+            {
+              "risk": "RG-RUNTIME-01",
+              "scenario": "RG-RUNTIME-01: Synthetic hardcoded service binds or executable/test URLs are offered to the scanner; environment-driven ports and live ephemeral reservations are compared.",
+              "testLocation": "scripts/tests/runtime-port-policy.test.mjs",
+              "assertion": "Assert scanner findings with file/line and reject hardcoded binds/URLs, accepting environment equivalents and actual listen(0).",
+              "layer": "repository scanner boundary"
+            },
+            {
+              "risk": "RG-RUNTIME-02",
+              "scenario": "RG-RUNTIME-02: Concurrent owned listeners and a colliding bind attempt exercise reservation and release.",
+              "testLocation": "scripts/tests/runtime-lifecycle.test.mjs",
+              "assertion": "Assert distinct ready live sockets, EADDRINUSE without takeover and release only after confirmed close.",
+              "layer": "local socket reservation boundary"
+            },
+            {
+              "risk": "RG-RUNTIME-03",
+              "scenario": "RG-RUNTIME-03: Failed, execution-expired and cancelled owned child trees and incomplete discovery exercise actual supervision.",
+              "testLocation": "scripts/tests/runtime-lifecycle.test.mjs",
+              "assertion": "Assert positive dispatch/readiness then bounded termination of owned descendants, closed listeners and unrelated fixture survival; actual discovery failure retains the target lease and denies reuse.",
+              "layer": "existing local supervisor and target lease boundary"
+            },
+            {
+              "risk": "RG-RUNTIME-04",
+              "scenario": "RG-RUNTIME-04: Changed workloads, alias/subset replacement or wrong tiers are offered to gate admission.",
+              "testLocation": "scripts/tests/failure-gate.test.mjs",
+              "assertion": "Assert the complete prior table is unchanged after removing exactly the three commands, inherited additions occur once and stale/wrong/alias/subset context refuses before dispatch until supported amendment, preserving historical bytes.",
+              "layer": "gate tier loader and admission boundary"
+            }
+          ]
+        }
+      },
+      "planTemplate": "unified-v4",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-19T02:52:41.460Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-19T02:52:41.496Z"
+        },
+        {
+          "kind": "amendment-start",
+          "from": "test-standard",
+          "to": "test-standard",
+          "fromDefinition": "46dce8b728ade9f59c0c9a1c09180dab0e2fe2bc8f7e43d20e6d91d2b0521476",
+          "toDefinition": "58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea",
+          "fromContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "toContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "coverageEvidence": "docs/validation/unified-tiers.json definition hash 58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea explicitly runs scripts/tests/runtime-port-policy.test.mjs and scripts/tests/runtime-lifecycle.test.mjs before the prior standard checks, runs scripts/check-runtime-ports.mjs last so real findings cannot hide remaining tests, and inherits scripts/tests/failure-gate.test.mjs. All prior checks retain their relative order. Invoke pnpm run test-standard -- the provisioned ID with TASK_PLAN_FILE and observed UNIFIED_CONTEXT_FILE.",
+          "why": "Retain every required command while observing runtime scan last under the existing fail-fast runner",
+          "at": "2026-10-19T02:59:24.355Z",
+          "coordination": {
+            "authorizationApplicability": "The owner-authorized exact three commands and unchanged checks, inheritance, prerequisites and limits still apply. Moving only runtime-port-scan to the last position does not broaden scope; the same identity and standard tier are preserved. Native task #56 remains eligible and the exact approved original scope is retained.",
+            "evidenceImpact": "Gate-only ordering reconciliation passed both Runtime Safety maintenance fixtures with confirmed quiescence. No application workload has run. Scanner and lifecycle sources already authored remain within the unchanged approved scope; no earlier test evidence is claimed for them. The old table context is stale and must be amended and reconciled before any application workload. All full-tier evidence will be obtained on the amended workload."
+          },
+          "hostAuthorization": "AGENT_CHECK_NOT_MACHINE_VERIFIED"
+        },
+        {
+          "kind": "amended",
+          "from": "test-standard",
+          "to": "test-standard",
+          "fromContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "toContract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+          "coverageEvidence": "docs/validation/unified-tiers.json definition hash 58f3ec04fe58a55f769a55956e631116832fccfb6f1795e23d9d0ec4c06cd4ea explicitly runs scripts/tests/runtime-port-policy.test.mjs and scripts/tests/runtime-lifecycle.test.mjs before the prior standard checks, runs scripts/check-runtime-ports.mjs last so real findings cannot hide remaining tests, and inherits scripts/tests/failure-gate.test.mjs. All prior checks retain their relative order. Invoke pnpm run test-standard -- the provisioned ID with TASK_PLAN_FILE and observed UNIFIED_CONTEXT_FILE.",
+          "why": "Retain every required command while observing runtime scan last under the existing fail-fast runner",
+          "at": "2026-10-19T02:59:24.379Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "560169c7-7595-4973-a726-6c49bf5a2f65",
+          "state": "FAIL",
+          "at": "2026-10-19T03:01:15.577Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "36c28b59-2640-48df-8192-c8f79f1d5771",
+          "state": "FAIL",
+          "at": "2026-10-19T03:01:29.398Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "e4eba4c7-eb34-42dd-acd4-168a466c1d70",
+          "state": "FAIL",
+          "at": "2026-10-19T03:03:44.556Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "5ac96ed4-2fe2-4f00-87b9-2fef35ab7189",
+          "state": "FAIL",
+          "at": "2026-10-19T03:04:09.601Z"
+        },
+        {
+          "kind": "self-classified-pre-existing",
+          "note": {
+            "suite": "api-outline",
+            "test": "src/routes/outline.test.ts",
+            "signature": "'test failed'",
+            "inference": true,
+            "sources": [
+              {
+                "type": "documented-pattern",
+                "file": "docs/validation/evidence/runtime-api-import-observation.md",
+                "quote": "the unchanged api-outline test exits during module initialization because\nDATABASE_URL is absent from the unchanged credential-free supervisor environment.",
+                "hash": "7fcee5ae3bc4fe9d20d05e6e1050edc3ec3fd146d0ff171658b690b9fa3b278d"
+              }
+            ],
+            "planHash": "d2b714ffacfc0d74a43abf190f7703dd207e32b61af1165640343b01bb63f8df",
+            "observedRun": "e4eba4c7-eb34-42dd-acd4-168a466c1d70",
+            "at": "2026-10-19T03:06:10.506Z"
+          },
+          "at": "2026-10-19T03:06:10.515Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "fa2587f9-3ae4-48d9-80ad-be22aedeb22e",
+          "state": "FAIL",
+          "at": "2026-10-19T03:08:02.722Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "b06e72cb-50e4-43bf-ac25-f3bf14aba4da",
+          "state": "FAIL",
+          "at": "2026-10-19T03:11:31.823Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "ba477bb6-2443-48eb-9e09-058ccea1210b",
+          "state": "FAIL",
+          "at": "2026-10-19T03:13:21.839Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "894a8c48-cab9-4d4e-b074-ac7d0aa47788",
+          "state": "FAIL",
+          "at": "2026-10-19T03:20:23.118Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "e2a5a0ce-d27d-42f9-9819-725409eb9100",
+          "state": "FAIL",
+          "at": "2026-10-19T03:22:22.291Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "560169c7-7595-4973-a726-6c49bf5a2f65",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/560169c7-7595-4973-a726-6c49bf5a2f65/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T02:59:49.649Z"
+        },
+        {
+          "runId": "36c28b59-2640-48df-8192-c8f79f1d5771",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/36c28b59-2640-48df-8192-c8f79f1d5771/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T03:01:28.912Z"
+        },
+        {
+          "runId": "e4eba4c7-eb34-42dd-acd4-168a466c1d70",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/e4eba4c7-eb34-42dd-acd4-168a466c1d70/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T03:01:54.048Z"
+        },
+        {
+          "runId": "5ac96ed4-2fe2-4f00-87b9-2fef35ab7189",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/5ac96ed4-2fe2-4f00-87b9-2fef35ab7189/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T03:04:08.049Z"
+        },
+        {
+          "runId": "fa2587f9-3ae4-48d9-80ad-be22aedeb22e",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/fa2587f9-3ae4-48d9-80ad-be22aedeb22e/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T03:06:24.765Z"
+        },
+        {
+          "runId": "b06e72cb-50e4-43bf-ac25-f3bf14aba4da",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/b06e72cb-50e4-43bf-ac25-f3bf14aba4da/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T03:09:48.374Z"
+        },
+        {
+          "runId": "ba477bb6-2443-48eb-9e09-058ccea1210b",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/ba477bb6-2443-48eb-9e09-058ccea1210b/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T03:11:44.465Z"
+        },
+        {
+          "runId": "894a8c48-cab9-4d4e-b074-ac7d0aa47788",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/894a8c48-cab9-4d4e-b074-ac7d0aa47788/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T03:18:38.287Z"
+        },
+        {
+          "runId": "e2a5a0ce-d27d-42f9-9819-725409eb9100",
+          "reportPath": ".local/failure-gate/runs/FGU-1c51dcfd-5c3a-4422-8ece-43a989ed2b90/e2a5a0ce-d27d-42f9-9819-725409eb9100/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T03:20:44.933Z"
+        }
+      ],
+      "preexistingNotes": [
+        {
+          "suite": "api-outline",
+          "test": "src/routes/outline.test.ts",
+          "signature": "'test failed'",
+          "inference": true,
+          "sources": [
+            {
+              "type": "documented-pattern",
+              "file": "docs/validation/evidence/runtime-api-import-observation.md",
+              "quote": "the unchanged api-outline test exits during module initialization because\nDATABASE_URL is absent from the unchanged credential-free supervisor environment.",
+              "hash": "7fcee5ae3bc4fe9d20d05e6e1050edc3ec3fd146d0ff171658b690b9fa3b278d"
+            }
+          ],
+          "planHash": "d2b714ffacfc0d74a43abf190f7703dd207e32b61af1165640343b01bb63f8df",
+          "observedRun": "e4eba4c7-eb34-42dd-acd4-168a466c1d70",
+          "at": "2026-10-19T03:06:10.506Z"
+        }
+      ],
+      "planHash": "d2b714ffacfc0d74a43abf190f7703dd207e32b61af1165640343b01bb63f8df",
+      "assessment": {
+        "state": "FAIL",
+        "runId": "e2a5a0ce-d27d-42f9-9819-725409eb9100",
+        "at": "2026-10-19T03:22:22.291Z"
+      }
+    },
+    "FGU-c2563e49-3399-426a-875f-add5adee1a32": {
+      "id": "FGU-c2563e49-3399-426a-875f-add5adee1a32",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "6c00f6acd84534a2e81f0dbaf268594f22c864d66a827b3582da8e5fa0c21cb3",
+      "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-c2563e49-3399-426a-875f-add5adee1a32.md",
+      "spec": {
+        "title": "Update App Support Ops",
+        "nativeTaskRef": "#58",
+        "tier": "test-fast",
+        "what": "Install only the owner-approved App Support Ops instructional revision and factual handoff. Full approved native specification and complete definition are retained in native task #58; immutable source attached_assets/app-support-ops-skill_(10.18.2026)_1792375255347.zip SHA-256 90e32389a8f8038824507c3e87cab81525efa2557da37e90c903ff171adbad66; root SKILL.md SHA-256 571805eb3a9bcbce80200d283d59ccf47eba017cb6cd2967b59d9c4aaa82e774; installed baseline SHA-256 de57d054bcd39880e741975f29a9cf0f38c300912f35791511a6b471d4d73983. Install no other archive members. Owner-adopted Runtime Safety selection is for subsequent application only; backup already confirmed.",
+        "why": "Exact instructional-source replacement only; unchanged execution machinery is covered by the complete current fast workload; byte parity and preservation are separate delivery evidence.",
+        "coverageEvidence": "docs/validation/unified-tiers.json SHA-256 6ccd5a5300f75e7bc0bb4a26ba3e80adfe8d7d8478c8319c1f20a264a76ba2de: test-fast runs workspace-skill-sync, gate-unit, regression-guard and port-authority-clock with no prerequisites or inheritance; 60000 ms step, 120000 ms run, 5000 ms cleanup. Supported invocation pnpm run test-fast -- generated-ID with TASK_PLAN_FILE and observed UNIFIED_CONTEXT_FILE. Standard runtime/CI/Poe additions and inherited upper-tier prerequisites do not alter this tier. No workload edits.",
+        "done": [
+          "`.agents/skills/app-support-ops/SKILL.md` matches the approved archive's root `SKILL.md` byte-for-byte, with SHA-256 `571805eb3a9bcbce80200d283d59ccf47eba017cb6cd2967b59d9c4aaa82e774`.",
+          "The file retains the App Support Ops identity and all Help, Admin Analytics, Runtime Safety and Combined requirements, and includes the new existing-tier coverage/amendment subsection and canonical Port Authority guidance without a separate Heavy companion prerequisite.",
+          "The file explicitly distinguishes definition installation, gate maintenance, application admission, assigned-tier validation and runtime activation, and does not grant implicit workload, listener-takeover, live-restart or deployment permission."
+        ],
+        "outOfScope": [
+          "Application changes, workload/tier edits, skill publication or mirror refresh, additional archive-member installation, changes to adjacent skills or evals, live services, production, databases, provider calls, CI execution, and deployment. Existing Task #56 owns the separately authorized workload additions; do not duplicate it. This task does not implement Runtime Safety or claim runtime readiness."
+        ],
+        "steps": [
+          "**Prepare and admit the definition update** — Recheck the adopted owner instruction, current task eligibility, canonical governing sources, baseline catalog and actual workload; use normal provisioning and the full current specification for exactly one adequate tier. Reconcile the exact sealed payload into this native task, read it back and satisfy current preflight and actual approval before edits; use supported amendments for covered changes, never hand-edit seals or records.",
+          "**Verify the selected source** — Reverify archive identity, CRC, unique safe regular member paths and all manifest-listed bytes; compare the current canonical definition with the approved baseline. If the canonical file has changed, preserve it and reconcile the exact differences before replacement instead of overwriting newer instructions or silently adopting another source.",
+          "**Install the instructional revision** — Replace only the canonical entry point with the exact approved root definition, preserving sibling evals, unrelated instructions and project state. The archive's baseline snapshot, application prompt, revision notes and authoring evidence are inputs, not alternate installed definitions or executable authority.",
+          "**Validate and publish the handoff** — Establish exact delivered source parity and preservation independently of the bound-tier result, then run the full admitted tier through its supported supervised route. Publish the definition handoff with source/pre-edit/delivered identities, actual checks, authorization, limits and explicit separation from subsequent runtime application."
+        ],
+        "relevantFiles": [
+          "`.agents/skills/app-support-ops/SKILL.md`",
+          "`.agents/skills/app-support-ops/evals/evals.json`",
+          "`.agents/skills/skill-install-confirmation/SKILL.md`",
+          "`.agents/skills/failure-gate-unified/SKILL.md`",
+          "`.agents/skills/regression-guard/SKILL.md`",
+          "`attached_assets/app-support-ops-skill_(10.18.2026)_1792375255347.zip`",
+          "`AGENTS.md`",
+          "`replit.md`",
+          "`docs/validation/unified-policy.json`",
+          "`docs/validation/unified-tiers.json`",
+          "`docs/validation/failure-baseline.json`",
+          "`docs/validation/unified-preflight-execution.md`",
+          "`docs/validation/regression-guard-authoring.md`",
+          "`scripts/new-plan.mjs`",
+          "`scripts/amend-plan.mjs`",
+          "`scripts/validate-task-plans.mjs`"
+        ],
+        "baselines": [],
+        "regression": {
+          "mode": "excluded",
+          "reason": "Cosmetic/copy-only: entire delivery is an exact instructional definition and factual handoff, without executable enforcement or application changes."
+        },
+        "regressionAssessment": {
+          "classification": "excluded",
+          "exclusion": "cosmetic",
+          "rationale": "Instructional source replacement and factual delivery record only; no executable enforcement, gate policy or runtime activation changes.",
+          "scopeReview": "Assessed all eight categories: bug-fix, behavior-change, error-handling, security-privacy, data-integrity, concurrency-lifecycle, performance-reliability and compatibility-contract. No material executable or application boundary is changed by this definition-only delivery.",
+          "coverageReview": "Archive CRC and manifest/source-byte comparisons establish exact instructional output and eval preservation separately from full assigned-tier execution. Application acceptance remains outside this scope.",
+          "risks": [],
+          "coverage": []
+        }
+      },
+      "planTemplate": "unified-v4",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-19T19:31:20.580Z"
+        },
+        {
+          "kind": "generation-failed",
+          "at": "2026-10-19T19:31:20.614Z"
+        },
+        {
+          "kind": "provisioning-retry-started",
+          "at": "2026-10-19T19:48:02.508Z",
+          "expectedRecordHash": "a8f7cd2efba278bbde6a5760ae6f72cebbd9fbaff617f794cf57e8c31d3cbbdd",
+          "specHash": "fdab6a8bc75dfd8905aa1813c23872dc285bf9daa0dd99dca766f7371d0d44b4"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-19T19:48:02.752Z",
+          "operation": "same-reservation-completion",
+          "specHash": "fdab6a8bc75dfd8905aa1813c23872dc285bf9daa0dd99dca766f7371d0d44b4"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "b54cb2e9-6722-49be-95cd-baf2cb84ebc5",
+          "state": "PASS",
+          "at": "2026-10-19T19:51:07.646Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "6040857a-9b72-4aab-a027-9048de0d7b93",
+          "state": "PASS",
+          "at": "2026-10-19T20:03:22.743Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "b54cb2e9-6722-49be-95cd-baf2cb84ebc5",
+          "reportPath": ".local/failure-gate/runs/FGU-c2563e49-3399-426a-875f-add5adee1a32/b54cb2e9-6722-49be-95cd-baf2cb84ebc5/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T19:49:25.183Z"
+        },
+        {
+          "runId": "6040857a-9b72-4aab-a027-9048de0d7b93",
+          "reportPath": ".local/failure-gate/runs/FGU-c2563e49-3399-426a-875f-add5adee1a32/6040857a-9b72-4aab-a027-9048de0d7b93/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T20:01:47.106Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "457b8276d2094db9115be543ab0b7715db3df3532ab9d4871ea2f793879a9022",
+      "assessment": {
+        "state": "PASS",
+        "runId": "6040857a-9b72-4aab-a027-9048de0d7b93",
+        "at": "2026-10-19T20:03:22.743Z"
+      }
+    },
+    "FGU-16fa022a-87e7-42f3-ae3d-17d6b09aeb07": {
+      "id": "FGU-16fa022a-87e7-42f3-ae3d-17d6b09aeb07",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "6c00f6acd84534a2e81f0dbaf268594f22c864d66a827b3582da8e5fa0c21cb3",
+      "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-16fa022a-87e7-42f3-ae3d-17d6b09aeb07.md",
+      "spec": {
+        "title": "Confirm & Harden: App Support Ops",
+        "nativeTaskRef": "#59",
+        "what": "The entire scope is verification-only checks of unchanged behavior through read-only comparison of the delivered App Support Ops definition against the approved archive and complete installer specification.",
+        "why": "Compare the exact delivered definition with its approved source using reproducible byte and content assertions.",
+        "tier": "test-fast",
+        "coverageEvidence": "docs/validation/unified-tiers.json SHA-256 6ccd5a5300f75e7bc0bb4a26ba3e80adfe8d7d8478c8319c1f20a264a76ba2de: test-fast includes workspace-skill-sync, gate-unit, regression-guard and port-authority-clock; no inheritance or prerequisites; 60000 ms per step, 120000 ms whole run and 5000 ms cleanup. pnpm run test-fast -- generated-ID with exact TASK_PLAN_FILE and observed UNIFIED_CONTEXT_FILE. Read-only archive/native/canonical byte and content comparisons are separate source evidence. Upper-tier runtime/CI/Poe changes do not affect this workload; no workload changes.",
+        "done": [
+          "`.agents/skills/app-support-ops/SKILL.md` matches the approved archive's root `SKILL.md` byte-for-byte, with SHA-256 `571805eb3a9bcbce80200d283d59ccf47eba017cb6cd2967b59d9c4aaa82e774`.",
+          "The file retains the App Support Ops identity and all Help, Admin Analytics, Runtime Safety and Combined requirements, and includes the new existing-tier coverage/amendment subsection and canonical Port Authority guidance without a separate Heavy companion prerequisite.",
+          "The file explicitly distinguishes definition installation, gate maintenance, application admission, assigned-tier validation and runtime activation, and does not grant implicit workload, listener-takeover, live-restart or deployment permission.",
+          "No section is vague, self-referential, or deferred to future work.",
+          "A future Planner reading the skill file cold could follow it without ambiguity."
+        ],
+        "outOfScope": [
+          "App Support Ops feature implementation, active runtime acceptance, workload registration, package resources or eval changes, mirrors/projection refresh, adjacent skills, CI, services, production, deployment, or a separate application reviewer. Only the canonical instructional file may be patched. Source inspection is not proof of runtime safety.",
+          "Make any changes outside `.agents/skills/app-support-ops/SKILL.md` as confirmation deliverables; ordinary supported provisioning/runner records remain host-governance bookkeeping, never manually edited or repurposed for this scope.",
+          "Refactor or modify adjacent skills.",
+          "Add speculative content beyond what the original spec called for.",
+          "Expand scope to include feature-code changes inspired by the skill's topic.",
+          "Silently fix gaps without first listing them."
+        ],
+        "steps": [
+          "Compare pinned source and target bytes and record the actual observations and limitations.",
+          "Verify approved exact delivered source parity independently through the full admitted tier result."
+        ],
+        "relevantFiles": [
+          "`.agents/skills/app-support-ops/SKILL.md`",
+          "`.agents/skills/skill-install-confirmation/SKILL.md`",
+          "`.agents/skills/failure-gate-unified/SKILL.md`",
+          "`.agents/skills/regression-guard/SKILL.md`",
+          "`attached_assets/app-support-ops-skill_(10.18.2026)_1792375255347.zip`",
+          "`AGENTS.md`",
+          "`docs/validation/unified-tiers.json`",
+          "`docs/validation/unified-policy.json`",
+          "`docs/validation/failure-baseline.json`",
+          "`docs/validation/unified-preflight-execution.md`",
+          "`scripts/new-plan.mjs`",
+          "`scripts/amend-plan.mjs`",
+          "`scripts/validate-task-plans.mjs`"
+        ],
+        "baselines": [],
+        "regression": {
+          "mode": "self",
+          "deliverable": "Read-only source comparison check of .agents/skills/app-support-ops/SKILL.md against the pinned approved archive root and complete installer specification; require exact byte equality, all concrete content assertions and recorded snapshot observations."
+        },
+        "regressionAssessment": {
+          "classification": "self",
+          "rationale": "Verification-only instructional file confirmation; exact source/content assertions are the entire check, with no executable repair or application change.",
+          "scopeReview": "Reviewed all eight material categories against the actual current no-change comparison. No skill correction is needed. Original conditional repair authority remains in the native task, but this seal authorizes no repair: stop and reassess through the supported amendment if any correction becomes necessary. The distinct owner-directed gate maintenance is not part of this self-satisfying comparison.",
+          "coverageReview": "Source comparison checks exact pinned archive and complete committed installer specification, identity and four modes, coverage/amendment mapping, canonical specialist reference and no implicit activation or takeover permission. Full unchanged fast tier remains required separately.",
+          "risks": [],
+          "coverage": [],
+          "verification": {
+            "target": {
+              "path": ".agents/skills/app-support-ops/SKILL.md",
+              "sha256": "571805eb3a9bcbce80200d283d59ccf47eba017cb6cd2967b59d9c4aaa82e774"
+            },
+            "source": {
+              "path": "attached_assets/app-support-ops-skill_(10.18.2026)_1792375255347.zip",
+              "sha256": "90e32389a8f8038824507c3e87cab81525efa2557da37e90c903ff171adbad66",
+              "member": "SKILL.md",
+              "memberSha256": "571805eb3a9bcbce80200d283d59ccf47eba017cb6cd2967b59d9c4aaa82e774"
+            },
+            "method": "Read the bounded approved ZIP root SKILL.md without extraction; verify archive, member and target SHA-256, compare every byte including the terminal newline and compare the full definition read from the completed native installer plan. Inspect each required mode, coverage/amendment instruction and safety boundary. Record actual observations and limits in the task conversation and the local revision-bound observation record.",
+            "assertions": [
+              {
+                "id": "exact-parity",
+                "kind": "bytes-equal",
+                "assertion": "The entire installed definition equals the pinned approved archive root, including all formatting and terminal newline.",
+                "expected": "equal"
+              },
+              {
+                "id": "content-1",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: name: App Support Ops",
+                "expected": "name: App Support Ops"
+              },
+              {
+                "id": "content-2",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: ## 3. Help mode",
+                "expected": "## 3. Help mode"
+              },
+              {
+                "id": "content-3",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: ## 4. Admin Analytics mode",
+                "expected": "## 4. Admin Analytics mode"
+              },
+              {
+                "id": "content-4",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: ## 5. Runtime Safety mode",
+                "expected": "## 5. Runtime Safety mode"
+              },
+              {
+                "id": "content-5",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: ## 6. Combined mode and delivery",
+                "expected": "## 6. Combined mode and delivery"
+              },
+              {
+                "id": "content-6",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: ### Validation coverage and existing-tier amendments",
+                "expected": "### Validation coverage and existing-tier amendments"
+              },
+              {
+                "id": "content-7",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: .agents/skills/port-authority/SKILL.md",
+                "expected": ".agents/skills/port-authority/SKILL.md"
+              },
+              {
+                "id": "content-8",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: No separate companion skill is an ordinary prerequisite.",
+                "expected": "No separate companion skill is an ordinary prerequisite."
+              },
+              {
+                "id": "content-9",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: Cleanup requirements do not grant takeover permission.",
+                "expected": "Cleanup requirements do not grant takeover permission."
+              },
+              {
+                "id": "content-10",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: Keep definition installation, gate maintenance, plan admission,",
+                "expected": "Keep definition installation, gate maintenance, plan admission,"
+              },
+              {
+                "id": "content-11",
+                "kind": "contains",
+                "assertion": "The approved instructional requirement remains present verbatim: assigned-tier validation, runtime activation and deployment",
+                "expected": "assigned-tier validation, runtime activation and deployment"
+              }
+            ],
+            "observationsLocation": ".local/tasks/confirm-app-support-ops-observations.json",
+            "repairPolicy": "stop-and-amend-before-correction"
+          }
+        }
+      },
+      "planTemplate": "unified-v4",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-19T20:29:30.475Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-19T20:29:30.522Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "caacd2c4-133f-4631-8aed-aadad8d227f9",
+          "state": "PASS",
+          "at": "2026-10-19T20:32:12.024Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "caacd2c4-133f-4631-8aed-aadad8d227f9",
+          "reportPath": ".local/failure-gate/runs/FGU-16fa022a-87e7-42f3-ae3d-17d6b09aeb07/caacd2c4-133f-4631-8aed-aadad8d227f9/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T20:30:22.616Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "d759987c96a144250ec0fd35c0df4cc7dc4e66e56e64f9a19745599bf816ce2a",
+      "assessment": {
+        "state": "PASS",
+        "runId": "caacd2c4-133f-4631-8aed-aadad8d227f9",
+        "at": "2026-10-19T20:32:12.024Z"
+      }
+    },
+    "FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3": {
+      "id": "FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3",
+      "status": "provisioned",
+      "tier": "test-standard",
+      "tierHash": "6c00f6acd84534a2e81f0dbaf268594f22c864d66a827b3582da8e5fa0c21cb3",
+      "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3.md",
+      "spec": {
+        "title": "Apply CloudPainter Runtime Safety",
+        "nativeTaskRef": "#60",
+        "tier": "test-standard",
+        "what": "Apply only Runtime Safety to existing API and both Vite services and actual photo/outline test harness callers, preserving original native scope and all C01–C12 obligations.",
+        "why": "Reject wrong ports, eliminate unsafe readiness and TERM-only cleanup, and prove real caller activation without disrupting managed services.",
+        "done": [
+          "API, CloudPainter and development sandbox listeners use the configured environment/platform port, reject invalid values before listening, and never silently switch to a different port when the configured one is busy. Existing artifact routes, base paths and managed service ownership remain intact.",
+          "Actual self-starting CloudPainter test harnesses share a canonical owned-server lifecycle with collision handling, finite service-specific readiness, bounded output and verified termination of their owned wrappers/descendants. Concurrent independent tests do not receive the same live reservation or stop unrelated listeners; externally supplied previews are treated as unowned.",
+          "The delivered repository scanner passes with narrowly evidenced classifications, not blanket fixture/documentation exclusions. Actual startup/health/cleanup callers are covered by required executable assertions, rather than only unused helpers or package fixtures.",
+          "Newly activated controls pass two complete consecutive runs of the one admitted existing tier without manual port, process or lease clearing between runs. Unknown ownership, surviving children, cancellation or missing evidence remain non-successful and do not authorize takeover or premature release.",
+          "A requirement-to-delivery handoff records capabilities, canonical source/input identities, actual wiring, tests, both run outcomes and remaining limitations. The absent safe development-restart capability is evidenced as ineligible; no outage/restart UI, Help, Admin Analytics, deployment or live-service disruption is introduced."
+        ],
+        "outOfScope": [
+          "Help/onboarding, Admin Analytics, product design/features, new artifacts, image/provider changes, user data/auth/quota/backups, a new outage/restart API or UI, and deployment/production operations. No existing listener reclaim, uncertain lease deletion, broad process-name killing, live service stop/restart, paid/external provider calls or remote CI operations. No new tier, parallel validation runner, removed checks, altered inheritance/prerequisites, raised budgets or hand-edited historical IDs/bindings/ledgers. No canonical skill edits, mirror writes, independent application reviewer or implementation of Task #53/#56/#57. Narrow runtime-port documentation/configuration corrections are allowed; unrelated CI/application refactoring is not."
+        ],
+        "steps": [
+          "Reconcile actual delivered prerequisites and current state; prepare/provision this normal plan, reconcile exact native payload and preflight under existing owner-selected scope before edits.",
+          "Implement bounded configured PORT validation and strict development/preview binding in existing API and both Vite configs without changing artifact routing or restarting live services.",
+          "Integrate one canonical owned-server adapter into actual photo export and outline harnesses with ephemeral allocation, collision denial/retry, service-specific finite readiness, independent supervision, bounded output and verified wrapper/descendant teardown.",
+          "Connect inventory diagnostics to canonical read-only discovery; extend registered owning suites for real callers, negative readiness and cleanup, sentinel protection and scanner classification.",
+          "Execute two complete sequential full standard-tier runs on the delivered snapshot with no manual process/port/lease intervention, preserve raw outcomes and publish requirement-to-delivery handoff with C01–C12 and capability gates."
+        ],
+        "relevantFiles": [
+          "artifacts/api-server/src/index.ts",
+          "artifacts/cloudpainter/vite.config.ts",
+          "artifacts/mockup-sandbox/vite.config.ts",
+          "artifacts/cloudpainter/tests/photo-export.browser.test.mjs",
+          "artifacts/cloudpainter/tests/outline-subject-regression.browser.mjs",
+          "scripts/runtime",
+          "scripts/runtime-port-policy.mjs",
+          "scripts/tests/runtime-port-policy.test.mjs",
+          "scripts/tests/runtime-lifecycle.test.mjs",
+          "docs/validation/app-support-runtime-application-handoff.md",
+          "replit.md"
+        ],
+        "coverageEvidence": "docs/validation/unified-tiers.json current SHA-256 6ccd5a5300f75e7bc0bb4a26ba3e80adfe8d7d8478c8319c1f20a264a76ba2de directly includes runtime-port-policy, runtime-lifecycle and runtime-port-scan, all inherited fast checks, workspace typecheck, drawing, API outline, three CI contracts and three provider-mocked checks. No prerequisites, 300000 ms step / 900000 ms total / 10000 ms cleanup. Invoke pnpm run test-standard -- generated-ID with exact TASK_PLAN_FILE and observed UNIFIED_CONTEXT_FILE twice sequentially. No tier or workload changes; DB/browser not needed for local process/Vite/health route assertions.",
+        "regression": {
+          "mode": "normal",
+          "covers": "Invalid PORT or occupied configured port is presented to the actual service configuration. Photo and outline adapters start concurrently and encounter a held bind collision. Intended Vite base path and actual API health route are checked alongside hanging redirect HTML and wrong JSON responses. Positive dispatch and ready descendants precede failed cancelled or expired startup and teardown. Executable binds and URLs occur adjacent to allowed platform examples and fixtures.",
+          "testLocation": "scripts/tests/runtime-port-policy.test.mjs; scripts/tests/runtime-lifecycle.test.mjs",
+          "checks": "Assert missing fractional infinite nondecimal and out-of-range ports refuse before listening; valid ports and base routes persist and strict dev and preview bindings deny collisions. Assert distinct ready endpoints, bounded retry or denial, confirmed release and unrelated sentinel survival; prove both harnesses call this adapter. Assert actual routed identity and JSON status media type body contract; cancel each request and bound the entire startup, never accepting an arbitrary HTTP 200. Assert independently supervised exact owned descendants stop and listeners close before success; retain non-success for unknown discovery or surviving children and preserve an unrelated listener. Assert real executable fixture and documentation violations remain findings while evidenced platform metadata and explicitly labelled examples pass; run the real repository scanner as a required step."
+        },
+        "regressionAssessment": {
+          "classification": "material",
+          "rationale": "Existing startup/configuration and harness readiness cleanup behavior materially changes; normal same-layer coverage is required.",
+          "scopeReview": "All eight categories reviewed: bug-fix, behavior-change, error-handling, concurrency-lifecycle, performance-reliability and compatibility-contract apply. No auth/privacy/data/provider or product UI behavior changes. Installed definitions and accepted prerequisites are reused; safe restart capability absent, no restart surface or separate reviewer selected.",
+          "coverageReview": "Owning port/scanner and lifecycle suites are explicit required standard steps. Extend these suites to execute actual adapters and real Vite and API health route boundaries without browser database or providers, retaining all later CI/Poe steps and budgets.",
+          "risks": [
+            {
+              "id": "ports",
+              "category": "compatibility-contract",
+              "change": "Managed service port validation and exact binding",
+              "layer": "service configuration and observable caller boundary"
+            },
+            {
+              "id": "allocation",
+              "category": "concurrency-lifecycle",
+              "change": "Actual self-starting harness allocation and ownership",
+              "layer": "owned server adapter and observable caller boundary"
+            },
+            {
+              "id": "health",
+              "category": "performance-reliability",
+              "change": "Finite intended-service readiness",
+              "layer": "HTTP readiness adapter and observable caller boundary"
+            },
+            {
+              "id": "cleanup",
+              "category": "concurrency-lifecycle",
+              "change": "Failed cancelled and expired owned server teardown",
+              "layer": "owned server adapter and observable caller boundary"
+            },
+            {
+              "id": "scan",
+              "category": "error-handling",
+              "change": "Narrow scanner classifications at executable boundaries",
+              "layer": "repository scanner and observable caller boundary"
+            }
+          ],
+          "coverage": [
+            {
+              "risk": "ports",
+              "scenario": "Invalid PORT or occupied configured port is presented to the actual service configuration.",
+              "testLocation": "scripts/tests/runtime-port-policy.test.mjs",
+              "assertion": "Assert missing fractional infinite nondecimal and out-of-range ports refuse before listening; valid ports and base routes persist and strict dev and preview bindings deny collisions.",
+              "layer": "service configuration and observable caller boundary"
+            },
+            {
+              "risk": "allocation",
+              "scenario": "Photo and outline adapters start concurrently and encounter a held bind collision.",
+              "testLocation": "scripts/tests/runtime-lifecycle.test.mjs",
+              "assertion": "Assert distinct ready endpoints, bounded retry or denial, confirmed release and unrelated sentinel survival; prove both harnesses call this adapter.",
+              "layer": "owned server adapter and observable caller boundary"
+            },
+            {
+              "risk": "health",
+              "scenario": "Intended Vite base path and actual API health route are checked alongside hanging redirect HTML and wrong JSON responses.",
+              "testLocation": "scripts/tests/runtime-lifecycle.test.mjs",
+              "assertion": "Assert actual routed identity and JSON status media type body contract; cancel each request and bound the entire startup, never accepting an arbitrary HTTP 200.",
+              "layer": "HTTP readiness adapter and observable caller boundary"
+            },
+            {
+              "risk": "cleanup",
+              "scenario": "Positive dispatch and ready descendants precede failed cancelled or expired startup and teardown.",
+              "testLocation": "scripts/tests/runtime-lifecycle.test.mjs",
+              "assertion": "Assert independently supervised exact owned descendants stop and listeners close before success; retain non-success for unknown discovery or surviving children and preserve an unrelated listener.",
+              "layer": "owned server adapter and observable caller boundary"
+            },
+            {
+              "risk": "scan",
+              "scenario": "Executable binds and URLs occur adjacent to allowed platform examples and fixtures.",
+              "testLocation": "scripts/tests/runtime-port-policy.test.mjs",
+              "assertion": "Assert real executable fixture and documentation violations remain findings while evidenced platform metadata and explicitly labelled examples pass; run the real repository scanner as a required step.",
+              "layer": "repository scanner and observable caller boundary"
+            }
+          ]
+        }
+      },
+      "planTemplate": "unified-v4",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-19T20:51:07.538Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-19T20:51:07.570Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "fe45d2f4-d9b3-4d13-957f-22d7cf9f519e",
+          "state": "FAIL",
+          "at": "2026-10-19T20:59:25.370Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "4d5572e2-917e-4845-bfce-2d72fe5beb28",
+          "state": "PASS",
+          "at": "2026-10-19T21:01:23.475Z"
+        },
+        {
+          "kind": "isolated-retry-observed",
+          "runId": "2854faaf-2bb8-490d-9a5d-2db9d2420914",
+          "state": "FAIL",
+          "at": "2026-10-19T21:01:46.248Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "3258db62-d0da-4b2f-af2d-57e68e19ddd0",
+          "state": "FAIL",
+          "at": "2026-10-19T21:06:21.318Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "281f3de0-e465-4290-83ae-e349c517d979",
+          "state": "PASS",
+          "at": "2026-10-19T21:10:41.156Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "fdc53c8a-84aa-4b56-ba50-c8c785e7209c",
+          "state": "PASS",
+          "at": "2026-10-19T21:13:37.004Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "fe45d2f4-d9b3-4d13-957f-22d7cf9f519e",
+          "reportPath": ".local/failure-gate/runs/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3/fe45d2f4-d9b3-4d13-957f-22d7cf9f519e/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T20:57:18.266Z"
+        },
+        {
+          "runId": "4d5572e2-917e-4845-bfce-2d72fe5beb28",
+          "reportPath": ".local/failure-gate/runs/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3/4d5572e2-917e-4845-bfce-2d72fe5beb28/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T21:01:16.839Z"
+        },
+        {
+          "runId": "2854faaf-2bb8-490d-9a5d-2db9d2420914",
+          "reportPath": ".local/failure-gate/runs/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3/2854faaf-2bb8-490d-9a5d-2db9d2420914/report.json",
+          "kind": "isolated-retry",
+          "at": "2026-10-19T21:01:45.560Z"
+        },
+        {
+          "runId": "3258db62-d0da-4b2f-af2d-57e68e19ddd0",
+          "reportPath": ".local/failure-gate/runs/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3/3258db62-d0da-4b2f-af2d-57e68e19ddd0/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T21:03:47.193Z"
+        },
+        {
+          "runId": "281f3de0-e465-4290-83ae-e349c517d979",
+          "reportPath": ".local/failure-gate/runs/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3/281f3de0-e465-4290-83ae-e349c517d979/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T21:08:04.866Z"
+        },
+        {
+          "runId": "fdc53c8a-84aa-4b56-ba50-c8c785e7209c",
+          "reportPath": ".local/failure-gate/runs/FGU-051daf4d-8f30-41b5-8a9b-e52d282518e3/fdc53c8a-84aa-4b56-ba50-c8c785e7209c/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-19T21:11:05.190Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "69efd7e4760e33869b12566e81c22122558573104939cce70e424da078318330",
+      "assessment": {
+        "state": "PASS",
+        "runId": "fdc53c8a-84aa-4b56-ba50-c8c785e7209c",
+        "at": "2026-10-19T21:13:37.004Z"
+      }
+    },
+    "FGU-836b3c19-83da-4639-95fb-75420a1f8973": {
+      "id": "FGU-836b3c19-83da-4639-95fb-75420a1f8973",
+      "status": "provisioned",
+      "tier": "test-fast",
+      "tierHash": "053047da1f12470f6d06d4c87f1c38522799819f606473d8ff24c7ceb6b4385e",
+      "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "bootstrapTask": false,
+      "planPath": ".local/tasks/FGU-836b3c19-83da-4639-95fb-75420a1f8973.md",
+      "spec": {
+        "title": "Complete skill package provenance",
+        "nativeTaskRef": "#68",
+        "tier": "test-fast",
+        "what": "Add the six missing passive App Support Ops package provenance resources from the approved archive and a deterministic package-integrity test suite. Preserve every existing canonical definition and the Port Authority consumer byte-for-byte. The copied authoring baseline and application prompt remain inactive provenance, not newly adopted instructions. Record package comparisons and observed delivery evidence in the handoff.",
+        "why": "The amended fast tier includes the new deterministic package-integrity suite plus the existing gate, Regression Guard, source-helper and Port Authority proof checks, with no service or credential prerequisites.",
+        "coverageEvidence": "docs/validation/unified-tiers.json test-fast now has workspace-skill-sync, gate-unit, regression-guard, port-authority-clock and skill-package-integrity; the new suite uses node:test with a 10000 ms per-test deadline, within unchanged 120000 ms run, 60000 ms step and 5000 ms cleanup budgets. Invoke pnpm run test-fast -- ID with the exact sealed plan and observed native context in this assigned task environment.",
+        "baselines": [],
+        "done": [
+          "The six approved missing App Support Ops provenance files match their archive bytes; the existing definition and evals remain unchanged.",
+          "The package-integrity suite checks all eight regular members, seven manifest records, lengths, hashes, safe paths, frontmatter and required local references; isolated missing, altered, duplicate, unsafe and symlink fixtures reject.",
+          "All six current definitions, Router corrections, Port Authority package/runtime modules and private proof adjustments remain byte-identical to the pre-edit snapshot.",
+          "The handoff maps PKG-01 through RUN-01 to actual detecting cases, maintenance and assigned-tier outcomes, protected-history comparisons, recovery status and unverified external capabilities."
+        ],
+        "outOfScope": [
+          "Any canonical definition or current revision-pin alteration; Port Authority fixture authoring or removal of current private corrections.",
+          "Application behavior, runtime activation, workspace publication/mirror editing, remote CI configuration, database or storage mutation, secrets/provider operations, deployment or backup retirement.",
+          "Existing task contracts, IDs, tombstones, reservations, historical runs and baseline changes; only this new admitted identity may append supported normal history.",
+          "Independent review is not selected; no new SKILL.md output triggers file-only confirmation."
+        ],
+        "steps": [
+          "Copy exactly the six absent passive provenance members from the verified App Support Ops archive without changing existing files.",
+          "Implement the owning package-integrity test suite with bounded disposable negative fixtures and no external capabilities.",
+          "Compare all package members against approved inputs and preserve the current Router reconciliation and Port Authority proof unchanged.",
+          "Validate only the complete assigned fast tier with actual native plan context and write the revision-bound delivery handoff."
+        ],
+        "relevantFiles": [
+          ".agents/skills/app-support-ops/SKILL.md",
+          ".agents/skills/app-support-ops/evals/evals.json",
+          "attached_assets/app-support-ops-skill_(10.18.2026)_1792458739186.zip",
+          "docs/validation/unified-tiers.json",
+          "scripts/port-authority-clock-proof.mjs",
+          "docs/resource-recovery-coverage.md"
+        ],
+        "regression": {
+          "mode": "normal",
+          "covers": "The supporting package is incomplete, modified, duplicated or points outside the approved canonical tree.",
+          "testLocation": "scripts/tests/skill-package-integrity.test.mjs",
+          "checks": "Assert all eight regular members and seven unique manifest records match exact byte lengths and digests, and reject missing, altered, duplicate, unsafe-path and symlink fixtures."
+        },
+        "regressionAssessment": {
+          "classification": "material",
+          "rationale": "The current publication guard classifies the newly introduced instructional provenance resources as requiring material coverage assessment. Use a conservative normal data-integrity declaration for package consistency without changing the approved content, scope or instruction adoption.",
+          "scopeReview": "Reviewed all eight categories and actual package member effects. Current SKILL definitions, active instructions and runtime behavior remain unchanged; the explicitly covered boundary is consistency and path safety of newly delivered instructional provenance.",
+          "coverageReview": "The owning skill-package-integrity suite is explicitly registered in test-fast and will exercise canonical completeness plus disposable corrupted, unsafe and symlink fixtures at the filesystem package boundary.",
+          "risks": [
+            {
+              "id": "package-integrity",
+              "category": "data-integrity",
+              "change": "New package provenance and its supplied manifest must stay complete and mutually consistent without escaping the approved canonical directory.",
+              "layer": "filesystem package manifest and canonical resource boundary"
+            }
+          ],
+          "coverage": [
+            {
+              "risk": "package-integrity",
+              "scenario": "The supporting package is incomplete, modified, duplicated or points outside the approved canonical tree.",
+              "testLocation": "scripts/tests/skill-package-integrity.test.mjs",
+              "assertion": "Assert all eight regular members and seven unique manifest records match exact byte lengths and digests, and reject missing, altered, duplicate, unsafe-path and symlink fixtures.",
+              "layer": "filesystem package manifest and canonical resource boundary"
+            }
+          ]
+        }
+      },
+      "planTemplate": "unified-v4",
+      "events": [
+        {
+          "kind": "reserved",
+          "at": "2026-10-20T01:43:39.258Z"
+        },
+        {
+          "kind": "provisioned",
+          "at": "2026-10-20T01:43:39.286Z"
+        },
+        {
+          "kind": "validation-observed",
+          "runId": "e9d4382c-8a4a-416c-86ce-9ab663a60808",
+          "state": "PASS",
+          "at": "2026-10-20T01:48:42.575Z"
+        }
+      ],
+      "runs": [
+        {
+          "runId": "e9d4382c-8a4a-416c-86ce-9ab663a60808",
+          "reportPath": ".local/failure-gate/runs/FGU-836b3c19-83da-4639-95fb-75420a1f8973/e9d4382c-8a4a-416c-86ce-9ab663a60808/report.json",
+          "kind": "tier-run",
+          "at": "2026-10-20T01:47:10.813Z"
+        }
+      ],
+      "preexistingNotes": [],
+      "planHash": "a910de40bbc251acd9f3c5350e7d58d92dba55790e127dc8e7fa221c2b099c2c",
+      "assessment": {
+        "state": "PASS",
+        "runId": "e9d4382c-8a4a-416c-86ce-9ab663a60808",
+        "at": "2026-10-20T01:48:42.575Z"
+      }
+    }
+  }
+}

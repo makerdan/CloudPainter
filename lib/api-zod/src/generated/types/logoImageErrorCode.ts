@@ -19,4 +19,9 @@ export const LogoImageErrorCode = {
   PROVIDER_FAILED: 'PROVIDER_FAILED',
   INVALID_IMAGE: 'INVALID_IMAGE',
   TIMEOUT: 'TIMEOUT',
+  unauthorized: 'unauthorized',
+  authorization_denied: 'authorization_denied',
+  quota_exhausted: 'quota_exhausted',
+  rate_limited: 'rate_limited',
+  budget_unavailable: 'budget_unavailable',
 } as const;

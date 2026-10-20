@@ -1,3 +1,5 @@
+import { getStroke } from 'perfect-freehand';
+
 export type Point = { x: number; y: number };
 export type BrushStyle = 'round' | 'chisel' | 'soft' | 'dry';
 export type DrawingTool = 'brush' | 'pencil' | 'pen' | 'eraser';
@@ -9,8 +11,94 @@ export type Stroke = {
   // Absent on legacy projects. Version pins the recipe for future renderer changes.
   brush?: { style: BrushStyle; version: 1; seed: number };
   // Legacy "pen" records have no instrument: keep their old brush recipe.
-  instrument?: { kind: 'pencil' | 'pen'; version: 1; seed: number };
+  instrument?:
+    | { kind: 'pencil' | 'pen'; version: 1; seed: number }
+    | { kind: 'pen'; version: 2; seed: number };
+  // Version 1 is normalized pressure aligned one-to-one with points.
+  // Sensitivity is stored per stroke so later control changes never alter saved marks.
+  pressure?: { version: 1; samples: number[]; sensitivity?: number };
 };
+
+const MAX_STROKE_POINTS = 50_000;
+const MAX_STROKE_SIZE = 10_000;
+const MAX_STROKE_COORDINATE = 1_000_000;
+
+export function isSafeDrawingColor(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 128
+    && /^(#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})|[a-z]+|rgba?\([^()]{1,96}\)|hsla?\([^()]{1,96}\))$/i.test(value);
+}
+
+export function normalizeStroke(value: unknown): Stroke | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  const points = candidate.points;
+  if (!Array.isArray(points) || points.length === 0 || points.length > MAX_STROKE_POINTS) return null;
+  if (!isSafeDrawingColor(candidate.color)
+    || typeof candidate.size !== 'number'
+    || !Number.isFinite(candidate.size)
+    || candidate.size <= 0
+    || candidate.size > MAX_STROKE_SIZE
+    || !['brush', 'pencil', 'pen', 'eraser'].includes(String(candidate.tool))) return null;
+
+  const normalizedPoints: Point[] = [];
+  for (const point of points) {
+    if (!point || typeof point !== 'object' || Array.isArray(point)) return null;
+    const { x, y } = point as Record<string, unknown>;
+    if (typeof x !== 'number' || !Number.isFinite(x) || Math.abs(x) > MAX_STROKE_COORDINATE
+      || typeof y !== 'number' || !Number.isFinite(y) || Math.abs(y) > MAX_STROKE_COORDINATE) return null;
+    normalizedPoints.push({ x, y });
+  }
+
+  const stroke: Stroke = {
+    points: normalizedPoints,
+    color: candidate.color,
+    size: candidate.size,
+    tool: candidate.tool as DrawingTool,
+  };
+  const brush = candidate.brush;
+  if (brush && typeof brush === 'object' && !Array.isArray(brush)) {
+    const metadata = brush as Record<string, unknown>;
+    if (['round', 'chisel', 'soft', 'dry'].includes(String(metadata.style))
+      && metadata.version === 1 && typeof metadata.seed === 'number' && Number.isFinite(metadata.seed)) {
+      stroke.brush = {
+        style: metadata.style as BrushStyle,
+        version: 1,
+        seed: metadata.seed,
+      };
+    }
+  }
+  const instrument = candidate.instrument;
+  if (instrument && typeof instrument === 'object' && !Array.isArray(instrument)) {
+    const metadata = instrument as Record<string, unknown>;
+    const validInstrument = (metadata.kind === 'pencil' || metadata.kind === 'pen')
+      && (metadata.version === 1 || (metadata.kind === 'pen' && metadata.version === 2))
+      && typeof metadata.seed === 'number' && Number.isFinite(metadata.seed);
+    if (validInstrument) {
+      stroke.instrument = {
+        kind: metadata.kind,
+        version: metadata.version,
+        seed: metadata.seed,
+      } as Stroke['instrument'];
+    }
+  }
+  const pressure = candidate.pressure;
+  if (pressure && typeof pressure === 'object' && !Array.isArray(pressure)) {
+    const metadata = pressure as Record<string, unknown>;
+    if (metadata.version === 1 && Array.isArray(metadata.samples)
+      && metadata.samples.length === normalizedPoints.length
+      && metadata.samples.every(sample => typeof sample === 'number' && Number.isFinite(sample))) {
+      const sensitivity = typeof metadata.sensitivity === 'number' && Number.isFinite(metadata.sensitivity)
+        ? Math.max(0, Math.min(100, metadata.sensitivity))
+        : undefined;
+      stroke.pressure = {
+        version: 1,
+        samples: metadata.samples,
+        ...(sensitivity === undefined ? {} : { sensitivity }),
+      };
+    }
+  }
+  return stroke;
+}
 
 export const BRUSH_STYLES: { style: BrushStyle; label: string; description: string }[] = [
   { style: 'round', label: 'Solid round', description: 'Smooth, opaque strokes with rounded ends.' },
@@ -40,6 +128,41 @@ function roundPath(ctx: CanvasRenderingContext2D, stroke: Stroke, width: number,
   }
 }
 
+function pressurePath(ctx: CanvasRenderingContext2D, stroke: Stroke, width: number, height: number) {
+  const pressure = stroke.pressure?.version === 1 && Array.isArray(stroke.pressure.samples)
+    && stroke.pressure.samples.length === stroke.points.length
+    ? stroke.pressure
+    : null;
+  const samples = pressure
+    ? pressure.samples
+    : stroke.points.map(() => 0.5);
+  const requestedSensitivity = pressure?.sensitivity;
+  const sensitivity = Number.isFinite(requestedSensitivity)
+    ? Math.max(0, Math.min(100, requestedSensitivity!))
+    : 50;
+  const pressureGain = sensitivity / 50;
+  const outline = getStroke(stroke.points.map((point, index) => [
+    point.x * width,
+    point.y * height,
+    Math.max(0, Math.min(1, 0.5 + (
+      (Number.isFinite(samples[index]) ? Math.max(0, Math.min(1, samples[index])) : 0.5) - 0.5
+    ) * pressureGain)),
+  ] as [number, number, number]), {
+    size: stroke.size,
+    thinning: 0.7,
+    smoothing: 0.5,
+    streamline: 0.5,
+    simulatePressure: false,
+    last: true,
+  });
+  if (!outline.length) return;
+  ctx.beginPath();
+  ctx.moveTo(outline[0][0], outline[0][1]);
+  for (let index = 1; index < outline.length; index++) ctx.lineTo(outline[index][0], outline[index][1]);
+  ctx.closePath();
+  ctx.fill();
+}
+
 function seededRandom(seed: number) {
   let state = seed >>> 0;
   return () => {
@@ -49,7 +172,14 @@ function seededRandom(seed: number) {
 }
 
 export function renderStroke(ctx: CanvasRenderingContext2D, stroke: Stroke, width: number, height: number) {
-  if (!stroke.points.length) return;
+  if (!stroke || !Array.isArray(stroke.points) || stroke.points.length === 0
+    || stroke.points.length > MAX_STROKE_POINTS
+    || !Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0
+    || !Number.isFinite(stroke.size) || stroke.size <= 0 || stroke.size > MAX_STROKE_SIZE
+    || !isSafeDrawingColor(stroke.color)
+    || !['brush', 'pencil', 'pen', 'eraser'].includes(stroke.tool)) return;
+  if (stroke.points.some(point => !point || !Number.isFinite(point.x) || !Number.isFinite(point.y)
+    || Math.abs(point.x) > MAX_STROKE_COORDINATE || Math.abs(point.y) > MAX_STROKE_COORDINATE)) return;
   ctx.save();
   try {
     ctx.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over';
@@ -74,6 +204,8 @@ export function renderStroke(ctx: CanvasRenderingContext2D, stroke: Stroke, widt
         ctx.lineDashOffset = random() * stroke.size * 3;
         roundPath(ctx, stroke, width, height, spread, (random() - 0.5) * stroke.size * 0.2);
       }
+    } else if (stroke.tool === 'pen' && stroke.instrument?.kind === 'pen' && stroke.instrument.version === 2) {
+      pressurePath(ctx, stroke, width, height);
     } else if (stroke.tool !== 'eraser' && stroke.instrument?.kind === 'pen') {
       // Uniform ink with sharp ends/corners, distinct from a rounded brush tip.
       ctx.lineCap = 'butt';

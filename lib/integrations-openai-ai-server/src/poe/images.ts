@@ -1,5 +1,5 @@
 import { POE_IMAGE_MODELS, isPoeImageModel } from "./models";
-import { assertPoeMediaUrl, downloadPoeImage, validatePoeMedia, type PoeMedia } from "./media";
+import { assertPoeMediaUrl, decodePoeMedia, downloadPoeImage, type PoeMedia } from "./media";
 
 export { POE_IMAGE_MODELS, isPoeImageModel } from "./models";
 export { assertPoeMediaUrl, downloadPoeImage, MAX_IMAGE_BYTES, validatePoeMedia, type PoeMedia } from "./media";
@@ -115,7 +115,7 @@ export async function generatePoeImage(
     const url = imageUrlFromResponse(payload);
     const mediaSignal = AbortSignal.any([signal, AbortSignal.timeout(15_000)]);
     const downloaded = await dependencies.download(url, mediaSignal);
-    const image = validatePoeMedia(downloaded.bytes, downloaded.mime);
+    const image = await decodePoeMedia(downloaded.bytes, downloaded.mime, mediaSignal);
     return { b64_json: image.bytes.toString("base64"), mime: image.mime };
   } catch (error) {
     if (signal.aborted) throw new PoeImageError("upstream_timeout", "Poe generation was stopped or timed out. It was not retried.");

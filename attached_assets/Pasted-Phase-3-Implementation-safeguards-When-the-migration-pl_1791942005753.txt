@@ -1,0 +1,39 @@
+Phase 3: Implementation safeguards
+When the migration plan is approved:
+
+Update the app's canonical skill source or activation instructions without copying policy from noncanonical variants.
+Make Unified the sole active policy for new task plans and validation runs.
+Ensure every new task is provisioned safely and bound to exactly one registered tier: test-fast, test-standard, test-standard-plus, or test-heavy.
+Ensure wrong-tier runs fail closed and any tier change follows a documented amendment process.
+Keep compatible baseline records and make their ignored-versus-owned status explicit. Do not blanket-delete, reset, or reclassify the baseline.
+Keep existing task IDs, bindings, and history intact. Use new IDs for newly planned Unified work.
+Update dependent docs, templates, workflows, hooks, and wrappers so they agree on which policy applies.
+Do not claim a safeguard is active until its actual enforcement path has been verified.
+After approving the plan, give the Agent this exact prompt
+Implement the most recent explicitly approved Failure Gate Unified migration
+plan for this application. Locate the approved plan and task ID yourself from
+this conversation and the project records. If approval or the intended plan is
+ambiguous, ask only which specific plan I approve; do not guess authorization.
+Confirm the Phase 0 backup/recovery record is still appropriate before editing.
+Use the approved canonical Unified skill under .agents as the sole target
+policy. Do not import rules from older or copied skill definitions.
+Carry out the approved plan end to end, including bounded prerequisites,
+documentation, task provisioning, tier enforcement, baseline handling, and
+local verification. Make Unified authoritative for new tasks while preserving
+the original contracts of in-flight tasks. Do not broaden scope, reuse or
+retroactively rebind task IDs, delete historical evidence, or reset or
+blanket-edit the baseline catalog.
+Bind each new task ID to exactly one registered tier: test-fast, test-standard,
+test-standard-plus, or test-heavy. Enforce wrong-tier rejection before tests
+run and documented plan-and-binding amendments for authorized tier changes.
+Use bounded test execution, process cleanup, and single-flight controls.
+Perform only approved actions. Stop for specific approval before any
+destructive, irreversible, externally visible, or remote action not already
+authorized. If tools, permissions, source material, or enforcement machinery
+are missing, continue independent safe work and report the exact blocker.
+Never simulate a safeguard or ask me for original receipts.
+Verify changes as you go. Save a discoverable migration/cutover record through
+the project's supported records without bulk-committing .local/tasks.
+Report changed files, observed check results, preserved legacy state, remaining
+conflicts, and PASS, FAIL, BLOCKED, or INCOMPLETE. Do not call a skipped,
+interrupted, or unobserved check a pass.

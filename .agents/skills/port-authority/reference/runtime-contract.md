@@ -1,820 +1,208 @@
-# Hardened runtime contract and acceptance
+# Core runtime contract
 
-These scripts operate on Linux `/proc` and a local filesystem with exclusive
-creation, rename, and directory sync semantics. Validate those capabilities.
-Do not claim distributed, cross-workspace, or hostile-code exclusion.
-Require Node 20+ and verified OS capabilities in the host manifest.
+Read for default installation, adaptation and acceptance. This is a deliberately
+reduced contract, not a partial claim that the optional advanced features work.
+Equivalent audited host implementations may satisfy these outcomes; the shipped
+templates require Node 20+, Linux `/proc` and a compatible local filesystem.
+Verify actual capabilities before choosing them. Neither instructions nor
+environment variables are authorization.
 
-## Expected outcomes versus task completion
+## Retained requirements
 
-Before authoring or executing a check, bind its declared stage, expected/allowed
-outcome, required evidence and task-acceptance mapping to the authorized plan.
-For each result retain the raw code/state, structured output, assertions,
-observations and separate criterion assessment. A status label or exit value
-alone neither proves nor defeats completion. Do not reinterpret expectations
-after an unexpected failure; changed acceptance scope requires actual approval.
-
-An expected `BLOCKED`, `BLOCKING`, negative finding or non-zero result can
-fulfill a task whose criteria permit it, with complete evidence and no other
-unmet requirement. Correct rejection is not a repair gap. This includes:
-
-| Declared check | Expected success evidence | What remains unproved |
-|---|---|---|
-| Invalid/prohibited cleanup | expected exit 2/state plus no signals or unsafe side effects | free ports or permission to reclaim |
-| Protected busy/dry-run | expected exit 3/state, unchanged protected targets, accurate inventory | successful cleanup or port reservation |
-| Unknown discovery/checked-action authority | expected exit 4/state, fail-closed behavior and required retained evidence; environment-admission rejection instead follows exit 2 | genuine authority, operational readiness or safe replacement |
-| Child failure propagation | expected child exit 7, exact propagation and healthy verified release | the child's workload passed |
-| Deadline/cancellation fixture | expected bounded non-zero result, actual owned-work termination and required exclusion disposition | accepting a real over-budget run |
-| API rejection fixture | actual probe rejects HTML-200, malformed/unhealthy JSON or simulated outage as specified | the genuine backend is healthy |
-| Audit/capability discovery | evidenced absent/conflicting/blocked finding and concrete dependency route | resolving the discovered blocker |
-
-An expected inner rejection does not make the outer regression suite fail: its
-assertions must succeed. Conversely an unexpected outer non-zero/failed assertion
-cannot be accepted merely because the suite contains negative tests. Production,
-reclaim, approval, retention, coverage, source integrity and finite-budget gates
-remain unchanged. Never rewrite raw UNKNOWN/non-success to FREE/PASS.
-
-A file-only staging or isolated-regression task can complete its declared scope;
-its output cannot satisfy a later host-activation task. A finding task may finish
-while its discovered dependency keeps that later task BLOCKED. Missing evidence
-for the current task's own required scope is still a genuine blocker.
-
-## Paired installation planning
-
-When requested, author an ordered durable backlog of full implementation and
-independent verification payloads outside `.local/`. Bind actual project,
-canonical package/specification digests, scope, stages and approval boundaries
-before creating native tasks. This package supplies instructions, not task APIs,
-an installed task series, scheduling or background advancement.
-
-Use canonical paired-task-orchestration and Router contracts when present and
-applicable; do not use mirrors or install companion skills merely to proceed.
-If a required target contract is unavailable, retain that handoff blocker.
-Without an orchestration companion, retain these semantic rules:
-
-1. Pin every piece's full requirements, expected outcomes, gates and evidence;
-   separate inert source, isolated fixtures and actual runtime activation.
-2. Prepare only the earliest eligible implementation/verifier pair as drafts
-   within actual user authorization. Preserve unrelated tasks and later backlog.
-3. Reconcile existing tasks and uncertain writes before creating. Read the
-   finalized complete primary back before linking its verifier; read the complete
-   verifier back with real dependency, scope, expected outcomes and identities.
-4. Require delivered primary inputs in the verifier's actual environment;
-   dependency/status labels alone do not prove delivery or acceptance.
-5. Verifiers inspect independently, list genuine gaps first, and repair only
-   explicitly approved piece scope. Do not repair expected negative behavior to
-   zero. Rebind changed snapshots, renew affected authorized checks and obtain
-   independent post-repair acceptance; never self-certify unavailable independence.
-6. Accept each criterion against its expected outcome/evidence. Only genuinely
-   unmet requirements block its piece; completed findings retain later blockers.
-   Source/fixture acceptance cannot satisfy activation prerequisites.
-7. Advance only after current-stage acceptance and delivered outputs, under
-   conditional successor-drafting authorization. Leave approval/execution to the
-   user. Missing authority never authorizes a workaround, merge or deployment.
-
-Before materialization, reconcile mandatory definition-confirmation and separate
-resource/application verification obligations. If they require a third task,
-surface the narrow batching decision; never suppress it for a two-card limit.
-Default progression is invocation-driven. Hooks/polling require their own actual
-capabilities, authorization and live verification; no auto-start or fictional IDs.
-
-## Validation registration acceptance
-
-Use the project's canonical validation contract and authorized task tier.
-If an available canonical `validation-tiers` skill defines that contract,
-read it. Its absence must not create a dependency on another installed
-skill: discover executable commands and document the choice instead.
-Do not silently change an assigned tier or invent a successful registration.
-
-When the host uses the four-tier registration convention, retain these
-four names, each with an executable backing command:
-
-| Command | Use when | Minimum acceptance |
-|---|---|---|
-| `test-fast` | copy/style or UI changes with no logic impact | typecheck and lint targets exist and run |
-| `test-standard` | most features and fixes touching existing behavior | fast targets plus unit and relevant documentation/data checks |
-| `test-standard-plus` | multi-package static/unit coverage without browser suites | complete non-Playwright target is executable |
-| `test-heavy` | schema, auth/security, new routes needing e2e, broad refactors | serialized full applicable target, including browser/schema checks where present |
-
-Do not assign fast solely because a change adds a component: classify its
-behavior and risk. Do not default every task to heavy.
-
-Where platform registration is supported, compare the canonical manifest,
-platform registrations, and package commands independently. A name without
-an executable backing command fails registration; never use placeholders
-or silently substitute a tier. If that capability or convention is absent,
-record it as not applicable and use existing executable validation commands,
-not fictional platform APIs. Missing optional checks must be explicit.
-
-Record every entry point's authorized route, enforced queue/execution/cleanup
-and cumulative budgets, Node test/hook limits, and serialization coverage.
-
-## Clean-split ownership and activation
-
-| Owner | Responsibility | Not a substitute for |
-|---|---|---|
-| Trusted host/platform | independent runtime attestation and protected capability transport | domain/environment guesses or an agent-written audit |
-| Failure Gate | human approval, exact task/approved-plan/run scope, checked claim, expiry/revocation, task single-flight, evidence acceptance | local manifests or Port Authority resource leases |
-| Port Authority | inventory, ownership preflight, safe target signaling, termination/port checks, actual outcome submission | attestation issuance, approval issuance, coverage waivers |
-
-Discover actual canonical sources, executable checked routes, trust boundaries,
-and deployed activation before dependent wiring. This bundle contains NO real approval
-registry, trusted platform attester, credential, public key, or host transport.
-The code-owned `scripts/host-capabilities.mjs` intentionally throws unavailable.
-It is an integration boundary, not a usable authority. Adapt it only against
-verified independent sources under applicable approval; never select verifier
-code by environment variable, dynamic path, caller command, or editable envelope.
-Never ship the test-only adapter as a working host integration.
-
-A draft Failure Gate update is not activation. If the requisite checked reclaim
-capability is absent, live reclaim is BLOCKED even if Failure Gate does not yet
-govern general project validation. Do not auto-install another skill. Prevention,
-unmarked read-only inventory, and ordinary local lease supervision may remain
-usable where their own applicable policy permits them. When Failure Gate does
-govern validation, retain its existing checked execution and evidence requirements.
-
-## Staged installation versus activation
-
-These are reporting/acceptance states, not new authorization tokens or platform
-APIs. Record each feature/caller separately; a verified lease or inventory does
-not imply live reclaim is available.
-
-| State | Evidence required | What it does not permit or prove |
-|---|---|---|
-| STAGED | applicable staging approval, verified canonical files/frontmatter/references, inert placement | overwriting active scripts, wiring callers, execution permission, host acceptance or completion beyond a declared file-only staging task |
-| NON_RECLAIM_VERIFIED | named controls/callers passed actual authorized admission, bounded execution and host-specific acceptance | development exception, reclaim, unrelated callers, missing required-tier evidence |
-| LIVE_RECLAIM_ENABLED | real independent attestation, exact checked reclaim claim/rechecks, outcome acknowledgement and actual scoped caller acceptance | blanket future approval, production bypass, unrelated scope or automatic validation PASS |
-
-### Staging gate
-
-Read the actual current approved task and active Failure Gate policy first.
-This skill allows partial progress only within their authorization. If that task
-explicitly requires authority before any edits or tests, retain its gate and
-obtain an authorized staged-task revision; never treat this skill update or a
-draft replacement plan as approval to bypass it.
-
-With applicable permission, inspect/copy canonical skill sources and stage
-inactive runtime templates without live wiring. Use a separate inactive location
-if a same-path copy would replace an active script. Do not add startup hooks,
-change package/workflow commands, restart services, delete locks or signal existing
-listeners. Observe current revisions/running work and refresh stale task bindings.
-Keep all sources/reports outside `.local`; temporary fixture state is distinct.
-
-Report isolated checks independently as PASSED, FAILED, BLOCKED or NOT_RUN.
-Assess expected rejection fixtures by their assertions, not inner exit zero.
-An unavailable authorized test route may leave files STAGED with checks BLOCKED;
-it cannot become a suite pass or operational acceptance. Failed/missing source
-integrity cannot satisfy STAGED. Run the bounded bundle suite twice when its
-separate scope/permission permits it, before any dependent operational activation.
-The matrix remains mandatory for adapted implementations; blocked host assertions
-stay blocked, not “not applicable” merely because the authority is missing.
-
-Missing attestation/reclaim capability does not itself prohibit inert staging,
-permitted read-only audits or explicitly authorized isolated fixture checks.
-Fixtures may copy canonical runtime modules and simulate authority only inside
-private test directories. This is not a genuine host-development exception,
-approval source, checked task run, required-tier evidence or activation proof.
-Do not install a fixture adapter in a genuine runtime or strip real production
-flags to make host checks pass. Bound every permitted test with the same timeout
-and termination requirements; never bypass a missing Failure Gate capability by
-calling a package script directly or relabeling host acceptance as a fixture.
-
-### Non-reclaim activation gate
-
-Discover whether Failure Gate actually governs this project's validation.
-If active, its verified checked execution/evidence route remains mandatory for
-required tiers; diagnostics retain their separately authorized bounded route.
-If inactive, use the verified existing host policy and finite runner rather than
-demand a fictitious Failure Gate API. Record policy status/evidence; unknown
-applicability cannot be treated as inactive or independently approved.
-
-Named prevention, permitted read-only inventory, or ordinary local lease
-supervision may be activated only after their actual runtime admission,
-authorization, finite budgets, conflict coverage and applicable caller checks
-pass. A production-marked context requiring the attested development exception
-still blocks that control without real attestation; staging does not exempt it.
-A non-reclaim control must not invoke unavailable cleanup implicitly through
-pre/post scripts, nested aliases or startup hooks. Inspect transitive callers.
-Do not silently remove an existing safety dependency to make activation pass.
-
-Use Phase 9's two consecutive authorized real host runs for these controls with
-current-snapshot evidence, unchanged applicable coverage and no manual cleanup.
-Check relevant health, raw failure propagation and lease release. Forced reclaim
-is tested only when that capability is authorized and genuinely enabled; a
-blocked reclaim feature is neither a prerequisite for unrelated staging nor an
-excuse to accept a dependent caller. State the exact verified/blocked controls.
-
-### Project-specific implementation and acceptance
-
-When the user authorizes project implementation/acceptance rather than only
-staging, use this sequence within the actual approved scope. Updating this skill
-does not authorize changing a project. Source/archive parity proves integrity,
-not trusted authorization integration, installed lock wiring or API health.
-Do not finish a project implementation task at file placement when approved
-integration and acceptance remain actionable.
-
-1. Audit the current project: canonical authorization/Failure Gate sources and
-   policy status; actual host runtime configuration and trust boundaries;
-   existing cleanup/locks; package aliases, pre/post hooks, tier/diagnostic
-   runners, workflows, nested callers; shared ports, generated outputs and DB
-   state; backend health contract, browser routing and existing test harness.
-   Treat reported findings as leads and verify current behavior read-only.
-   Do not assume a Studio frontend, framework, provider, route or package manager.
-2. Plan the permitted implementation with a Regression Guard, explicit validation
-   and per-control acceptance criteria, including expected negative/non-zero
-   outcomes and their evidence. Distinguish inert staging, non-reclaim
-   controls and live reclaim. Preserve approved task/plan/run bindings, coverage,
-   production guards, budgets and retained leases. Do not reinterpret a stricter
-   task or draft plan as approval. Obtain exact disruption authorization before
-   signaling active services, changing live callers or performing a disruptive
-   cutover. Do not change production without its separate explicit authorization.
-3. Implement actual independently trusted provider integration where in scope.
-   Adapt the code-owned host boundary to the verified platform attestation and
-   checked reclaim/claim/recheck/outcome routes, reusing genuine existing
-   protected infrastructure. A local manifest, boolean, mock or invented API is
-   not a trusted authorization integration. Do not install the fixture adapter
-   or weaken guards. If a capability is absent, identify the exact authoritative
-   provider/route/permission dependency and keep dependent cleanup BLOCKED.
-   Continue only independently authorized work; transitive cleanup dependencies
-   remain blockers. Never claim interface documentation implemented a provider.
-4. Adopt the audited existing lock or adapt the canonical template only where
-   actual conflicts require serialization. Install the project implementation
-   and wire actual conflicting callers under approved cutover; a staged lock
-   file is not installed lock wiring. Map every conflicting alias, hook, nested
-   runner and workflow to the same canonical lock identity or verified common
-   acquisition order. `global` is not hierarchical, and a composite lock does
-   not conflict with constituent names. Check finite queue/execution/cleanup
-   limits, admission and raw failure propagation. Non-conflicting callers need
-   no invented lock but still need finite transitive supervision.
-5. Repair the actual health probe under the API health acceptance below.
-   For browser callers, including a Studio probe when present, test the browser's
-   real routed request rather than just a direct backend curl or a fixture-only
-   helper. Use existing project infrastructure; do not add an unnecessary API.
-6. Execute applicable authorized acceptance twice consecutively on current
-   inputs without manual port/process/lock cleanup between runs. Retain real
-   route, scope, limits, revision, raw outcomes and assessment evidence. Active
-   Failure Gate requires its checked routes; verified inactivity uses existing
-   host policy; unknown applicability blocks the affected decision. Isolated
-   bundle tests cannot replace these real project runs.
-   Expected rejection/timeout cases satisfy only their declared assertions;
-   unexpected failures and missing applicable host proof remain unresolved.
-
-For live reclaim being enabled, acceptance must prove authorization denials
-cannot signal and exact approved operations use genuine providers and persist
-acknowledged outcomes. For applicable serialization, prove wired conflicting
-callers cannot overlap. An uncovered/unwrapped conflicting alias or alternate
-lock path fails wiring acceptance. Test positive/skip/rejection
-paths applicable to that project; do not trigger live reclaim merely to prove
-the template is installed. Live tests require the separate exact authorization.
-
-Report named controls/callers as STAGED, NON_RECLAIM_VERIFIED or
-LIVE_RECLAIM_ENABLED only with their existing required evidence. Record failed,
-blocked and not-run checks separately, with exact missing dependencies and
-unchanged caller inventory. Source parity is not operational readiness. Do not
-close the project task as validation passed with incomplete applicable proof.
-
-### API health acceptance
-
-For a backend/API project, discover its actual health endpoint and code-owned
-response contract; `/api/healthz` is an example, not a required new route.
-Require the expected successful HTTP status, JSON media type (`application/json`
-or a documented JSON-compatible `+json` type), successful JSON parsing and the
-exact required fields/types/values indicating healthy service. Check service
-identity/version when the existing contract supplies it. Do not invent universal
-`ok:true` or `status:"ok"` fields or assume JSON alone proves health.
-
-Reject HTML with HTTP 200, SPA/login fallback, missing or incorrect content type,
-malformed JSON, unexpected redirects, unhealthy values and wrong-shape/wrong-service
-responses. Use the actual proxy/base URL/path and applicable request method/
-authentication. Never log credentials or sensitive diagnostic bodies. A non-JSON
-legacy probe cannot satisfy this JSON API acceptance: use an existing verified
-JSON endpoint or perform a separately approved compatible endpoint/probe change.
-Record a blocker if that contract change is outside the approved scope.
-Static-only projects need no invented backend; record that applicability rather
-than pretending a frontend document is API health.
-
-Require automated positive and negative regressions against the actual probe.
-Include valid healthy JSON; HTML with HTTP 200 through the same frontend routing;
-missing/wrong media type; malformed JSON; wrong fields/types or service identity;
-unhealthy JSON; unexpected redirects; HTTP failure; and network failure/timeout.
-Discover approved finite request/cumulative limits and verify abort/cancellation;
-a hanging health request cannot pass or outlive its authorized boundary.
-Exercise browser/proxy behavior where applicable, using isolated supported
-route/browser fixtures for outage/negative cases. Do not disrupt production or
-stop a live service just to generate a negative response. Fixture passes are
-regression evidence, not proof that a genuine backend is healthy.
-
-### Live reclaim activation gate
-
-All existing independent host attestation, exact Failure Gate task/plan/run scope,
-atomic claim/replay/conflict protection, per-signal authorization, production,
-ownership and evidence rules remain unchanged. Missing provider/checked route
-keeps reclaim and the development exception BLOCKED. Do not synthesize authority,
-weaken guards, or claim operational installation from fixture passes.
-Actual live checks require explicit approval for the exact disruption and targets,
-including applicable grace/escalation and outcome storage. Do not signal a
-current service merely to finish an installation checklist.
-
-### Cutover, failures and reporting
-
-Keep existing work and live caller wiring untouched until a separately authorized
-cutover. If legacy cleanup is fail-open or leaks processes, record it as an
-unresolved risk; staged templates do not repair it, authorize another sweep or
-establish that retained wiring is safe. Propose scoped remediation under the real
-approval flow; do not disable/restart services or add another bypass unilaterally.
-Independent reported findings (for example wrong health-probe routing) remain
-separate defects, not evidence of successful Port Authority adoption.
-
-After failed activation, prevent the new control from being accepted/enabled.
-Restore only the authorized prior wiring when safe and applicable; if that wiring
-is itself unsafe or rollback is uncertain, retain the blocker and seek approved
-remediation rather than calling it a working baseline. Record per-control state,
-source hashes/current revision, actual checks and route/budget/evidence references,
-unchanged callers, legacy risks and exact missing capabilities. Do not describe
-staging as “operational installation complete” or close an incompletely validated
-host task. A task expressly limited to staging may complete that limited scope.
-
-The module exposes these bounded, non-blocking, code-owned interfaces:
-
-- `attestRuntime({binding, developmentRecord, deadlineAt, abortSignal})`, owned
-  by the trusted host, returns `{protocolVersion:1, attestationId,
-  environment:"development", projectRoot, bootId, expiresAt}`. Verify the real
-  source, identity, applicability, current revocation and freshness; the envelope
-  is only a locator. Bind workspace identity/domain/launcher to the host source.
-- `beginReclaim({operationId, operation:"runtime.process-reclaim", manifest,
-  binding, requestedScope, scopeDigest, attestation, deadlineAt, abortSignal})`,
-  owned by Failure Gate's checked route, independently resolves approval and
-  verifies task, approved plan, run, project/workspace, boot/attestation, exact
-  target/port scope, own-tree permission, SIGTERM/SIGKILL escalation and budgets.
-  Atomically claim one operation; reject replay/concurrent conflicting claims.
-- Its returned handle must provide `{protocolVersion:1, authorizationId,
-  operationId, scopeDigest, attestationId, expiresAt, runBinding,
-  checkBeforeSignal, recordOutcome}`. Expiry cannot exceed manifest expiry.
-  `checkBeforeSignal` receives the same binding/scope/operation and current
-  attestation plus signal. Recheck live authorization/revocation and durably
-  journal intent before returning exactly `true`; escalation belongs to the
-  same claim, not a second use of the grant.
-- `recordOutcome({operationId, rawOutcome, signalOutcomes, scopeDigest, binding,
-  deadlineAt, abortSignal})` durably records actual outcomes through the
-  authoritative Failure Gate evidence route and acknowledges with exactly
-  `true`. Acknowledge storage, not validation acceptance. Preserve failures,
-  partial signals and uncertain operations; never fabricate a pass.
-  Capture evidence for an already claimed operation even after grant
-  expiry/revocation; this grants no permission for additional signals.
-
-`binding` carries canonical project root, current kernel boot and observed
-environment indicators. The provider independently resolves trusted workspace
-identity: these indicators and filesystem paths cannot attest themselves.
-`requestedScope` is a fixed-order object containing sorted/deduplicated `ports`,
-PID-sorted `processes` of `{pid,startTime}`, `allowOwnTree`, `signals` in
-`["SIGTERM","SIGKILL"]` order, `graceMs:3000`, `killVerificationMs:5000`.
-`scopeDigest` is SHA-256 of UTF-8 `JSON.stringify(requestedScope)`. Failure Gate
-must compare this to independently approved exact scope, not merely hash the
-caller-supplied object. Approval must include every escalation that may occur;
-providers requiring a different policy must block or use an approved adaptation.
-
-Each adapter call has a two-second caller deadline and an abort signal. Real
-adapters must honor cancellation and must not block the JS event loop. A timed-out
-claim/write may have applied: journal a stable `operationId`, retain single-flight
-state, and reconcile via an authorized recovery/read route. Never blindly retry
-or launch a replacement. Unknown claims and uncertain/living workloads retain
-the authoritative exclusion; only verified outcome/recovery can resolve it.
-Local source code or a passing fixture cannot establish deployed capabilities.
-
-## Cleanup contract
-
-```sh
-node scripts/free-ports.mjs --dry-run --ownership-manifest /verified/scope.json 8080
-node scripts/free-ports.mjs --authorized-cleanup --ownership-manifest /verified/scope.json 8080
-```
-
-Without action mode, busy ports are inventoried but no signals are sent.
-Without a manifest, a busy port is protected. A free-port observation is not
-a reservation; coordinate startup/bind with the host allocator/lifecycle.
-Both applicable TCP tables must be readable. An absent IPv6 table is omitted
-only when the kernel module explicitly reports IPv6 disabled and the kernel
-protocol inventory has no TCPv6 support. Missing/denied discovery without that
-positive capability evidence remains UNKNOWN.
-
-Failure Gate's checked route produces an authorized manifest v2 using audited
-Port Authority discovery. The object itself remains untrusted input:
-
-```json
-{
-  "version": 2,
-  "bootId": "<actual /proc/sys/kernel/random/boot_id>",
-  "expiresAt": 1234567890000,
-  "ports": [8080],
-  "processes": [{"pid": 12345, "startTime": "<actual /proc stat field 22>"}],
-  "authorizationReference": "<locator for authoritative Failure Gate approval>",
-  "runBinding": {
-    "taskId": "<actual authorized task>",
-    "approvedPlanBinding": "<actual approved plan binding>",
-    "runId": "<actual checked run>"
-  },
-  "allowOwnTree": false
-}
-```
-
-Values above are illustrative, not ready-to-use identities or authorization.
-The host verifies the independent environment; Failure Gate verifies the actual
-decision and exact targets before atomically claiming the operation. The script
-also validates structure, run binding, expiry, scope, same UID, boot/incarnation,
-protected caller ancestry and descendants. Neither a local manifest nor
-`--authorized-cleanup` authenticates approval. Manifest v1 is no longer admitted
-for action; migrate via the actual checked route, never by merely adding fields.
-
-Include only approved stale listeners and their audited wrappers/descendants.
-No wrapper is inferred from names. Any unapproved live descendant, listener,
-changed incarnation, missing ownership, or expired manifest blocks the action.
-An own-tree target additionally requires manifest `allowOwnTree: true` and
-`--include-own-tree`, permitted only BETWEEN serialized steps. Ancestors of
-cleanup are never targets.
-
-`NODE_ENV=production` and `REPLIT_DEPLOYMENT=1` are unconditional blockers.
-`REPLIT_ENVIRONMENT=production` blocks unless the verified development exception
-below applies. A domain alone never overrides a production indicator.
-Disabled/recursive invocations return skipped/non-success. Exit/status semantics:
-
-| Exit | State | Meaning |
-|---|---|---|
-| 0 | FREE | complete socket discovery says no listener; after action, exact targets stopped |
-| 1 | CLEANUP_FAILED | owned workload/port did not reach the required state |
-| 2 | INVALID / PROHIBITED | bad input, hard production flag, or unverified production-marked context |
-| 3 | PROTECTED_BUSY / SKIPPED | no action authorization, protected target, or disabled/recursive |
-| 4 | UNKNOWN | discovery, attestation, authorization, evidence, identity or recovery uncertainty |
-
-Every action requires independent host attestation, including an unmarked
-environment, before Failure Gate's checked grant. Read-only free-port inventory
-is only an observation, not proof of host identity or permission to reclaim.
-Before each signal batch, re-attest and recheck the claimed grant. A changed
-attestation ID requires renewed authorization, not an implicit scope upgrade.
-Ownership/ancestor/descendant guards remain mandatory even after authorization.
-
-Record actual operation outcomes once, including denial/failure after a claim.
-After signals, known transient ENOENT/ESRCH or unmapped-listener snapshots may
-receive read-only rechecks within the existing finite termination budget, with
-observations logged and included in raw evidence. Permission/capability errors
-still block immediately. Require a complete known final snapshot before success
-or escalation; a persistent discovery gap remains UNKNOWN. This never retries
-claims, writes or signals, and does not change pre-action discovery/authorization.
-If evidence storage fails, return UNKNOWN/non-success and retain `rawOutcome`
-and operation identity; a raw cleanup success cannot stand in for recorded
-evidence or Failure Gate acceptance. Before a claim is established, record the
-local blocker without pretending authoritative evidence was stored.
-
-Target signaling rechecks Linux start time immediately before each numeric-PID
-signal. Node does not expose pidfd signaling here: this is cooperative identity
-checking, not atomic anti-PID-reuse protection under adversarial churn. Hosts
-requiring that stronger guarantee must provide pidfd/job-identity supervision
-and test it before acceptance. Never market the template as a security sandbox.
-
-## Verified development-workspace exception
-
-Some audited hosts may report `REPLIT_ENVIRONMENT=production` inside a Replit
-development workspace. Do not assume this universally or infer it merely from
-`REPLIT_DEV_DOMAIN`. BOTH `scripts/runtime-environment.mjs` and
-`scripts/host-capabilities.mjs` must be installed beside either consumer.
-
-Before enabling the exception, independently audit the execution context using
-current host/platform evidence: identify the actual development workspace,
-project root and managed launcher ancestry, inspect deployment configuration and
-actual deployment indicators, and confirm this launcher is not a deployment.
-Resolve the independently issued host attestation through the verified provider,
-not just a narrative audit. Record evidence under the currently active policy.
-A draft Failure Gate application task is not active governance.
-Remembered guidance or an existing script is not execution-context evidence.
-Never unset or spoof production markers to make the scripts run.
-
-The audited host launcher supplies `PORT_AUTHORITY_DEV_CONTEXT_FILE`, an absolute
-path to a regular same-UID file, with no symlink, hard link, or group/world-write
-permission. Prefer mode `0600`. Use private disposable runtime state, not a
-committed approval record. Its contents (all placeholders must be replaced):
-
-```json
-{
-  "version": 1,
-  "kind": "replit-development-workspace",
-  "bootId": "<actual current kernel boot id>",
-  "projectRoot": "<canonical realpath of the runtime working directory>",
-  "devDomain": "<exact current REPLIT_DEV_DOMAIN>",
-  "supervisor": {"pid": 12345, "startTime": "<actual live launcher start time>"},
-  "issuedAt": 1234567890000,
-  "expiresAt": 1234568490000,
-  "verificationReference": "<actual host audit reference>",
-  "attestationReference": "<actual independently issued host attestation ID>"
-}
-```
-
-The launcher must remain a live same-UID ancestor of each consumer. The record
-must match boot, real working directory and domain; issuance cannot be in the
-future, expiry must be in the future, and its total lifetime cannot exceed
-15 minutes. Audit/refresh evidence before launch and ensure it remains fresh
-through any queue wait or new cleanup signals. Relative/missing/malformed/stale
-records, unknown context, unsafe files, or unverified ancestry block admission.
-Do not generate this record just from environment variables or the example.
-
-The helper checks local binding THEN calls the code-owned host attestation
-provider. Structural validity alone never admits the exception. The real provider
-must independently verify platform identity and applicability. A local file,
-reference string and CLI environment cannot authenticate permission against a
-caller who can edit them. Missing/unavailable/revoked provider or invalid
-attestation blocks admission. Human reclaim approval belongs separately to
-Failure Gate. Neither hard blocker can be overridden even by a valid record.
-
-Both scripts log admitted exceptions. Cleanup rechecks admission before each
-signal batch; expiry before escalation prevents new signals and reports non-success
-with recovery required. Locking rechecks before queued child dispatch. Expiry
-after admission does not disable supervision, cancellation, owned-work termination
-or verified release of an already dispatched child. Never orphan admitted work
-merely because its admission record expired.
-
-Existing domain-only overrides require this approved migration; they are not
-automatically accepted as equivalent. Test the adapted implementation against
-both the valid exception and every rejected path before accepting host wiring.
-
-## Lease v2 contract
-
-### Conflict examples
-
-The template supports one resource per invocation, not a list:
-
-| Audited conflict | Example resource |
+| ID | Required outcome |
 |---|---|
-| commands regenerating the same outputs | `codegen` |
-| measured unit/e2e CPU contention | `validation-cpu` |
-| browser suites sharing service ports | `e2e-port` |
-| suites sharing database state | `test-db` |
-| independent lint/static checks | none, unless evidence shows a conflict |
+| C01 | Scope, genuine authority, current inputs and relevant host capabilities are established before affected writes/execution. |
+| C02 | Port inventory sends no signals; protected busy and unknown discovery never become FREE. |
+| C03 | Production guards, argument validation and disabled/recursive non-success remain enforced. |
+| C04 | Actual managed service ownership, configured bind/preview routing and health are verified for changed service lifecycles. |
+| C05 | Every participating conflicting caller shares one canonical local lease; independent callers are not unnecessarily serialized. |
+| C06 | Explicit finite safe queue/execution/termination limits and actual independent outer supervision cover authorized owned work. |
+| C07 | Exact owned incarnations, startup registration and descendant cleanup prevent false release/success; uncertain lifecycle retains exclusion. |
+| C08 | Raw exit/signal and deadline/cleanup outcomes remain distinct; late zero and missing evidence never fabricate success. |
+| C09 | Recovery requires compatible finalized healthy state and verified quiescence or a genuinely authorized recovery route; no age-only unlink. |
+| C10 | Existing validation authority/coverage/failure/completion policy remains unchanged; Port Authority creates none of those permissions. |
+| C11 | Actual app wiring, applicable positive/negative proofs and two consecutive authorized host runs establish activation; fixture proof alone does not. |
+| C12 | Stage, independent acceptance, current runtime readiness and administrative/native task state are reported separately. |
 
-These names are examples, not installed paths. Apply the common-identity/order
-rules below to every overlapping resource; priority does not change exclusion.
+## Inventory CLI
 
 ```sh
-VALIDATION_LOCK_TIMEOUT_MS=5000 VALIDATION_LOCK_MAX_HOLD_MS=60000 \
-  node scripts/validation-lock.mjs --resource test-db --priority 3 -- node test-command.mjs
+node scripts/free-ports.mjs [--dry-run] PORT...
 ```
 
-All conflicting callers must resolve the SAME canonical lock file. `global`
-does not exclude another resource name. For an operation needing database AND
-browser resources, either every affected caller adopts the same common lock,
-or every caller acquires all relevant resources in one globally consistent
-order. Publish and review the conflict map, including hooks and independent
-cooperating validation entry points. Uncoordinated CI/remote callers remain
-outside this local exclusion boundary.
+Decimal ports must be in 1..65535; invalid arguments fail. Default accepts no action,
+manifest or own-tree options. It uses TCP socket inodes and process fd/incarnation
+evidence. Both applicable socket tables must be readable; absence of IPv6 is safe
+only with positive disabled-capability evidence. Unknown holder mappings fail closed.
 
-The default path is disposable `.local/validation-lock-<resource>.lock`
-relative to the installed runtime script's project root. Overrides:
+| Exit/state | Interpretation |
+|---|---|
+| 0 / FREE | Complete current discovery found no listeners; not a reservation. |
+| 2 / INVALID or PROHIBITED | Invalid input or blocked production context; no cleanup. |
+| 3 / PROTECTED_BUSY or SKIPPED | Listener protected, or disabled/recursive invocation; no free-port claim. |
+| 4 / UNKNOWN | Ownership/discovery unavailable; no free-port claim. |
 
-- `VALIDATION_LOCK_FILE`: exact lock path; same name/different file is not shared.
-- `VALIDATION_LOCK_WAITERS_DIR`: disposable priority manifests.
-- `VALIDATION_LOCK_TIMEOUT_MS`: REQUIRED explicit queue-wait limit.
-- `VALIDATION_LOCK_MAX_HOLD_MS`: REQUIRED explicit owner's execution limit after
-  acquisition. Examples are illustrative, not authoritative host-approved limits.
-- `VALIDATION_LOCK_POLL_MS`: positive integer milliseconds, default 100.
-- `VALIDATION_LOCK_HEARTBEAT_MS`: default 1000.
-- `VALIDATION_LOCK_STALE_HEARTBEAT_MS`: default 10000, greater than heartbeat;
-  a health indicator, NEVER permission to steal a live lease.
-- `VALIDATION_LOCK_STOP_GRACE_MS`: SIGTERM grace, default 3000.
-- `VALIDATION_LOCK_STOP_KILL_MS`: bounded post-SIGKILL verification, default 5000.
-- `VALIDATION_LOCK_PRIORITY_GRACE_MS`: advisory priority grace, default 2000.
+Hard `NODE_ENV=production`, `REPLIT_DEPLOYMENT=1` and
+`REPLIT_ENVIRONMENT=production` deny core template admission, even with a domain or
+development record. Unmarked admission does not independently attest development.
+Never remove real flags to make execution pass.
 
-All duration values must be integer milliseconds in `1..2147483647`; missing
-queue/execution values, zero, negative, NaN, Infinity and timer overflow fail
-before enqueue/dispatch. Hosts must additionally restrict these values to their
-independently approved bounds. Environment values are configuration, not approval.
-Migration: callers formerly relying on implicit three-hour queue/two-hour
-execution defaults now fail until both limits are explicitly supplied through
-their authorized route. Do not copy those old defaults as presumed approved
-limits. Audit aliases, nesting and runtime copies before an authorized cutover.
-Elapsed queue, execution, transition and termination deadlines use monotonic time;
-wall-clock timestamps remain evidence/lifetime metadata, not elapsed timers.
-Pre-launch admission may not dispatch after cancellation or execution expiry.
-The wrapper reports its effective limits and local-supervision-only status.
-Budget breach takes precedence over raw zero exit at/after the deadline.
-Manifest, lease, waiter, transition and development-context JSON inputs use
-nonblocking/no-follow descriptor opens, regular-file/ownership checks and byte
-bounds. FIFO/device/oversized inputs cannot block a pre-dispatch JSON read.
-Kernel/filesystem stalls still require the independent outer watchdog; these
-checks are not a hostile-code or uninterruptible-I/O guarantee.
+## Single outer lease CLI and configuration
 
-Queue timeout returns 3; blocked discovery/recovery returns 4. Invalid or
-production input returns 2. A completed child propagates its raw exit code.
-Budget/cancellation/spawn/lifecycle cleanup failure returns nonzero, while
-structured output preserves raw child status separately. Do not interpret a
-child's raw zero as success when supervision failed. Command strings/arguments
-are not printed by the wrapper; the child controls its own log content.
+```sh
+VALIDATION_LOCK_TIMEOUT_MS=<approved-ms> \
+VALIDATION_LOCK_MAX_HOLD_MS=<approved-ms> \
+node scripts/validation-lock.mjs -- executable arg...
+```
 
-Reentry uses path-keyed `VALIDATION_LOCK_CONTEXT_<sha256>` with a verified
-ancestor lease chain. Each nested invocation acquires a sibling slot under its
-parent token. Parallel siblings serialize; deeper sequential nesting is allowed.
-This assumes parents delegate conflicting mutation sequentially, not continue
-mutating the resource alongside children. PID-only legacy context is rejected.
-Context is cooperative state, not cryptographic authorization.
+All conflict participants must resolve the same canonical file. The default is
+`.local/validation-lock-global.lock` relative to the installed script's project root;
+`VALIDATION_LOCK_FILE` selects an exact alternative path, not an authorization token.
+Core rejects options before `--` and inherited `VALIDATION_LOCK_CONTEXT_*` or
+PID-only reentry indicators. Use unwrapped inner commands. Do not nest core wrappers.
 
-The lease persists boot identity, token, owner/start time, phase, group,
-observed descendant identities, acquisition and heartbeat times, plus the
-mandatory boolean `recoveryRequired`. New reservations set it true BEFORE any
-dispatch and never clear it on a supervision error, crash or uncertain cleanup.
-Only a verified healthy completion/release transaction writes false; its durable
-write and unlink share the same transition. A failed mutating transition retains
-its sidecar even when the ordinary finally block runs. Read-only rejection does
-not manufacture an abandoned mutation. This field is lifecycle evidence, not a
-human authorization token, checked task approval or genuine host recovery route.
-Guarded
-transitions use an atomic sidecar directory. Interrupted/corrupt sidecars are
-never age-deleted: they require separately authorized host recovery with
-contenders reconciled/stopped. Similarly, a launch-intent record without known
-child identity remains blocked, not guessed to be empty.
+Queue TIMEOUT and execution MAX_HOLD are required. All duration values must be integer
+milliseconds in 1..2147483647 and within the actual approved host limits. Local defaults:
+POLL 100, HEARTBEAT 1000, STALE_HEARTBEAT 10000 (> heartbeat), STOP_GRACE 3000 and
+STOP_KILL 5000. These mechanics are not authority to exceed host/parent limits.
+The engine retains advisory waiter records internally; core exposes no priority
+selection or fairness guarantee. Environment override paths must be mapped consistently.
 
-Stale heartbeat/max-hold never allow another caller to reclaim live ownership.
-The owning wrapper enforces its budget, stops owned processes, and verifies
-quiescence before release. Dead-supervisor auto-recovery requires a compatible
-finalized (`phase:"finished", recoveryRequired:false`) lease and no remaining
-group/observed workload. A retained true flag or unfinalized phase blocks ordinary
-recovery even after the recorded workload stops. Older v2 leases lacking the
-field are incompatible: reconcile them through actual separately authorized
-host recovery, never just add false or erase a sidecar. Discover whether older
-callers/copies still run before any approved cutover; all cooperating callers
-must use the same accepted contract. Unknown or surviving work remains blocked.
+Execution starts after acquisition. Queue timeout is not a slow-test failure.
+Monotonic elapsed time governs deadlines. Retain parent-wide remaining allowance
+through the adopted host runner; standalone MAX_HOLD values do not implement it.
 
-Commands run behind a private IPC startup gate in a separate process group/session.
-The gate's identity is durably journaled and independently registered before
-user code can start. A second Node process, in its own session, watches the
-owner incarnation and the same remaining monotonic execution deadline. It
-continuously observes group/descendant identities, survives an original-group
-GNU timeout, and enforces bounded TERM/KILL cleanup if the owner stalls/dies.
-The registered watchdog PID/start-time is journaled as lifecycle evidence.
-Watchdog registration/handshakes are bounded at two seconds; failure blocks
-dispatch. Its private worker modes reject ordinary CLI invocation without IPC.
-No command arguments are logged by these workers.
+## Owned-work lifecycle
 
-Normal and expected budget/cancellation completion both require independent
-quiescence acknowledgement before release. Failed/uncertain
-completion never releases retained exclusion. The watchdog cannot issue reclaim
-approval, delete a lease, mark a validation PASS or authorize a replacement.
-Discovery tracks that group
-and observed descendants by start time; child exit, SIGTERM delivery, or timeout
-does not prove termination. A surviving descendant is cleaned up and makes the
-run fail. SIGKILL verification is bounded; uncertainty retains ownership.
-Newly observed owned descendants receive the current termination signal. On a
-supervision/journal error, attempt bounded owned-tree cleanup without requiring
-successful journal writes. Discovery failure permits only best-effort exact-known
-target cleanup; it cannot prove quiescence. Error-path leases remain retained,
-even if local cleanup succeeds, pending separately authorized reconciliation.
+Lease v2 retains boot, token, canonical path, owner PID/start time, phase, group,
+observed descendants and the mandatory boolean `recoveryRequired`.
+Reserve with true before dispatch. A private startup gate and independent IPC
+watchdog must register exact owned scope before executing user commands.
+Handshake failure denies dispatch. The watchdog remains outside the owner's event
+loop and original process group, retaining the same finite execution deadline.
 
-Commands/hooks/workers must NOT daemonize, double-fork, deliberately escape
-groups, or start untracked remote jobs. Polling cannot prove detection of every
-instantaneous escape. Approve and inspect transitive scope before wiring.
-Where such scope cannot be ruled out, use a verified host cgroup/job supervisor
-or block the safety claim. These resource leases do not implement Failure Gate
-task single-flight, monitor, authorization, or evidence acceptance.
+Observe exact descendant incarnations; PID/name/port alone is insufficient. On
+deadline, cancellation, owner/watchdog loss or journal failure, stop new dispatch,
+attempt bounded TERM/KILL of exact owned work and verify termination. Late descendants
+receive applicable cleanup. A stopped listener cannot hide a surviving wrapper.
+Expiration of admission after launch must not abandon already owned children.
 
-## All-entry-point timeout acceptance
+Release requires complete quiescence, independent acknowledgement and the guarded
+durable healthy-finalization/unlink transition. Child exit/signal delivery/heartbeat
+expiry alone is insufficient. Journal/discovery errors retain exclusion and raw
+incidents even after best-effort local cleanup. Do not inject false recovery flags.
 
-Every finite validation launch needs an enforced budget, regardless of tier,
-duration expectation or whether serialization applies. Inventory package aliases,
-pre/post scripts, nested runners, workers, server startup, global setup/teardown,
-tests and hooks, diagnostics, three isolation retries, and snapshot comparisons.
-Watch/server commands cannot masquerade as finite validation. Untracked remote
-work must be covered by an actual verified provider cancellation/job deadline or
-blocked; stopping a local client is not remote termination.
+Dead-owner ordinary recovery permits only a compatible finalized
+`phase:"finished", recoveryRequired:false` lease with no remaining or unknown workload.
+Missing fields, legacy/corrupt leases, launch gaps, surviving work and abandoned
+transition sidecars require actual separately authorized recovery. Reconcile competing
+writers and unknown outcomes; do not blindly unlink or replay.
 
-When Failure Gate is verified active, required-tier runs use its checked
-task/approved-plan route. When verified inactive, use verified existing host
-policy and equivalent bounded supervision; unknown applicability remains blocked.
-When the
-audited host runner (for example `scripts/run-tier.mjs`) enforces registry limits,
-do not bypass it with a direct package command. A direct command is allowed only
-under its separately authorized bounded diagnostic/other capability AND an
-equivalent verified supervisor; it is not automatically accepted tier evidence.
-There is no such host runner or genuine registry in this bundle.
+These identities protect process incarnations and resource exclusion, not task
+authorization. Do not make boot/device/inode or lease-token identity an admission
+condition for ordinary Failure Gate Unified plans or task execution. Unified's
+owner-directed gate maintenance does not authorize lease deletion, process reclaim
+or service disruption. Recover affected resources through their actual supported,
+authorized route; no separate reviewer or recovery specification is universally
+required. Existing permission suffices only when it covers the exact recovery.
+An unresolved lease blocks its conflicting callers, not unrelated task planning or
+independently permitted work.
 
-Require finite queue, per-step execution, startup/teardown/termination, evidence
-capture, and parent/cumulative attempt limits. Preserve remaining parent time
-across nested wrappers, resource changes, retries and recovery. Local independent
-MAX_HOLD values do not establish a shared parent budget. The host must enforce a
-protected outer deadline/cancellation boundary across the complete approved tree,
-including independently launched nested sessions. Stop admission when remaining
-time cannot cover authorized cleanup. Expiry never allows a new workload to start,
-but does not abandon supervision of work already started under approval.
+Task-plan admission and resource recovery are different authorities. Follow the
+adopted pre-implementation preflight/amendment route without adding another Start
+hook. A supported post-Start amendment neither releases an uncertain lease nor
+authorizes disruption. Pause affected work and establish quiescence or use the
+supported authorized cancellation route before changing an active run's binding,
+limits or shared-resource configuration. Preserve uncertain exclusion; do not
+change state underneath running work or stop unrelated services.
 
-For Node tests require explicit finite `test(..., {timeout:...})`/suite-inherited
-timeouts AND hook timeouts, or verified supported runner-wide equivalents.
-Probe the installed Node version before choosing CLI flags: Node 20+ support
-does not imply every newer test-runner flag exists. Audit overrides such as
-Infinity and missing inherited limits. Passing TAP/spec output does not disclose
-effective timeout configuration; report it explicitly from verified wiring,
-including missing/disabled limits. Per-test cancellation is not process cleanup.
-An event-loop-blocking test, hung worker, hook or subprocess must be terminated
-by an independent finite outer supervisor. A shell/tool timeout is supplementary
-unless transitive termination and evidence have actually been demonstrated.
+Bound JSON reads: no-follow, nonblocking regular-file checks, private owner and byte
+limits. Filesystem/kernel stalls still need verified outer supervision. Commands must
+not daemonize or start untracked remote work. Local polling cannot prove every escape;
+use verified stronger host containment or block that claim. No cross-clone exclusion,
+hostile-code sandbox or uninterruptible-I/O guarantee.
 
-Record route/command identity, approved limit source, selected/effective limits,
-queue versus execution elapsed time, parent remainder, observed load, raw exit,
-deadline/cancellation reason, descendant termination, retained exclusion and
-evidence acknowledgement. A late raw zero, pipeline masking, swallowed timeout,
-test cancellation or missing report cannot become validated success. Prove this
-with deliberately hanging asynchronous, synchronous, hook and subprocess fixtures,
-late zero exit, nested/retry cumulative exhaustion and uncertain cleanup. These
-host-wiring proofs are separate from isolated bundle regression evidence.
+Completed commands propagate raw exits; raw signals are preserved separately.
+Invalid input returns 2, queue timeout 3, uncertain discovery/recovery 4, and budget/
+cancellation/survivor/spawn failures nonzero. A raw zero after deadline or with missing
+cleanup/evidence is not success. The resource lease is not a checked-task decision,
+global parent budget, tier registry, independent acceptance or completion authority.
 
-## Mandatory adversarial acceptance matrix
+## Acceptance and regression guard
 
-Run the following twice sequentially from the skill directory. Bundle tests use
-explicit 30-second test and 5-second fixture-hook timeouts. The supervised mode
-copies canonical runtime modules into a private fixture, supplies its explicit
-test-only environment and launches the suite through that fixture's local wrapper
-with a 180-second execution deadline. It does not alter the real caller's flags,
-configure the shipped authority adapters or prove host admission/authorization:
+Before implementation, pin the applicable C01–C12 outcomes, original scope, starting
+observations and expected proof. Keep pre-install and delivered snapshots distinct.
+Preserve approved input/environment/source/plan bindings; expected code changes do
+not change requirements. Relevant changed inputs invalidate affected proof.
+
+For material behavior/safety/error-path changes, retain the host-required Regression
+Guard: pre-change observation, exact protected behaviors, automated cases at the owning
+boundary and expected outcome. A deliberately denied fixture is not an ignored failure.
+Do not skip, quarantine, delete, filter, reclassify or retry away required failures.
+The adopted validation contract determines tiers, diagnosis, acceptance and closure.
+When that contract is Failure Gate Unified, preserve its task ID, admitted plan
+revision and single assigned tier. Integrate applicable checks as supported supervised
+steps of that tier. Do not add tiers, run unguarded diagnostics, substitute a package
+PASS for tier validation or invent a separate approval system.
+
+The executable package tests separate default-profile fixtures from optional advanced
+fixtures. Under actual isolated-test permission, use:
 
 ```sh
 node tests/hardening.test.mjs --supervised
 ```
 
-Add an independent external watchdog with a finite deadline allowing the wrapper's
-termination grace and verification; verify it owns the whole fixture tree.
-The harness preserves its state on a retained outer lease; never blindly delete
-that state. Fixture cleanup is separate from genuine host recovery. Signals
-target fixture-owned identities. A direct invocation of the shipped wrapper in
-an unverified production-marked environment still blocks; do not strip real flags
-or install a simulated adapter to bypass host admission. Run real host-wiring
-acceptance only through its separately authorized verified route.
+Run twice sequentially for package acceptance. This creates a private fixture supervisor
+and test-only adapters; it does not configure genuine host authority. Keep an independent
+external finite boundary around authoring checks, allowing owned teardown. The fixture
+engine's own watchdog covers its admitted scope; a shell-client timeout alone does not
+prove transitive termination. Preserve retained fixture state when lifecycle is uncertain.
 
-| Boundary | Required assertion |
-|---|---|
-| Input/production | malformed inputs fail; hard production PLUS valid dev evidence cannot launch/signals |
-| Development exception | domain alone blocks; audited root/boot/live-ancestor-bound fresh record admits |
-| Independent attestation | a plausible local record without actual provider backing still blocks |
-| Checked reclaim | missing/unavailable source, forged reference, altered scope/run, replay and conflicting concurrent claims cannot signal |
-| Authority lifetime | revocation/expiry before escalation blocks new signals; partial outcomes remain recorded |
-| Evidence source | failed authoritative storage preserves raw outcome but blocks successful completion |
-| Capability deadlines | unknown/timed-out claims are not retried; no signals or replacement |
-| Invalid context | missing/expired/unsafe/out-of-scope/unverified records block without signals/dispatch |
-| Context lifetime | expiry during queue prevents dispatch; expiry after dispatch preserves owned-work supervision; expired cleanup context prevents escalation |
-| Discovery | unreadable socket tables return UNKNOWN; never a false FREE |
-| Protected busy | unapproved listener and caller-tree holder remain alive; non-success |
-| Manifest identity | expiry, wrong boot/start time, extra descendant block all signals |
-| Dry-run | exact target inventory changes no processes and remains busy/non-success |
-| Authorized action | exact fixture target stops; unrelated fixture survives; port is free |
-| Full target cleanup | closing listener alone cannot hide an approved surviving wrapper |
-| Normal lease | child 0/7 propagate and remove owned lease; missing executable fails safely |
-| Live/aged lease | no takeover/overlap of a live or stale-heartbeat holder |
-| Cancellation | retain exclusion until SIGTERM-resistant owned work actually stops |
-| Parent/descendants | child exit cannot yield a pass while descendants remain active |
-| Dead owner | quiescent compatible lease recovers loudly; surviving/unknown work blocks |
-| Reentry | forged PID/token/path cannot bypass; nested sequential calls finish |
-| Parallel reentry | inherited-context siblings cannot overlap |
-| Resource graph | shared resource conflicts serialize; disjoint resources may overlap |
-| Crash transitions | malformed legacy lease, launch gap, abandoned transition block |
-| Skill gates | budget gate remains independent when serialization is skipped |
-| All-entry-point budgets | missing/zero/infinite/overflow limits block; direct package scripts remain bounded |
-| Deadline ordering | wall-clock reversal does not extend elapsed budgets; late raw zero cannot pass |
-| Outer supervision | hanging async tests, sync-blocked tests and hooks cannot outlive owned supervision |
-| Error lifecycle | journal failure triggers bounded termination; uncertain/retained leases prevent replacement |
-| Late descendants | new owned work observed during grace/escalation is signaled; no early release |
-| Blocking inputs | FIFO/symlink/oversized JSON fails or is safely ignored as advisory priority; no blocked read |
-| Shutdown snapshots | transient read-only gaps are recorded; persistent/permission errors block escalation and success |
-| Retained errors | transient journal/discovery faults block ordinary replacement even without an abandoned sidecar; missing recovery disposition blocks legacy auto-recovery |
-| Independent watchdog | stalled/dead owner and original-group timeout leave no known owned fixture survivors; no command dispatch before independent registration |
-| Manifest members | null/primitive/array/malformed process entries return structured INVALID and send no signals |
-| Project integration | file parity is not activation; genuine providers and real checked acceptance are verified or dependent controls remain BLOCKED |
-| Lock wiring | conflicting actual entry points share verified lock identity/order; uncovered aliases fail acceptance; independent callers retain finite budgets |
-| API health | actual browser/API path validates expected status, JSON media type/body and healthy fields; HTML-200 and other malformed/unhealthy responses cannot pass |
-| Expected outcomes | prescribed inner exits 2/3/4/7 or negative findings pass only with their exact assertions/evidence; unexpected outer failures remain failures |
-| Completion scope | accepted audit/staging/fixture tasks can retain later activation blockers without claiming runtime readiness |
-| Outcome preservation | full task plans/readback retain expected results; no post-failure waiver or repair of correct rejection to zero |
+Required applicable cases: free/busy/unknown inventory; invalid/production/disabled
+rejections; no default signals or advanced admission; same-file exclusion and independent
+work; 0/nonzero/signal propagation; missing/invalid limits; queue-versus-execution expiry;
+late zero, synchronous hang, hook/child hang, owner/watchdog failure; surviving/late
+descendants; corrupted/legacy/retained leases, blocked reads and uncertain recovery.
+Keep the hardened runtime cases for shared mechanisms; feature-specific advanced cases
+are package regressions, not prerequisites to enable optional authority on an app.
+Clock-reversal cases must separately establish pre-dispatch expiry, confirmed
+post-dispatch execution expiry and queue expiry. Assert the exact stage-specific
+outcome, actual clock reversal, no unauthorized dispatch, owned-work cleanup and
+correct retained/released lease state. Do not assume startup finishes in 200 ms
+or make a queue assertion dependent on an earlier execution assertion passing.
 
-Map each assertion to adapted code, not only to the bundled implementation.
-Check approved host callers, exact scope, resource conflict map, real ports,
-health endpoints, managed workflows, selected validation coverage, reports,
-and Failure Gate checked-route evidence separately. Missing applicable proof
-blocks dependent activation/readiness, not otherwise authorized inert staging.
-Never waive blocked assertions or substitute fixtures for deployed host outcomes.
+For host activation, map these outcomes from actual evidence to adapted callers and
+their transitive hooks. Obtain two consecutive authorized host runs without manual
+cleanup between them. Test expected negative cases safely; never stop a live service
+merely to create an outage fixture. Actual API probes need status, media type, parsed
+service-specific health, finite cancellation and the real browser/proxy path when used.
+The host's own required coverage/evidence still governs.
+Under Unified, the two acceptance runs use the assigned tier's supported route and
+applicable existing authorization. They establish affected control activation, not
+two more approvals or a publication gate for unrelated plans. A blocked optional
+reclaim adapter does not block tests or planning that do not depend on reclaim.
 
-The local watchdog is still cooperative Linux `/proc` supervision, not a cgroup,
-pidfd guarantee, hostile-code sandbox or uninterruptible-I/O solution. The
-independent watchdog's own inability to discover/stop work remains uncertain
-and requires retained host exclusion/recovery. Hosts must test their real outer
-boundary, including watchdog failure and remote work. Do not claim that GNU
-timeout alone owns all sessions, or copy caller-controlled limits as host approval.
+These two runs are runtime evidence, not mandatory separate review. The authorized
+implementer may obtain them through the actual supported route. Separate review is
+optional unless selected by the owner or required by an identifiable already-approved
+requirement. Cite that basis when applicable. Otherwise review is "not selected,"
+not pending required acceptance or a blocker. Do not create review tasks automatically
+or use optional review to waive required runtime proof.
 
-## Migration from the two-skill setup
+The independent watchdog and cleanup acknowledgement above are runtime mechanisms,
+not independent human/Agent review requirements; their safety contract is unchanged.
 
-Replace the workspace's Port Authority skill with this bundle. Once the
-replacement is accepted, remove the obsolete separate Port Authority - Heavy
-entry so future sessions do not load contradictory instructions.
+Stage inactive sources without overwriting live scripts/callers. `STAGED` proves only
+the source stage; `CORE_VERIFIED` requires named installed core controls and real
+authorized acceptance. Record isolated checks PASSED/FAILED/BLOCKED/NOT_RUN separately.
+Default installation does not need configured reclaim adapters. A dependent caller
+that invokes advanced cleanup still needs its actual capability; do not silently
+remove that dependency or call it core merely to pass.
 
-For existing projects, inventory both canonical skill entries and references,
-then consolidate authorized references onto
-`.agents/skills/port-authority/SKILL.md`. Compare existing runtime wiring;
-do not reinstall scripts blindly. Never edit disposable platform mirrors.
-Replacing the workspace bundle does not by itself migrate every project's
-installed copy or prove its runtime validation passes.
-
-This revision replaces legacy scripts and adds runtime/host-capability helpers.
-Migrate approved callers to the documented development-context, v2 lease and
-ownership-manifest interfaces, including recovery disposition. Old leases and
-PID-only reentry need verified safe cutover, not optimistic reuse. Preserve
-Failure Gate governance, coverage, independent caller compatibility and raw results.
-Templates retain documented cooperative limits; no separate Heavy is necessary.
+Audit first; scoped repair never self-certifies independent acceptance. Only when
+separate review remains selected/required, obtain fresh independent post-repair proof
+for affected delivery. A read-only verifier does not repair or execute workloads;
+any repair/run permission is separately scoped, not implied by review.
+Definition-only confirmation, resource verification and app integration are distinct.
+If a paired workflow is selected, follow its actual canonical full-plan/readback,
+dependency/readiness and uncertainty protocol instead of duplicating it here.

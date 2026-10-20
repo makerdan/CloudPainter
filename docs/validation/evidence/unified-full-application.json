@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
+  "sourceCommitBefore": "17d7fe0e517d78a9dcd996d99253d7dffa573004",
+  "authorization": {
+    "source": "Current owner conversation",
+    "directions": [
+      "apply fully Failure Gate Unified to this project.",
+      "go"
+    ],
+    "mode": "Build",
+    "operation": "gate-only completion; no native task or live Unified allocation"
+  },
+  "canonicalSha256": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+  "archivePath": "attached_assets/failure-gate-unified-current-canonical_1792464744209.zip",
+  "archiveSha256": "e12ef26d91a5f02244b8c54abe278422a242f0451e5965838d0cc13da6c13469",
+  "definitionByteIdentical": true,
+  "assessment": "PASS",
+  "assessmentScope": "Supervised gate/RG maintenance, not validation-tier PASS",
+  "command": [
+    "python3",
+    "scripts/failure-gate/supervisor.py",
+    "120000",
+    "5000",
+    ".local/unified-full-application/gate.log",
+    "[\"node\",\"--test\",\"--test-reporter=tap\",\"--test-timeout=45000\",\"scripts/tests/failure-gate.test.mjs\",\"scripts/tests/check-regression-guard.test.mjs\"]"
+  ],
+  "log": ".local/unified-full-application/gate.log",
+  "logSha256": "a7b3b85dc9f463defe8eb0c1098c9149f78c796a0ad461f003d053b714cbd8e1",
+  "counts": {
+    "tests": 113,
+    "pass": 113,
+    "fail": 0,
+    "skipped": 0,
+    "cancelled": 0
+  },
+  "durationMs": 31521.979522,
+  "supervisor": {
+    "exit": 0,
+    "blocked": null,
+    "quiescent": true,
+    "bytes": 27898
+  },
+  "protectedHashesBeforeAndAfter": {
+    "docs/validation/unified-task-registry.json": "292746b2408e16b8c04b0feb35bc1506864748cef396218ac50e446d034da49b",
+    "docs/validation/unified-policy.json": "6a59bad4c1ad86cb18d3fa3161643047b023dbe2b39e8e37a8a24198d72ad583",
+    "docs/validation/unified-tiers.json": "8e32725168fa9d2cc0b878a03916958816cf72815aafda6f9ee44814706d2162",
+    "docs/validation/failure-baseline.json": "352892da28d8320bb6fcaa1d482bba8eecd9510786f3baf464e0b7343a57b871",
+    "docs/validation/unified-cutover-acceptance.json": "2e623674a8d11ce3859fc36a20434558e4e2771b18919fa35e9817924db05256",
+    "AGENTS.md": "da3bcd12c6affe490dee14de34f24c11ef337b73303c15f50c102fa0bf3325ef",
+    "replit.md": "3a17e96ba3b386dc5ef0e82727c334b49e17a5ccfafb0e754e0216b648069ea8",
+    ".agents/skills/failure-gate-unified/SKILL.md": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+    ".agents/skills/skill-application-router/SKILL.md": "3ced0827ecc17ef6883de30de7b8246b53d55babab5030fe6d9dacad61d8778d",
+    ".agents/skills/regression-guard/SKILL.md": "6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1"
+  },
+  "registry": {
+    "revision": 121,
+    "records": 13,
+    "byteIdentical": true,
+    "newIdentities": 0,
+    "changedBindings": 0
+  },
+  "testedFiles": {
+    "docs/validation/unified-local-execution.md": "46856d50c95b8e7213932dd86d43e7e001477ca9ae33ae2e41b705c45f3c18da",
+    "scripts/tests/failure-gate.test.mjs": "99266925a4943e2931297cb1af1dc5f71faf158d38ab49e470b85a324ad473fc"
+  },
+  "readOnlyProbes": {
+    "freshNodeProcesses": 2,
+    "observedPids": [
+      17420,
+      17429
+    ],
+    "samePinRegistryAndTiers": true,
+    "registryRevision": 121,
+    "records": 13,
+    "baselineEntries": 0,
+    "inheritedStepCounts": {
+      "test-fast": 5,
+      "test-standard": 17,
+      "test-standard-plus": 19,
+      "test-heavy": 21
+    },
+    "assessment": "NOT_EXECUTION",
+    "liveReboot": false,
+    "actualTaskAgentLaunch": false
+  },
+  "summaryCommand": {
+    "command": [
+      "node",
+      "scripts/check-failure-gate.mjs"
+    ],
+    "observed": {
+      "mode": "active",
+      "assessment": "NOT_EXECUTION",
+      "registryRecords": 13,
+      "warnings": []
+    }
+  },
+  "priorBoundRun": "e9d4382c-8a4a-416c-86ce-9ab663a60808",
+  "priorBoundRunReuse": "All recorded inputs unchanged at pre-edit inspection. After the new gate test, do not represent that old 152-test tier run as a current full-tier PASS.",
+  "notPerformed": [
+    "Live resource restore/deletion",
+    "Deployment",
+    "New activation",
+    "Live gate allocation or ledger mutation",
+    "Remote CI",
+    "Secret-value inspection",
+    "Unrelated Poe task changes"
+  ],
+  "runtimeParity": "Not inspected; canonical-source boundary preserved",
+  "nativeVerificationFollowup": "Not created; no native primary for direct maintenance and Build does not create project plans/tasks"
+}

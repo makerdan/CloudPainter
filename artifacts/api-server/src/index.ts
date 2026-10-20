@@ -1,19 +1,9 @@
-import app from "./app";
+import { configuredPort } from "../../../scripts/runtime/configured-port.mjs";
 import { logger } from "./lib/logger";
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
+// Validate before importing dependencies which may initialize data services.
+const port = configuredPort(process.env["PORT"]);
+const { default: app } = await import("./app");
 
 app.listen(port, (err) => {
   if (err) {

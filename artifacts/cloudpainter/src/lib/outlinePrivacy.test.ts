@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { maskContours, validOutline, validRegion, viewportToProject, OutlineRequestGuard } from './outlineGeometry.ts';
+import { isPhotoWideOutline, maskContours, validOutline, validRegion, viewportToProject, OutlineRequestGuard } from './outlineGeometry.ts';
 import { traceEdges } from './outlineEdges.ts';
 
 test('nonrectangular mask produces an actual ordered boundary, with closed endpoints', { timeout: 1000 }, () => {
@@ -11,6 +11,15 @@ test('nonrectangular mask produces an actual ordered boundary, with closed endpo
   assert.ok(validOutline(contour));
   assert.deepEqual(contour[0], contour.at(-1));
   assert.ok(contour.some(p => p.x === .35 && p.y > .1 && p.y < .4));
+});
+
+test('photo-wide framing is rejected without filtering valid large subjects by area alone', { timeout: 1000 }, () => {
+  const photoWide = [{ x: .04, y: .04 }, { x: .96, y: .04 }, { x: .96, y: .96 }, { x: .04, y: .96 }, { x: .04, y: .04 }];
+  const tallLargeSubject = [{ x: .08, y: .01 }, { x: .92, y: .01 }, { x: .92, y: .99 }, { x: .08, y: .99 }, { x: .08, y: .01 }];
+  const wideLargeSubject = [{ x: .01, y: .08 }, { x: .99, y: .08 }, { x: .99, y: .92 }, { x: .01, y: .92 }, { x: .01, y: .08 }];
+  assert.equal(isPhotoWideOutline(photoWide), true);
+  assert.equal(isPhotoWideOutline(tallLargeSubject), false);
+  assert.equal(isPhotoWideOutline(wideLargeSubject), false);
 });
 
 test('portrait and landscape view coordinates invert zoom and pan consistently', { timeout: 1000 }, () => {
@@ -50,6 +59,7 @@ test('local worker receives pixels, uses an in-memory image and has no photo tra
   const edge = readFileSync(new URL('./outlineEdges.ts', import.meta.url), 'utf8');
   assert.match(worker, /new RawImage\(input.pixels/);
   assert.match(worker, /Xenova\/detr-resnet-50-panoptic/);
+  assert.match(worker, /isPhotoWideOutline\(points\)/);
   assert.doesNotMatch(worker + transport + edge, /fetch\(|XMLHttpRequest|sendBeacon|\/api\/|FormData/);
   assert.match(transport, /worker\.terminate\(\)/);
 });

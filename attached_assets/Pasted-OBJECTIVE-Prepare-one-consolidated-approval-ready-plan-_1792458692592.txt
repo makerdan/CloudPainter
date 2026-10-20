@@ -1,0 +1,109 @@
+OBJECTIVE
+Prepare one consolidated, approval-ready plan to update CloudPainter’s canonical skill definitions using these five attached packages:
+1. app-support-ops-existing-tier-coverage.zip
+2. port-authority-fixture-headroom.zip
+3. install-github-actions-unified-compatibility.zip
+4. ci-validation-parity-unified-compatibility.zip
+5. skill-application-router-selection-aware.zip
+Include each package’s required references and resources, not just SKILL.md.
+This prompt authorizes read-only inspection and preparation of a proposed installation plan. It does not authorize installation, implementation, task activation, validation workloads, remote changes, merge, or deployment.
+SOURCE AND CURRENT-STATE DISCOVERY
+Read current project instructions and canonical custom skill sources under .agents. Do not use alternate or copied custom skill definitions under .local as policy.
+Read the attached packages’ SKILL.md files, applicable references, revision notes, manifests, and application/usage prompts. Their planning-only restrictions remain in effect; this combined prompt does not convert any embedded implementation instructions into execution authorization.
+Inspect the actual current:
+- Failure Gate Unified, Regression Guard, Port Authority, and source-management instructions, where adopted.
+- Canonical definitions of the five target skills.
+- Draft, queued, and active tasks relevant to these updates.
+- Registered tier workloads, inheritance, supported runners, and prerequisites.
+- Source pins, binding/hash rules, projection mechanisms, and supported maintenance and amendment routes.
+- Port Authority consumer harnesses and previous local corrections.
+Do not assume task numbers, statuses, paths, or prior findings are still current. Discover them.
+Compare package revisions with installed sources. Preserve unrelated or newer changes. If a source differs from the package baseline, explain the substantive differences and propose reconciliation instead of blindly overwriting it. An identical installed package needs no replacement.
+SCOPE OF THE PROPOSED INSTALLATION
+Include:
+- The five canonical definition updates and required resources.
+- Only directly necessary source registration, manifest, reference, and supported projection updates.
+- The smallest directly necessary Port Authority consumer-harness adaptation described below.
+- Concrete implementation validation and a requirement-to-delivery handoff.
+Do not expand definition installation into:
+- Full App Support Ops implementation.
+- Port Authority runtime-control activation.
+- GitHub Actions installation or remote workflow changes.
+- A live CI parity investigation beyond evidence needed for this plan.
+- New Start hooks, task interceptors, automatic Plan editors, or platform integrations.
+Do not modify Failure Gate Unified or Regression Guard merely because these packages compose with them. Report a concrete incompatibility if one is actually found.
+PORT AUTHORITY CONSUMER RECONCILIATION
+Inspect scripts/port-authority-clock-proof.mjs and
+docs/validation/port-authority-clock-repair-delivery.md if present, along with their current callers and replacement paths.
+Determine whether CloudPainter still rewrites a private copy of the older Port Authority tests to:
+- Give the replacement waiter sufficient finite queue headroom.
+- Preserve retained or uncertain lease evidence during fixture cleanup.
+The attached package incorporates canonical fixture corrections. Do not blindly replay an old exact-string patch against corrected source.
+If the old harness remains in use, include the smallest consumer adaptation needed to accept the new canonical package without applying the correction twice or failing an obsolete source-text assertion.
+Preserve the behavioral cases, detecting assertions, expected outcomes, ownership safeguards, and finite execution/queue limits. Do not delete a test simply because its old source-text patch no longer matches.
+Distinguish a timing-sensitive test expectation from a demonstrated runtime defect. A budget expiring before dispatch can be a correct result; it is not, by itself, evidence of a runtime failure.
+Do not change the four Port Authority runtime modules unless a separately evidenced and authorized defect requires it. Definition installation alone does not authorize live harness edits, policy-pin changes, or runtime activation; include necessary changes explicitly in the proposed scope.
+FAILURE GATE UNIFIED AND REGRESSION GUARD
+Use the currently adopted supported routes, not a new approval system.
+Separate:
+1. Canonical definition installation.
+2. Any genuinely necessary gate registration/workload maintenance.
+3. Ordinary consumer-harness or application implementation.
+Do not classify all work as gate maintenance merely because it touches validation-related files.
+For ordinary implementation, identify exactly one adequate registered tier with actual coverage. Do not invent a fifth tier or substitute a lower tier or standalone command for the assigned tier.
+Map each required check to:
+- The requirement or concrete recurrence.
+- Test location and detecting assertion.
+- Executable command or verified discovery rule.
+- Prerequisites.
+- Existing tier coverage.
+If required coverage is genuinely missing, automatically prepare the smallest appropriate amendment to an existing tier and its registration fixtures. Distinguish missing registration from tests already included by discovery and from unavailable capabilities.
+Prefer extending the owning suite over duplicate parallel validation. Preserve existing checks, budgets, inheritance, and prerequisites. Any proposed change to those boundaries must be explicit and separately scoped where required.
+Use an actual owner-directed maintenance route for changes it permits. Maintenance evidence is not an application tier PASS and does not authorize ordinary application execution.
+Apply Regression Guard by substance:
+- Material qualifying changes need a concrete recurrence, an affected-layer test, and the assertion that catches it.
+- Support valid N/A, genuinely self-satisfying declarations, and documented exceptions through actual supported routes.
+- Do not force purely additive, cosmetic, deletion-marked, or non-material work into bug-fix coverage.
+- Do not let mixed material work evade coverage through its title or an exclusion mentioned elsewhere.
+Reuse identifiable existing approval only where it actually covers the same scope and revision. Do not ask for generic “execution authority,” a new bootstrap specification, a shared allocator, or machine-bound task authorization.
+PRESERVE CURRENT WORK AND HISTORY
+Do not edit, reseal, rebind, approve, start, cancel, or otherwise change existing active task plans.
+Inspect matching draft and active work to avoid duplication. Identify possible overlap without silently absorbing or rewriting that work.
+Preserve historical sealed plans, contract revisions, IDs, tombstones, bindings, ledgers, baselines, and previous evidence.
+If a proposed definition, projection, workload, or pin update would affect an active task’s binding or runtime behavior:
+- Identify the exact dependency and affected task.
+- Keep that update unapplied under this planning prompt.
+- Propose safe sequencing after the task finishes, or a separate supported amendment decision if genuinely necessary.
+- Continue planning independent changes.
+Do not impose a blanket migration of historical plans. Do not silently change a shared dependency beneath a running task.
+REVIEW AND SOURCE-MANAGEMENT BOUNDARIES
+A separate independent verifier is not selected by this prompt.
+Create or retain one only when an identifiable already-approved requirement actually calls for it. Do not silently cancel an existing required verifier or deliberately selected paired workflow.
+Keep implementer validation, the delivery handoff, and any genuinely triggered file-only skill confirmation. These do not automatically authorize an independent runtime review.
+Use canonical source-management and mirror-projection mechanisms only as actually supported. Do not hand-edit runtime mirrors, claim workspace publication from a project file change, or treat a historical catalog manifest as current policy.
+VALIDATION TO PLAN
+Specify bounded checks for:
+- Package completeness, metadata, references, manifests, and source integrity.
+- Preservation of unrelated/current instructions.
+- Canonical source and supported projection consistency.
+- Port Authority consumer compatibility and retained behavioral assertions.
+- No unintended changes to active plans or protected gate records.
+Use the assigned tier’s supported supervised route for ordinary implementation validation. Keep gate-maintenance results separate.
+Package fixture passes are not host acceptance or runtime activation evidence. If newly activated controls would require two consecutive acceptance runs, identify that condition without imposing activation on this definition-installation plan.
+Do not run validation under this prompt. Do not restart services, reclaim listeners, remove uncertain leases, access production, spend provider credits, mutate remote CI, merge, or deploy.
+OUTPUT
+Present one proposed installation plan, with dependent phases where necessary, rather than five disconnected plans or duplicate tasks.
+Include:
+- Current installed revision versus each attached candidate.
+- Exact proposed files and resource changes.
+- Items already current and requiring no change.
+- Port Authority consumer-harness reconciliation.
+- Existing-task overlap and active-task protection.
+- Source/pin/projection effects.
+- Any concrete existing-tier workload amendment.
+- Regression Guard declarations and the one assigned tier for each ordinary implementation task.
+- Validation commands, finite limits, expected assertions, and evidence locations.
+- The requirement-to-delivery handoff.
+- What remains definition-only versus implemented, activated, or externally verified.
+Separate verified findings from assumptions and unavailable evidence. If something cannot proceed, identify the exact dependent scope and continue independent planning.
+End with the consolidated plan ready for my approval. Ask a question only for a consequential choice you cannot resolve from the available evidence; do not ask me to supply information you can inspect yourself.

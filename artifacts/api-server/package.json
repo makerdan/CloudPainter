@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "setup:image-access": "tsx scripts/setup-image-access.ts",
+    "setup:general-admin": "tsx scripts/setup-general-admin.ts",
     "test:image-access": "tsx --test tests/image-access.test.ts",
     "test:image-upscale": "node --import tsx --test tests/image-upscale.test.ts",
     "test:outline": "tsx --test --test-timeout=10000 src/routes/outline.test.ts",
@@ -14,6 +15,10 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:palettes": "tsx --test src/routes/palettes.test.ts",
+    "test:settings": "tsx --test src/routes/settings.test.ts",
+    "test:admin": "tsx --test --test-timeout=15000 src/routes/admin.test.ts",
+    "test:admin-storage": "tsx --test src/lib/adminStore.test.ts",
+    "test:admin-provisioning": "tsx --test src/lib/adminProvisioning.test.ts",
     "test:logo-api": "node --import tsx --test tests/logo-images.test.ts",
     "verify:logo-live": "node --import tsx tests/verify-logo-live.ts"
   },

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { ClerkProvider, SignIn, SignUp, useAuth, useClerk, useUser } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
+import { getGetAdminOverviewQueryKey, useGetAdminOverview } from '@workspace/api-client-react';
 import { Link, useLocation } from 'wouter';
 import { TooltipButton } from './tooltip-button';
 
@@ -47,8 +48,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       },
     }}
     localization={{
-      signIn: { start: { title: 'Welcome to CloudPainter', subtitle: 'Sign in to save your personal colors' } },
-      signUp: { start: { title: 'Create your CloudPainter account', subtitle: 'Keep your palette across devices' } },
+      signIn: { start: { title: 'Welcome to CloudPainter', subtitle: 'Sign in to access your account backups and saved colors' } },
+      signUp: { start: { title: 'Create your CloudPainter account', subtitle: 'Keep your sketches and colors with your account' } },
     }}
   ><AccountContext.Provider value={{ leaving, setLeaving }}>{children}</AccountContext.Provider></ClerkProvider>;
 }
@@ -58,17 +59,31 @@ export function usePaletteAccount() {
   return { isLoaded, userId: leaving ? null : userId, sessionId: leaving ? null : sessionId };
 }
 export function AccountControls() {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, sessionId } = useAuth();
   const { user } = useUser();
   const { signOut } = useClerk();
   const { leaving, setLeaving } = useContext(AccountContext);
   const [error, setError] = useState('');
-  if (!isLoaded) return <span className="account-note">Loading account…</span>;
-  if (!isSignedIn) return <div className="account-controls"><Link className="button button-small" href="/sign-in">Sign in</Link><Link className="button button-small" href="/sign-up">Create account</Link></div>;
+  const adminOverview = useGetAdminOverview({
+    request: {
+      headers: { 'X-Admin-Session': sessionId ?? '' },
+      credentials: 'same-origin',
+    },
+    query: {
+      enabled: Boolean(isLoaded && isSignedIn && sessionId && !leaving),
+      queryKey: [...getGetAdminOverviewQueryKey(), sessionId ?? ''],
+      retry: false,
+      staleTime: 0,
+    },
+  });
+  if (!isLoaded) return <div className="account-controls"><Link className="button button-small" href="/settings" data-testid="link-account-settings">Settings</Link><span className="account-note">Loading account…</span></div>;
+  if (!isSignedIn) return <div className="account-controls"><Link className="button button-small" href="/settings" data-testid="link-account-settings">Settings</Link><Link className="button button-small" href="/sign-in">Sign in</Link><Link className="button button-small" href="/sign-up">Create account</Link></div>;
   return <div className="account-controls">
     <span className="account-note" data-testid="account-name">{user?.firstName || user?.primaryEmailAddress?.emailAddress || 'Your account'}</span>
+    <Link className="button button-small" href="/settings" data-testid="link-account-settings">Settings</Link>
+    {adminOverview.isSuccess && !leaving && <Link className="button button-small" href="/admin" data-testid="link-admin-console">Admin console</Link>}
     <TooltipButton className="button button-small" disabled={leaving}
-      description="Sign out and hide your account palette. Your browser-local drawing stays on this device."
+       description="Sign out and hide account data. Your current browser sketch stays here; account backups remain with your account."
       onClick={async () => {
         setLeaving(true); setError('');
         try { await signOut({ redirectUrl: basePath || '/' }); }
@@ -80,13 +95,13 @@ export function AccountControls() {
 export function SignInPage() {
   return <div className="account-page"><Link href="/">Back to your drawing</Link>
     <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} fallback={<AccountLoading />} />
-    <p>Only palettes are saved to your account. Projects and photos stay in this browser.</p>
+    <p>Your account keeps saved colors and preferences. Sketches and reference photos stay in this browser unless you explicitly back them up to your account.</p>
   </div>;
 }
 export function SignUpPage() {
   return <div className="account-page"><Link href="/">Back to your drawing</Link>
     <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} fallback={<AccountLoading />} />
-    <p>Only palettes are saved to your account. Projects and photos stay in this browser.</p>
+    <p>Your account keeps saved colors and preferences. Sketches and reference photos stay in this browser unless you explicitly back them up to your account.</p>
   </div>;
 }
 function AccountLoading() {

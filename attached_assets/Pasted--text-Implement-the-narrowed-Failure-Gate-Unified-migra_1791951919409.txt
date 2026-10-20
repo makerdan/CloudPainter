@@ -1,0 +1,102 @@
+```text
+Implement the narrowed Failure Gate Unified migration plan from your
+reassessment, verify it, and activate Unified for new tasks once all required
+acceptance checks pass.
+
+This authorizes the local gate-code, policy, template, and test changes in
+that plan. This is also my explicit cutover authorization, conditional on
+successful verification and satisfaction of the project's documented
+acceptance requirements. Do not ask for another routine cutover approval.
+
+Honor any genuinely separate acceptance requirement in the current project
+policy. If it requires an independent reviewer or another approval that this
+instruction cannot satisfy, identify the exact requirement and obtain only
+that remaining acceptance. Do not invent additional acceptance gates.
+
+Do not deploy, change production resources, trigger remote CI, provision
+external infrastructure, or perform destructive actions. Those actions remain
+outside this authorization.
+
+Use the approved canonical skill at:
+.agents/skills/failure-gate-unified/SKILL.md
+
+Use only canonical skill sources under .agents as authoritative definitions.
+Inspect older Failure Gate references as migration evidence, not as rules to
+merge into Unified. Retrieve the existing reassessment, plan, task IDs,
+backup record, and supporting evidence yourself. Do not ask me for original
+receipts or technical details you can discover.
+
+Confirm that the existing Remix backup and recovery precautions are
+appropriate for the resources this migration will actually change. Do not
+create another Remix unnecessarily. Do not require a blanket recovery drill
+or complete recovery verification for untouched external resources.
+
+Before adopting the single-authoritative-workspace restriction, verify that
+the supported execution route works with this application's actual Agent and
+task environments. Do not assume an environment identifier proves authority,
+and do not simply flip allocatorAuthorityVerified. Demonstrate the admitted
+execution path and rejection behavior using safe, isolated tests.
+
+Choose the simplest supported mechanism that actually enforces Unified in
+this project's execution model. Reuse existing mechanisms wherever they
+satisfy the contract. Resolve actual task-context propagation, plan-generation,
+caller-coverage, and enforcement gaps within the approved scope.
+
+Ensure that:
+- New task IDs are provisioned transactionally, permanently unique, and
+  non-reusable, including after failure or cancellation.
+- Each task ID is bound to exactly one registered tier: test-fast,
+  test-standard, test-standard-plus, or test-heavy.
+- Wrong-tier attempts fail closed before tests execute.
+- Tier changes use the documented plan-and-binding amendment process.
+- Validation is bounded, monitored, and protected against duplicate top-level
+  runs against the same target.
+- Baseline matches and ignored-versus-owned repairs are handled correctly.
+- A passing retry establishes intermittency, not pre-existing provenance.
+- Completion states reflect observed results rather than assumptions.
+- Unified becomes the sole policy for new tasks after successful cutover.
+
+Preserve existing IDs, tier bindings, baseline records, historical evidence,
+and in-flight task contracts. Do not silently rebind legacy tasks, reset the
+baseline, or delete history. Keep independent CI clearly identified as
+independent CI rather than claiming it is Unified-governed execution.
+
+Use exactly the validation tier justified and bound for this migration task.
+If that required tier cannot run, report the specific blocker; do not choose
+a lighter tier merely to avoid it. Unavailable tiers that this work does not
+require are not blanket blockers to source-only preparation. Do not claim
+those tiers are operational until their required resources are verified.
+
+Use guard-level fixtures to test wrong-tier denial and concurrency controls.
+Do not invoke an unauthorized tier against an actual task or launch duplicate
+live validations merely to demonstrate rejection.
+
+Do not add distributed coordination, signed native-task identities, external
+evidence storage, universal output adapters, or recovery drills unless a
+concrete project dependency establishes their necessity and I separately
+approve that expanded scope. Distinguish explicit Unified requirements,
+verified project constraints, and optional hardening.
+
+Complete the authorized implementation, repair defects within that scope,
+and rerun the affected checks. Activate Unified only after the required checks
+and documented acceptance requirements pass. Record the cutover boundary and
+update the project's activation policy through its supported mechanism.
+
+If required checks fail or remain unverified, do not activate. Continue
+independent safe work, then report the precise blocker and the smallest
+remaining owner decision. Do not simulate enforcement or claim a skipped,
+interrupted, or unobserved check passed.
+
+Finish with a concise handoff stating:
+- What changed.
+- Which canonical skill governs new tasks.
+- The task ID, bound tier, commands, and observed verification results.
+- Whether acceptance passed and activation occurred.
+- How legacy tasks, IDs, bindings, and baselines were preserved.
+- Any unavailable tiers, unresolved gaps, or follow-up work.
+- The backup reference and recovery approach.
+- The final state: PASS, FAIL, BLOCKED, or INCOMPLETE.
+
+Do not deploy as part of this work. Ask me only for unavoidable owner
+decisions, not routine technical preparation or information you can retrieve.
+```

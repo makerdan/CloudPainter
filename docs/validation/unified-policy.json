@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "mode": "active",
+  "projectId": "4b60cdc8-3fdb-439e-b554-21dd7e77a03e",
+  "allocatorAuthorityVerified": false,
+  "canonicalSource": ".agents/skills/failure-gate-unified/SKILL.md",
+  "canonicalSha256": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+  "planTemplates": {
+    "f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12": "legacy-v1",
+    "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0": "legacy-v1",
+    "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc": "unified-v2",
+    "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22": "unified-v2"
+  },
+  "newPlanTemplate": "unified-v4",
+  "preflightContracts": ["2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22"],
+  "regressionGuard": {
+    "source": ".agents/skills/regression-guard/SKILL.md",
+    "current": "6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1",
+    "record": "docs/validation/regression-guard-revision-application-handoff.md",
+    "contracts": {
+      "f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12/legacy-v1": "legacy-v1",
+      "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0/legacy-v1": "legacy-v1",
+      "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc/unified-v2": "legacy-v1",
+      "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc/unified-v3": "legacy-v1",
+      "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc/unified-v4": "6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1",
+      "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22/unified-v4": "6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1"
+    }
+  },
+  "contractRevisions": [
+    {
+      "revision": 3,
+      "fromCanonicalSha256": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "toCanonicalSha256": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      "sourceArchive": "attached_assets/failure-gate-unified-2026-10-15_1792282392881.zip",
+      "sourceArchiveSha256": "478d37336a161b376d067ac220a7ae34eb482486e86144050ed7ebccbbecf88e",
+      "authorization": "Owner selected Apply the attached revision; gate-only maintenance under the canonical exception.",
+      "scope": "Pre-implementation preflight, preparation and amendment coordination; no historical retrofit or live ledger mutation.",
+      "record": "docs/validation/unified-preflight-application-handoff.md"
+    },
+    {
+      "revision": 1,
+      "recordedAt": "2026-10-15T20:56:33Z",
+      "fromCanonicalSha256": "f9ac675788e538f19de92b67e1be629d1daa5db0c2f8c4341d7abef35d48af12",
+      "replacedInstalledSha256": "b04decfc03db49cab37c221f749f77be1000845d537ea4f9f6f6a25b629d1a06",
+      "toCanonicalSha256": "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0",
+      "sourceArchive": "attached_assets/failure-gate-unified-reviewed-final_1792097479101.zip",
+      "sourceArchiveSha256": "308f65bbcd275a6c58ee4cc6b99533a02070e78734886f91a97f4ca17b18c536",
+      "authorization": "Owner explicitly requested installation of this latest canonical skill as a contract revision resolving canonical source drift.",
+      "scope": "Canonical definition and policy pin only; preserve existing task contracts, IDs, bindings, history, activation marker and workspace-authority boundary.",
+      "record": "docs/validation/unified-contract-revision.md",
+      "operationalAcceptance": "Not established by source installation or pin alignment; workspace-authority failure remains."
+    },
+    {
+      "revision": 2,
+      "recordedAt": "2026-10-16T19:51:45Z",
+      "fromCanonicalSha256": "d4eeb2a528f5e77af89bdd1b5c23f24cc3af58a2a3bb46d30046dd2ddbfdbab0",
+      "toCanonicalSha256": "73254fc29ec62a3966fd16508ec20dcac6cc676f65fa309a5365d400dcccf2cc",
+      "sourceArchive": "attached_assets/failure-gate-unified-2026-10-15_1792180022158.zip",
+      "sourceArchiveSha256": "36af4dd4fbfd792159e8804c60c1519e3cc9f3224d056a193b226116a58adf11",
+      "authorization": "Owner direction attached in the active conversation authorizes gate-only maintenance without task admission or a separate reviewer/bootstrap.",
+      "scope": "Remove machine-bound admission, preserve sealed contracts by revision, update plan rendering and enforce merge preservation without changing ledger records.",
+      "record": "docs/validation/unified-gate-repair.md"
+    }
+  ],
+  "cutover": {
+    "at": "2026-10-14T04:48:37.343Z",
+    "migrationId": "FGU-81af9606-cc13-465c-99a0-820e95ec1e03",
+    "runId": "664621dd-a244-4522-8e6f-47bd631fcc01",
+    "acceptanceFile": "docs/validation/unified-cutover-acceptance.json",
+    "acceptanceHash": "2e623674a8d11ce3859fc36a20434558e4e2771b18919fa35e9817924db05256",
+    "boundary": "New local tasks only; isolated copies denied; CI independent"
+  },
+  "capabilities": [],
+  "legacyNativeTasks": [
+    {
+      "ref": "#2",
+      "contract": "native-pre-cutover",
+      "gateId": null,
+      "tier": null,
+      "disposition": "Preserve the original sketch-recovery contract. This is not a legacy Failure Gate authorization or a runner bypass. Re-read native state before cutover."
+    }
+  ],
+  "ownerDirectionAdapter": null,
+  "bootstrap": {
+    "specHash": "a36609461e1976b3ae401760664a542838b024e20bd19b6dfe687ce72db10b4d",
+    "specFile": "docs/validation/unified-local-migration-spec.json"
+  }
+}

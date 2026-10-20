@@ -9,6 +9,8 @@ import { CLERK_PROXY_PATH, clerkProxyMiddleware, getClerkProxyHost } from "./mid
 import logoImagesRouter from "./routes/logo-images";
 import imageUpscaleRouter from "./routes/image-upscale";
 import outlineRouter from "./routes/outline";
+import { createProjectBackupRouter } from "./routes/project-backups";
+import { projectBackupStore } from "./lib/projectBackupStore";
 
 const app: Express = express();
 
@@ -44,6 +46,9 @@ app.use("/api", logoImagesRouter);
 app.use("/api", imageUpscaleRouter);
 // Photo inference has its own session/origin gates and bounded ephemeral parser.
 app.use("/api", outlineRouter);
+// Account project snapshots have an explicit 2 MiB payload bound. Mount before
+// the default JSON parser so it does not apply Express's smaller default first.
+app.use("/api", createProjectBackupRouter(projectBackupStore));
 // Other API routes retain their existing parser and account middleware.
 app.use(cors());
 app.use(express.json());

@@ -9,6 +9,190 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Read the account count for authorized CloudPainter administrators
+ */
+export const getAdminOverviewHeaderXAdminSessionMax = 256;
+
+
+
+export const GetAdminOverviewHeader = zod.object({
+  "X-Admin-Session": zod.string().max(getAdminOverviewHeaderXAdminSessionMax)
+})
+
+export const getAdminOverviewResponseTotalAccountsMin = 0;
+
+
+
+export const GetAdminOverviewResponse = zod.object({
+  "totalAccounts": zod.number().int().min(getAdminOverviewResponseTotalAccountsMin)
+})
+
+
+/**
+ * @summary Search and page through CloudPainter accounts
+ */
+export const listAdminAccountsQueryLimitDefault = 25;
+export const listAdminAccountsQueryLimitMax = 50;
+
+export const listAdminAccountsQueryOffsetDefault = 0;
+export const listAdminAccountsQueryOffsetMin = 0;
+export const listAdminAccountsQueryOffsetMax = 10000;
+
+export const listAdminAccountsQueryQueryMax = 100;
+
+
+
+export const ListAdminAccountsQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(listAdminAccountsQueryLimitMax).default(listAdminAccountsQueryLimitDefault),
+  "offset": zod.coerce.number().int().min(listAdminAccountsQueryOffsetMin).max(listAdminAccountsQueryOffsetMax).default(listAdminAccountsQueryOffsetDefault),
+  "query": zod.coerce.string().max(listAdminAccountsQueryQueryMax).optional()
+})
+
+export const listAdminAccountsHeaderXAdminSessionMax = 256;
+
+
+
+export const ListAdminAccountsHeader = zod.object({
+  "X-Admin-Session": zod.string().max(listAdminAccountsHeaderXAdminSessionMax)
+})
+
+export const listAdminAccountsResponseAccountsMax = 50;
+
+export const listAdminAccountsResponseTotalCountMin = 0;
+
+export const listAdminAccountsResponseLimitMax = 50;
+
+export const listAdminAccountsResponseOffsetMin = 0;
+export const listAdminAccountsResponseOffsetMax = 10000;
+
+
+
+export const ListAdminAccountsResponse = zod.object({
+  "accounts": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "status": zod.enum(['active', 'suspended']),
+  "generationAccess": zod.object({
+  "role": zod.enum(['normal', 'admin']),
+  "enabled": zod.boolean()
+})
+})).max(listAdminAccountsResponseAccountsMax),
+  "totalCount": zod.number().int().min(listAdminAccountsResponseTotalCountMin),
+  "limit": zod.number().int().min(1).max(listAdminAccountsResponseLimitMax),
+  "offset": zod.number().int().min(listAdminAccountsResponseOffsetMin).max(listAdminAccountsResponseOffsetMax)
+})
+
+
+/**
+ * @summary Page through account status changes for authorized CloudPainter administrators
+ */
+export const listAdminAuditEventsQueryLimitDefault = 25;
+export const listAdminAuditEventsQueryLimitMax = 50;
+
+export const listAdminAuditEventsQueryCursorMax = 512;
+
+
+
+export const ListAdminAuditEventsQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(listAdminAuditEventsQueryLimitMax).default(listAdminAuditEventsQueryLimitDefault),
+  "cursor": zod.coerce.string().max(listAdminAuditEventsQueryCursorMax).optional(),
+  "action": zod.enum(['suspend', 'reactivate']).optional().describe('Restrict history to one account status action'),
+  "outcome": zod.enum(['pending', 'succeeded', 'failed']).optional().describe('Restrict history to one audit outcome')
+})
+
+export const listAdminAuditEventsHeaderXAdminSessionMax = 256;
+
+
+
+export const ListAdminAuditEventsHeader = zod.object({
+  "X-Admin-Session": zod.string().max(listAdminAuditEventsHeaderXAdminSessionMax)
+})
+
+export const listAdminAuditEventsResponseEventsMax = 50;
+
+export const listAdminAuditEventsResponseTotalCountMin = 0;
+
+export const listAdminAuditEventsResponseLimitMax = 50;
+
+export const listAdminAuditEventsResponseNextCursorMax = 512;
+
+
+
+export const ListAdminAuditEventsResponse = zod.object({
+  "events": zod.array(zod.object({
+  "actorId": zod.string(),
+  "targetId": zod.string(),
+  "action": zod.enum(['suspend', 'reactivate']),
+  "outcome": zod.enum(['pending', 'succeeded', 'failed']),
+  "createdAt": zod.coerce.date()
+})).max(listAdminAuditEventsResponseEventsMax),
+  "totalCount": zod.number().int().min(listAdminAuditEventsResponseTotalCountMin),
+  "limit": zod.number().int().min(1).max(listAdminAuditEventsResponseLimitMax),
+  "nextCursor": zod.string().max(listAdminAuditEventsResponseNextCursorMax).nullable()
+})
+
+
+/**
+ * @summary Suspend or reactivate a CloudPainter account
+ */
+export const setAdminAccountStatusPathUserIdRegExp = new RegExp('^user_[A-Za-z0-9]{5,}$');
+
+
+export const SetAdminAccountStatusParams = zod.object({
+  "userId": zod.coerce.string().regex(setAdminAccountStatusPathUserIdRegExp)
+})
+
+export const setAdminAccountStatusHeaderXAdminSessionMax = 256;
+
+
+
+export const SetAdminAccountStatusHeader = zod.object({
+  "X-Admin-Session": zod.string().max(setAdminAccountStatusHeaderXAdminSessionMax)
+})
+
+export const SetAdminAccountStatusBody = zod.object({
+  "status": zod.enum(['active', 'suspended'])
+})
+
+export const SetAdminAccountStatusResponse = zod.object({
+  "id": zod.string(),
+  "status": zod.enum(['active', 'suspended'])
+})
+
+
+/**
+ * @summary Approve or revoke image-generation access for a CloudPainter account
+ */
+export const setAdminGenerationAccessPathUserIdRegExp = new RegExp('^user_[A-Za-z0-9]{5,}$');
+
+
+export const SetAdminGenerationAccessParams = zod.object({
+  "userId": zod.coerce.string().regex(setAdminGenerationAccessPathUserIdRegExp)
+})
+
+export const setAdminGenerationAccessHeaderXAdminSessionMax = 256;
+
+
+
+export const SetAdminGenerationAccessHeader = zod.object({
+  "X-Admin-Session": zod.string().max(setAdminGenerationAccessHeaderXAdminSessionMax)
+})
+
+export const SetAdminGenerationAccessBody = zod.object({
+  "role": zod.enum(['normal', 'admin']),
+  "enabled": zod.boolean()
+})
+
+export const SetAdminGenerationAccessResponse = zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['normal', 'admin']),
+  "enabled": zod.boolean()
+})
+
+
+/**
  * @summary Hosted mask capability and account access, without inference
  */
 export const GetOutlineConfigResponse = zod.object({
@@ -76,8 +260,16 @@ export const GenerateOutlineResponse = zod.object({
 
 
 /**
- * @summary Generate one exploratory logo PNG from text only
+ * @summary Generate one account-budgeted exploratory logo PNG from text only
  */
+export const generateLogoImageHeaderXLogoSessionMax = 256;
+
+
+
+export const GenerateLogoImageHeader = zod.object({
+  "X-Logo-Session": zod.string().max(generateLogoImageHeaderXLogoSessionMax).describe('Must match the verified current Clerk session to prevent delayed requests crossing accounts.')
+})
+
 export const generateLogoImageBodyPromptMax = 1200;
 
 
@@ -166,6 +358,211 @@ export const SavePaletteResponse = zod.object({
   "hex": zod.string().regex(savePaletteResponseColorsItemHexRegExp)
 })).max(savePaletteResponseColorsMax)
 })
+
+
+export const GetSettingsHeader = zod.object({
+  "X-Settings-Session": zod.string().describe('Must match the verified current session so delayed requests cannot cross accounts.')
+})
+
+export const getSettingsResponseRevisionMin = 0;
+export const getSettingsResponseRevisionMax = 2147483647;
+
+export const getSettingsResponseSettingsTextSizeMin = 80;
+export const getSettingsResponseSettingsTextSizeMax = 140;
+export const getSettingsResponseSettingsTextSizeMultipleOf = 10;
+
+export const getSettingsResponseSettingsBrushSizeMax = 48;
+
+
+
+export const GetSettingsResponse = zod.object({
+  "revision": zod.number().int().min(getSettingsResponseRevisionMin).max(getSettingsResponseRevisionMax),
+  "settings": zod.object({
+  "textSize": zod.number().int().min(getSettingsResponseSettingsTextSizeMin).max(getSettingsResponseSettingsTextSizeMax).multipleOf(getSettingsResponseSettingsTextSizeMultipleOf),
+  "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
+  "brushStyle": zod.enum(['round', 'chisel', 'soft', 'dry']),
+  "brushSize": zod.number().int().min(1).max(getSettingsResponseSettingsBrushSizeMax)
+})
+})
+
+
+export const SaveSettingsHeader = zod.object({
+  "X-Settings-Session": zod.string().describe('Must match the verified current session so delayed requests cannot cross accounts.')
+})
+
+export const saveSettingsBodyRevisionMin = 0;
+export const saveSettingsBodyRevisionMax = 2147483647;
+
+export const saveSettingsBodySettingsTextSizeMin = 80;
+export const saveSettingsBodySettingsTextSizeMax = 140;
+export const saveSettingsBodySettingsTextSizeMultipleOf = 10;
+
+export const saveSettingsBodySettingsBrushSizeMax = 48;
+
+
+
+export const SaveSettingsBody = zod.object({
+  "revision": zod.number().int().min(saveSettingsBodyRevisionMin).max(saveSettingsBodyRevisionMax),
+  "settings": zod.object({
+  "textSize": zod.number().int().min(saveSettingsBodySettingsTextSizeMin).max(saveSettingsBodySettingsTextSizeMax).multipleOf(saveSettingsBodySettingsTextSizeMultipleOf),
+  "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
+  "brushStyle": zod.enum(['round', 'chisel', 'soft', 'dry']),
+  "brushSize": zod.number().int().min(1).max(saveSettingsBodySettingsBrushSizeMax)
+})
+})
+
+export const saveSettingsResponseRevisionMin = 0;
+export const saveSettingsResponseRevisionMax = 2147483647;
+
+export const saveSettingsResponseSettingsTextSizeMin = 80;
+export const saveSettingsResponseSettingsTextSizeMax = 140;
+export const saveSettingsResponseSettingsTextSizeMultipleOf = 10;
+
+export const saveSettingsResponseSettingsBrushSizeMax = 48;
+
+
+
+export const SaveSettingsResponse = zod.object({
+  "revision": zod.number().int().min(saveSettingsResponseRevisionMin).max(saveSettingsResponseRevisionMax),
+  "settings": zod.object({
+  "textSize": zod.number().int().min(saveSettingsResponseSettingsTextSizeMin).max(saveSettingsResponseSettingsTextSizeMax).multipleOf(saveSettingsResponseSettingsTextSizeMultipleOf),
+  "drawingTool": zod.enum(['brush', 'pencil', 'pen']),
+  "brushStyle": zod.enum(['round', 'chisel', 'soft', 'dry']),
+  "brushSize": zod.number().int().min(1).max(saveSettingsResponseSettingsBrushSizeMax)
+})
+})
+
+
+/**
+ * @summary List bounded sketch backups for the signed-in account
+ */
+export const listProjectBackupsHeaderXProjectSessionMax = 256;
+
+
+
+export const ListProjectBackupsHeader = zod.object({
+  "X-Project-Session": zod.string().max(listProjectBackupsHeaderXProjectSessionMax).describe('Must match the verified current Clerk session to prevent delayed requests crossing accounts.')
+})
+
+export const listProjectBackupsResponseBackupsItemTitleMax = 120;
+
+export const listProjectBackupsResponseBackupsItemSizeBytesMax = 2097152;
+
+export const listProjectBackupsResponseBackupsMax = 20;
+
+export const listProjectBackupsResponseTotalBytesMin = 0;
+export const listProjectBackupsResponseTotalBytesMax = 33554432;
+
+
+
+export const ListProjectBackupsResponse = zod.object({
+  "backups": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "title": zod.string().min(1).max(listProjectBackupsResponseBackupsItemTitleMax),
+  "sizeBytes": zod.number().int().min(1).max(listProjectBackupsResponseBackupsItemSizeBytesMax),
+  "createdAt": zod.coerce.date()
+})).max(listProjectBackupsResponseBackupsMax),
+  "totalBytes": zod.number().int().min(listProjectBackupsResponseTotalBytesMin).max(listProjectBackupsResponseTotalBytesMax),
+  "accountLimitBytes": zod.literal(33554432)
+})
+
+
+/**
+ * @summary Explicitly copy one editable sketch into the signed-in account
+ */
+export const createProjectBackupHeaderXProjectSessionMax = 256;
+
+
+
+export const CreateProjectBackupHeader = zod.object({
+  "X-Project-Session": zod.string().max(createProjectBackupHeaderXProjectSessionMax).describe('Must match the verified current Clerk session to prevent delayed requests crossing accounts.')
+})
+
+export const createProjectBackupBodyBackupMax = 2097152;
+
+
+
+export const CreateProjectBackupBody = zod.object({
+  "requestId": zod.string().uuid(),
+  "backup": zod.string().min(1).max(createProjectBackupBodyBackupMax).describe('Versioned CloudPainter project JSON; server enforces the UTF-8 byte limit.')
+})
+
+export const createProjectBackupResponseTitleMax = 120;
+
+export const createProjectBackupResponseSizeBytesMax = 2097152;
+
+
+
+export const CreateProjectBackupResponse = zod.object({
+  "id": zod.string().uuid(),
+  "title": zod.string().min(1).max(createProjectBackupResponseTitleMax),
+  "sizeBytes": zod.number().int().min(1).max(createProjectBackupResponseSizeBytesMax),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Read one account-owned sketch backup
+ */
+export const GetProjectBackupParams = zod.object({
+  "backupId": zod.coerce.string().uuid()
+})
+
+export const getProjectBackupHeaderXProjectSessionMax = 256;
+
+
+
+export const GetProjectBackupHeader = zod.object({
+  "X-Project-Session": zod.string().max(getProjectBackupHeaderXProjectSessionMax).describe('Must match the verified current Clerk session to prevent delayed requests crossing accounts.')
+})
+
+export const getProjectBackupResponseTitleMax = 120;
+
+export const getProjectBackupResponseSizeBytesMax = 2097152;
+
+export const getProjectBackupResponseBackupMax = 2097152;
+
+
+
+export const GetProjectBackupResponse = zod.object({
+  "id": zod.string().uuid(),
+  "title": zod.string().min(1).max(getProjectBackupResponseTitleMax),
+  "sizeBytes": zod.number().int().min(1).max(getProjectBackupResponseSizeBytesMax),
+  "createdAt": zod.coerce.date(),
+  "backup": zod.string().min(1).max(getProjectBackupResponseBackupMax)
+})
+
+
+/**
+ * @summary Delete one account-owned sketch backup
+ */
+export const DeleteProjectBackupParams = zod.object({
+  "backupId": zod.coerce.string().uuid()
+})
+
+export const deleteProjectBackupHeaderXProjectSessionMax = 256;
+
+
+
+export const DeleteProjectBackupHeader = zod.object({
+  "X-Project-Session": zod.string().max(deleteProjectBackupHeaderXProjectSessionMax).describe('Must match the verified current Clerk session to prevent delayed requests crossing accounts.')
+})
+
+export const DeleteProjectBackupResponse = zod.void()
+
+
+/**
+ * @summary Download a bounded archive of the signed-in account's uploaded sketch backups
+ */
+export const exportProjectBackupsHeaderXProjectSessionMax = 256;
+
+
+
+export const ExportProjectBackupsHeader = zod.object({
+  "X-Project-Session": zod.string().max(exportProjectBackupsHeaderXProjectSessionMax).describe('Must match the verified current Clerk session to prevent delayed requests crossing accounts.')
+})
+
+export const ExportProjectBackupsResponse = zod.unknown()
 
 
 /**

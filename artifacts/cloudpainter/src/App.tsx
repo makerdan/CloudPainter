@@ -5,6 +5,8 @@ import {
   Cloud,
   Copy,
   ClipboardPaste,
+  ChevronDown,
+  Download,
   Eye,
   EyeOff,
   Eraser,
@@ -17,6 +19,7 @@ import {
   PenTool,
   Minus,
   Plus,
+  PaintBucket,
   Redo2,
   RotateCcw,
   Save,
@@ -31,42 +34,48 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ActionTooltip, TooltipButton } from '@/components/tooltip-button';
 import { BrushDisclosure } from '@/components/BrushDisclosure';
 import NotFound from '@/pages/not-found';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { LogoCreationPanel } from '@/components/LogoCreationPanel';
-import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions } from '@/lib/imageDimensions';
+import { fitDimensionsWithinBounds, fitStageDimensions, getScaledImageDimensions, normalizeProjectDimensions } from '@/lib/imageDimensions';
 import { ImageGenerator } from '@/components/ImageGenerator';
 import { PoeUpscaleExport } from '@/components/PoeUpscaleExport';
 import { DrawingColorControl } from '@/components/DrawingColorControl';
 import { BrushStyleControl } from '@/components/BrushStyleControl';
 import { BRUSH_STYLES, renderStroke, type BrushStyle, type DrawingTool, type Point, type Stroke } from '@/lib/strokeRenderer';
-import { createInstrumentStroke, toolAfterColorSelection, TOOL_GUIDANCE, type DrawingInstrument } from '@/lib/drawingTools';
+import { BACKGROUND_TOOL_GUIDANCE, createInstrumentStroke, normalizePointerPressure, toolAfterColorSelection, TOOL_GUIDANCE, type DrawingInstrument } from '@/lib/drawingTools';
 import { AccountProvider, AccountControls, SignInPage, SignUpPage } from '@/components/Account';
+import { AccountSettingsProvider, useAccountSettings } from '@/components/AccountSettings';
+import { CloudProjectBackups } from '@/components/CloudProjectBackups';
+import SettingsPage from '@/components/SettingsPage';
 import { OutlinePanel } from '@/components/OutlinePanel';
 import { viewportToProject } from '@/lib/outlineGeometry';
-import { copyDrawing, pasteIntoLayers, renderDrawing, undoDrawing, redoDrawing, type DrawingClipboard, type DrawingEntry } from '@/lib/layerClipboard';
+import { clearDrawing, copyDrawing, hasDrawing, normalizeDrawingEntries, pasteIntoLayers, renderDrawing, undoDrawing, redoDrawing, type DrawingClipboard } from '@/lib/layerClipboard';
+import { editorDefaultsFromSettings } from '@/lib/settingsPersistence';
+import {
+  createProjectBackup as createEditableProjectBackup,
+  MAX_PROJECT_BACKUP_BYTES,
+  parseProjectBackup,
+  type EditableProject,
+  type ProjectBackupLayer,
+} from '@/lib/projectBackup';
+import AdminAccountsPage from '@/pages/AdminAccountsPage';
 
-type PaintLayer = {
-  id: string;
-  name: string;
-  visible: boolean;
-  opacity: number;
-  strokes: DrawingEntry[];
-  redo: DrawingEntry[];
-};
-type Project = {
-  image: string | null;
-  width: number;
-  height: number;
-  layers: PaintLayer[];
-  selectedLayerId: string;
-  title: string;
-  photoZoom: number;
-  photoPan: { x: number; y: number };
-};
+type PaintLayer = ProjectBackupLayer;
+type Project = EditableProject;
+type SavedProject = Project & { savedId: string };
 
+type ActivePhotoImport = {
+  id: number;
+  reader: FileReader;
+  image: HTMLImageElement | null;
+  stage: 'reading' | 'decoding' | 'storage';
+  finish: () => void;
+};
+const RECOVERED_PROJECTS = new WeakSet<Project>();
 const STORE_KEY = 'cloudpainter-project-v1';
 const PREVIOUS_PROJECT_KEY = 'cloudpainter-previous-project-v1';
 
@@ -74,6 +83,13 @@ const PROJECT_HISTORY_KEY = 'cloudpainter-project-history-v1';
 
 const STORAGE_WARNING_THRESHOLD = 0.8;
 const id = () => `layer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+const createSavedProjectId = (usedIds = new Set<string>()) => {
+  let savedId = '';
+  do {
+    savedId = `saved-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  } while (usedIds.has(savedId));
+  return savedId;
+};
 const createLayer = (name: string): PaintLayer => ({
   id: id(), name, visible: true, opacity: 1, strokes: [], redo: [],
 });
@@ -82,32 +98,116 @@ const freshProject = (): Project => {
   return {
     image: null, width: 1200, height: 800, layers: [layer], selectedLayerId: layer.id,
     title: 'Untitled idea', photoZoom: 1, photoPan: { x: 0, y: 0 },
+    referencePhotoVisible: true, referencePhotoOpacity: 100,
   };
 };
 
 function normalizeProjectView(project: Project): Project {
-  const candidate = project as Project & { photoZoom?: unknown; photoPan?: { x?: unknown; y?: unknown } | null };
+  let recovered = RECOVERED_PROJECTS.has(project);
+  const candidate = project as Project & {
+    width?: unknown;
+    height?: unknown;
+    layers?: unknown;
+    selectedLayerId?: unknown;
+    image?: unknown;
+    title?: unknown;
+    photoZoom?: unknown;
+    photoPan?: { x?: unknown; y?: unknown } | null;
+    referencePhotoVisible?: unknown;
+    referencePhotoOpacity?: unknown;
+  };
+  const dimensions = normalizeProjectDimensions(candidate.width, candidate.height);
+  if (candidate.width !== dimensions.width || candidate.height !== dimensions.height) recovered = true;
+  const layerIds = new Set<string>();
+  const layers = (Array.isArray(candidate.layers) ? candidate.layers : []).flatMap((value, index) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      recovered = true;
+      return [];
+    }
+    const layer = value as Record<string, unknown>;
+    const requestedId = typeof layer.id === 'string' && layer.id.length > 0 && layer.id.length <= 128
+      ? layer.id
+      : `recovered-layer-${index + 1}`;
+    if (requestedId !== layer.id) recovered = true;
+    let layerId = requestedId;
+    let suffix = 1;
+    while (layerIds.has(layerId)) {
+      layerId = `${requestedId}-${suffix}`;
+      suffix += 1;
+    }
+    if (layerId !== requestedId) recovered = true;
+    layerIds.add(layerId);
+    return [{
+      id: layerId,
+      name: typeof layer.name === 'string' && layer.name.trim() ? layer.name.slice(0, 120) : `Layer ${index + 1}`,
+      visible: typeof layer.visible === 'boolean' ? layer.visible : true,
+      opacity: typeof layer.opacity === 'number' && Number.isFinite(layer.opacity)
+        ? Math.max(0, Math.min(1, layer.opacity))
+        : 1,
+      strokes: normalizeDrawingEntries(layer.strokes, 0, () => { recovered = true; }),
+      redo: normalizeDrawingEntries(layer.redo, 0, () => { recovered = true; }),
+    }];
+  });
+  if (!layers.length) recovered = true;
+  const safeLayers = layers.length ? layers : [createLayer('Layer 1')];
   const photoZoom = typeof candidate.photoZoom === 'number' && Number.isFinite(candidate.photoZoom)
     ? Math.max(1, Math.min(4, candidate.photoZoom))
     : 1;
-  const photoPan = candidate.photoPan && typeof candidate.photoPan === 'object'
+  const photoPan = candidate.photoPan && typeof candidate.photoPan === 'object' && !Array.isArray(candidate.photoPan)
     ? {
         x: typeof candidate.photoPan.x === 'number' && Number.isFinite(candidate.photoPan.x) ? candidate.photoPan.x : 0,
         y: typeof candidate.photoPan.y === 'number' && Number.isFinite(candidate.photoPan.y) ? candidate.photoPan.y : 0,
       }
     : { x: 0, y: 0 };
-  return { ...project, photoZoom, photoPan };
+  const referencePhotoVisible = typeof candidate.referencePhotoVisible === 'boolean'
+    ? candidate.referencePhotoVisible
+    : true;
+  const referencePhotoOpacity = typeof candidate.referencePhotoOpacity === 'number'
+    && Number.isFinite(candidate.referencePhotoOpacity)
+    ? Math.round(Math.max(0, Math.min(100, candidate.referencePhotoOpacity)))
+    : 100;
+  const normalized: Project = {
+    ...project,
+    image: typeof candidate.image === 'string' && candidate.image ? candidate.image : null,
+    width: dimensions.width,
+    height: dimensions.height,
+    layers: safeLayers,
+    selectedLayerId: typeof candidate.selectedLayerId === 'string'
+      && safeLayers.some(layer => layer.id === candidate.selectedLayerId)
+      ? candidate.selectedLayerId
+      : safeLayers[0].id,
+    title: typeof candidate.title === 'string' && candidate.title.trim() ? candidate.title.slice(0, 120) : 'Untitled idea',
+    photoZoom, photoPan, referencePhotoVisible, referencePhotoOpacity,
+  };
+  if (recovered) RECOVERED_PROJECTS.add(normalized);
+  return normalized;
 }
 
-function readProject(): Project {
+function readProjectSnapshot(): { project: Project; snapshot: string | null; recovered: boolean } {
+  let snapshot: string | null = null;
   try {
-    const saved = localStorage.getItem(STORE_KEY);
-    if (saved) {
-      const project = JSON.parse(saved) as Project;
-      if (project && Array.isArray(project.layers) && project.layers.length) return normalizeProjectView(project);
+    snapshot = localStorage.getItem(STORE_KEY);
+    if (snapshot) {
+      const project = JSON.parse(snapshot) as Project;
+      if (project && Array.isArray(project.layers) && project.layers.length) {
+        const normalized = normalizeProjectView(project);
+        return { project: normalized, snapshot, recovered: RECOVERED_PROJECTS.has(normalized) };
+      }
     }
   } catch {
     // Corrupt or unavailable browser storage starts a fresh local project.
+  }
+  return { project: freshProject(), snapshot, recovered: false };
+}
+
+function projectFromSnapshot(snapshot: string | null): Project {
+  if (snapshot) {
+    try {
+      const project = JSON.parse(snapshot) as Project;
+      if (project && Array.isArray(project.layers) && project.layers.length) return normalizeProjectView(project);
+    } catch {
+      // A cleared or unreadable shared snapshot is treated as a fresh project.
+    }
   }
   return freshProject();
 }
@@ -125,24 +225,57 @@ function readPreviousProject(): Project | null {
   return null;
 }
 
-function readProjectHistory(): Project[] {
+function readProjectHistory(): SavedProject[] {
+  return readProjectHistoryState().projects;
+}
+
+function readProjectHistoryState(): {
+  projects: SavedProject[];
+  snapshot: string | null;
+  migratedSnapshot: string | null;
+} {
+  let snapshot: string | null = null;
   try {
-    const saved = localStorage.getItem(PROJECT_HISTORY_KEY);
-    if (saved) {
-      const history = JSON.parse(saved) as unknown;
+    snapshot = localStorage.getItem(PROJECT_HISTORY_KEY);
+    if (snapshot) {
+      const history = JSON.parse(snapshot) as unknown;
       if (Array.isArray(history)) {
-        return history
-          .filter((project): project is Project =>
-            Boolean(project && Array.isArray(project.layers) && project.layers.length),
+        const usedIds = new Set<string>();
+        let needsMigration = false;
+        const persistedHistory = history.map(project => {
+          if (!project || typeof project !== 'object' || !Array.isArray((project as Project).layers)
+            || !(project as Project).layers.length) return project;
+          const savedProject = project as SavedProject;
+          const savedId = typeof savedProject.savedId === 'string' && savedProject.savedId
+            && !usedIds.has(savedProject.savedId)
+            ? savedProject.savedId
+            : createSavedProjectId(usedIds);
+          if (savedId !== savedProject.savedId) needsMigration = true;
+          usedIds.add(savedId);
+          return { ...project, savedId };
+        });
+        const projects = persistedHistory
+          .filter((project): project is SavedProject =>
+            Boolean(project && typeof project === 'object' && Array.isArray((project as Project).layers)
+              && (project as Project).layers.length),
           )
-          .map(normalizeProjectView);
+          .map(project => ({ ...normalizeProjectView(project), savedId: project.savedId }));
+        return {
+          projects,
+          snapshot,
+          migratedSnapshot: needsMigration ? JSON.stringify(persistedHistory) : null,
+        };
       }
     }
   } catch {
     // Fall back to the earlier single-project recovery slot.
   }
   const previousProject = readPreviousProject();
-  return previousProject ? [previousProject] : [];
+  return {
+    projects: previousProject ? [{ ...previousProject, savedId: createSavedProjectId() }] : [],
+    snapshot,
+    migratedSnapshot: null,
+  };
 }
 
 type ExportSize = '1' | '2' | 'letter' | 'a4';
@@ -271,7 +404,7 @@ async function composeProjectCanvas(
   if (!context) throw new Error('Could not create the PNG export. Try again or use a smaller canvas.');
   context.setTransform(layout.scale, 0, 0, layout.scale, layout.offsetX, layout.offsetY);
 
-  if (project.image) {
+  if (project.image && project.referencePhotoVisible && project.referencePhotoOpacity > 0) {
     const photo = new Image();
     await new Promise<void>((resolve, reject) => {
       photo.onload = () => resolve();
@@ -280,8 +413,11 @@ async function composeProjectCanvas(
     });
     try {
       const imageSize = fitDimensionsWithinBounds(photo.naturalWidth, photo.naturalHeight, project.width, project.height);
+      context.globalAlpha = project.referencePhotoOpacity / 100;
       context.drawImage(photo, (project.width - imageSize.width) / 2, (project.height - imageSize.height) / 2, imageSize.width, imageSize.height);
+      context.globalAlpha = 1;
     } catch {
+      context.globalAlpha = 1;
       throw new Error('Could not include the reference photo in the PNG export. Try again or remove the photo before exporting.');
     }
   }
@@ -300,26 +436,32 @@ async function composeProjectCanvas(
   return { canvas, scale: layout.scale };
 }
 
+async function createPdfArtworkPreview(
+  project: Project,
+  layerCanvases: Record<string, HTMLCanvasElement | null>,
+): Promise<string> {
+  const { canvas: artwork } = await composeProjectCanvas(project, layerCanvases, '1');
+  let previewScale = Math.min(1, 240 / Math.max(artwork.width, artwork.height));
+  const shortestSide = Math.min(artwork.width, artwork.height);
+  if (shortestSide * previewScale < 1) previewScale = 1 / shortestSide;
+  const preview = document.createElement('canvas');
+  preview.width = Math.max(1, Math.round(artwork.width * previewScale));
+  preview.height = Math.max(1, Math.round(artwork.height * previewScale));
+  const context = preview.getContext('2d');
+  if (!context) throw new Error('Could not prepare the PDF layout preview.');
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, preview.width, preview.height);
+  context.drawImage(artwork, 0, 0, preview.width, preview.height);
+  return preview.toDataURL('image/jpeg', 0.82);
+}
+
 function createPrintPdf(
   source: HTMLCanvasElement,
   paperSize: PdfPaperSize,
   orientation: PdfOrientation,
   safeMargin: PdfSafeMargin,
 ): Blob {
-  const portraitPage = paperSize === 'letter'
-    ? { width: 612, height: 792 }
-    : { width: 595.28, height: 841.89 };
-  const page = orientation === 'landscape'
-    ? { width: portraitPage.height, height: portraitPage.width }
-    : portraitPage;
-  const margin = PDF_SAFE_MARGIN_POINTS[safeMargin];
-  const printableWidth = page.width - margin * 2;
-  const printableHeight = page.height - margin * 2;
-  const scale = Math.min(printableWidth / source.width, printableHeight / source.height);
-  const artworkWidth = source.width * scale;
-  const artworkHeight = source.height * scale;
-  const artworkX = margin + (printableWidth - artworkWidth) / 2;
-  const artworkY = margin + (printableHeight - artworkHeight) / 2;
+  const layout = getPdfLayout(source.width, source.height, paperSize, orientation, safeMargin);
 
   const flattened = document.createElement('canvas');
   flattened.width = source.width;
@@ -337,7 +479,7 @@ function createPrintPdf(
   }
   const jpegBytes = Uint8Array.from(atob(jpegUrl.slice(jpegPrefix.length)), character => character.charCodeAt(0));
   const encode = (value: string) => new TextEncoder().encode(value);
-  const imagePlacement = `q ${artworkWidth.toFixed(4)} 0 0 ${artworkHeight.toFixed(4)} ${artworkX.toFixed(4)} ${artworkY.toFixed(4)} cm /Im0 Do Q\n`;
+  const imagePlacement = `q ${layout.artworkWidth.toFixed(4)} 0 0 ${layout.artworkHeight.toFixed(4)} ${layout.artworkX.toFixed(4)} ${layout.artworkY.toFixed(4)} cm /Im0 Do Q\n`;
   const imagePlacementBytes = encode(imagePlacement);
   const chunks: Uint8Array[] = [encode('%PDF-1.4\n')];
   const offsets = [0];
@@ -353,7 +495,7 @@ function createPrintPdf(
   appendObject(1, [encode('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n')]);
   appendObject(2, [encode('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n')]);
   appendObject(3, [encode(
-    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.width} ${page.height}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`,
+    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${layout.pageWidth} ${layout.pageHeight}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`,
   )]);
   appendObject(4, [
     encode(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${flattened.width} /Height ${flattened.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.byteLength} >>\nstream\n`),
@@ -383,25 +525,89 @@ function createPrintPdf(
   pdfBytes.set(xrefBytes, cursor);
   return new Blob([pdfBytes.buffer], { type: 'application/pdf' });
 }
+
+function getPdfLayout(
+  sourceWidth: number,
+  sourceHeight: number,
+  paperSize: PdfPaperSize,
+  orientation: PdfOrientation,
+  safeMargin: PdfSafeMargin,
+) {
+  const portraitPage = paperSize === 'letter'
+    ? { width: 612, height: 792 }
+    : { width: 595.28, height: 841.89 };
+  const page = orientation === 'landscape'
+    ? { width: portraitPage.height, height: portraitPage.width }
+    : portraitPage;
+  const margin = PDF_SAFE_MARGIN_POINTS[safeMargin];
+  const printableWidth = page.width - margin * 2;
+  const printableHeight = page.height - margin * 2;
+  const scale = Math.min(printableWidth / sourceWidth, printableHeight / sourceHeight);
+  const artworkWidth = sourceWidth * scale;
+  const artworkHeight = sourceHeight * scale;
+  const artworkX = margin + (printableWidth - artworkWidth) / 2;
+  const artworkY = margin + (printableHeight - artworkHeight) / 2;
+  return {
+    pageWidth: page.width,
+    pageHeight: page.height,
+    margin,
+    printableWidth,
+    printableHeight,
+    artworkWidth,
+    artworkHeight,
+    artworkX,
+    artworkY,
+    effectivePpi: 72 / scale,
+  };
+}
+
 function Home() {
-  const [project, setProject] = useState<Project>(readProject);
-  const [projectHistory, setProjectHistory] = useState<Project[]>(readProjectHistory);
+  const accountSettings = useAccountSettings();
+  const [initialProject] = useState(readProjectSnapshot);
+  const [project, setProject] = useState<Project>(initialProject.project);
+  const persistedProjectSnapshot = useRef<string | null>(initialProject.snapshot);
+  const hasUnsavedProjectChanges = useRef(false);
+  const projectConflict = useRef(false);
+  const [storageConflict, setStorageConflict] = useState(false);
+  const [initialHistory] = useState(readProjectHistoryState);
+  const [projectHistory, setProjectHistory] = useState<SavedProject[]>(initialHistory.projects);
   const latestProject = useRef(project);
   latestProject.current = project;
   const [tool, setTool] = useState<DrawingTool>('brush');
+  const [backgroundMode, setBackgroundMode] = useState(false);
   const lastDrawingTool = useRef<DrawingInstrument>('brush');
-  const [color, setColor] = useState('#315d4d');
+  const editorDefaultsApplied = useRef(false);
+  const drawingDefaultsTouched = useRef(false);
+  const [color, setColor] = useState('#000000');
   const [toolSizes, setToolSizes] = useState<Record<DrawingTool, number>>({ brush: 8, pencil: 3, pen: 3, eraser: 16 });
+  const [penPressureSensitivity, setPenPressureSensitivity] = useState(50);
   const brushSize = toolSizes[tool];
   const selectTool = (nextTool: DrawingTool) => {
+    drawingDefaultsTouched.current = true;
     if (nextTool !== 'eraser') lastDrawingTool.current = nextTool;
+    setBackgroundMode(false);
     setTool(nextTool);
   };
+  const selectBackgroundTool = () => {
+    drawingDefaultsTouched.current = true;
+    setBackgroundMode(true);
+  };
   const [brushStyle, setBrushStyle] = useState<BrushStyle>('round');
+  useEffect(() => {
+    if (!accountSettings.ready || !accountSettings.signedIn || editorDefaultsApplied.current) return;
+    editorDefaultsApplied.current = true;
+    if (drawingDefaultsTouched.current) return;
+    const defaults = editorDefaultsFromSettings(accountSettings.settings, toolSizes);
+    setTool(defaults.tool);
+    lastDrawingTool.current = defaults.tool;
+    setBrushStyle(defaults.brushStyle);
+    setToolSizes(defaults.toolSizes);
+  }, [accountSettings.ready, accountSettings.signedIn, accountSettings.settings]);
   const [draft, setDraft] = useState<{ layerId: string; stroke: Stroke } | null>(null);
   const [savedStatus, setSavedStatus] = useState('Saved in this browser');
   const [storageEstimate, setStorageEstimate] = useState<BrowserStorageEstimate | null>(null);
   const [toast, setToast] = useState('');
+  const [photoLoading, setPhotoLoading] = useState(false);
   const [drawingClipboard, setDrawingClipboard] = useState<DrawingClipboard | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -411,9 +617,13 @@ function Home() {
   const [pdfPaperSize, setPdfPaperSize] = useState<PdfPaperSize>('letter');
   const [pdfOrientation, setPdfOrientation] = useState<PdfOrientation>('portrait');
   const [pdfSafeMargin, setPdfSafeMargin] = useState<PdfSafeMargin>('0.5');
+  const [pdfArtworkPreview, setPdfArtworkPreview] = useState<string | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [projectBackupLoading, setProjectBackupLoading] = useState(false);
   const [panMode, setPanMode] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const projectBackupInput = useRef<HTMLInputElement>(null);
   const stageWrapRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
@@ -421,6 +631,10 @@ function Home() {
   const [outline, setOutline] = useState<{ image: string; key: string; photo: string; layerId: string } | null>(null);
   const [outlineOpening, setOutlineOpening] = useState(false);
   const outlineOpenId = useRef(0);
+  const photoImportsInProgress = useRef(0);
+  const photoImportId = useRef(0);
+  const activePhotoImport = useRef<ActivePhotoImport | null>(null);
+  const photoImportFinishers = useRef(new Map<number, () => void>());
   const drawingRef = useRef(false);
   const panningRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const touchPointersRef = useRef(new Map<number, Point>());
@@ -431,6 +645,14 @@ function Home() {
   } | null>(null);
   const toastTimer = useRef<number | undefined>(undefined);
   const selectedLayer = project.layers.find(layer => layer.id === project.selectedLayerId) ?? project.layers[0];
+  const pdfLayout = getPdfLayout(
+    project.width,
+    project.height,
+    pdfPaperSize,
+    pdfOrientation,
+    pdfSafeMargin,
+  );
+  const pdfEffectivePpi = Math.round(pdfLayout.effectivePpi);
   const visibleLayers = useMemo(() => [...project.layers].reverse(), [project.layers]);
   const stageSize = fitStageDimensions(
     project.width,
@@ -535,10 +757,31 @@ function Home() {
     toastTimer.current = window.setTimeout(() => setToast(''), 2600);
   }, []);
 
+  useEffect(() => {
+    if (!initialHistory.migratedSnapshot) return;
+    try {
+      if (localStorage.getItem(PROJECT_HISTORY_KEY) !== initialHistory.snapshot) return;
+      localStorage.setItem(PROJECT_HISTORY_KEY, initialHistory.migratedSnapshot);
+    } catch {
+      // Keep the loaded sketches available; a later successful history write can persist their IDs.
+    }
+  }, [initialHistory]);
+
+  useEffect(() => {
+    if (initialProject.recovered) announce(RECOVERY_MESSAGE);
+  }, [initialProject.recovered, announce]);
+
   const refreshStorageEstimate = useCallback(async () => {
     const estimate = await readBrowserStorageEstimate();
     setStorageEstimate(estimate);
     return estimate;
+  }, []);
+
+  const reportProjectConflict = useCallback(() => {
+    projectConflict.current = true;
+    hasUnsavedProjectChanges.current = true;
+    setStorageConflict(true);
+    setSavedStatus('Changes from another tab need attention');
   }, []);
 
   useEffect(() => {
@@ -546,28 +789,126 @@ function Home() {
   }, [refreshStorageEstimate]);
 
   useEffect(() => {
+    const detectProjectChange = (event: StorageEvent) => {
+      if (event.key !== STORE_KEY && event.key !== null) return;
+      try {
+        const currentSnapshot = localStorage.getItem(STORE_KEY);
+        if (currentSnapshot === persistedProjectSnapshot.current) return;
+        if (currentSnapshot === JSON.stringify(latestProject.current)) {
+          persistedProjectSnapshot.current = currentSnapshot;
+          hasUnsavedProjectChanges.current = false;
+          setSavedStatus('Saved in this browser');
+          return;
+        }
+        reportProjectConflict();
+      } catch {
+        setSavedStatus('Could not check changes from another tab');
+      }
+    };
+    window.addEventListener('storage', detectProjectChange);
+    return () => window.removeEventListener('storage', detectProjectChange);
+  }, [reportProjectConflict]);
+
+  useEffect(() => {
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedProjectChanges.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeLeaving);
+    return () => window.removeEventListener('beforeunload', warnBeforeLeaving);
+  }, []);
+
+  useEffect(() => {
+    if (draft) {
+      hasUnsavedProjectChanges.current = true;
+    } else if (JSON.stringify(project) === persistedProjectSnapshot.current) {
+      hasUnsavedProjectChanges.current = false;
+    }
+  }, [draft, project]);
+
+  const persistProjectIfCurrent = useCallback((snapshot: Project) => {
+    if (projectConflict.current) return;
+    try {
+      const currentSnapshot = localStorage.getItem(STORE_KEY);
+      const serialized = JSON.stringify(snapshot);
+      if (currentSnapshot !== persistedProjectSnapshot.current) {
+        if (currentSnapshot === serialized) {
+          persistedProjectSnapshot.current = currentSnapshot;
+          hasUnsavedProjectChanges.current = false;
+          setSavedStatus('Saved in this browser');
+          return;
+        }
+        reportProjectConflict();
+        return;
+      }
+      localStorage.setItem(STORE_KEY, serialized);
+      persistedProjectSnapshot.current = serialized;
+      hasUnsavedProjectChanges.current = false;
+      setSavedStatus('Saved in this browser');
+      void refreshStorageEstimate();
+    } catch {
+      hasUnsavedProjectChanges.current = true;
+      setSavedStatus('Storage is full');
+    }
+  }, [refreshStorageEstimate, reportProjectConflict]);
+
+  const reloadSharedProject = () => {
+    try {
+      const snapshot = localStorage.getItem(STORE_KEY);
+      persistedProjectSnapshot.current = snapshot;
+      hasUnsavedProjectChanges.current = false;
+      projectConflict.current = false;
+      setStorageConflict(false);
+      setProject(projectFromSnapshot(snapshot));
+      announce('Loaded the newer shared sketch.');
+    } catch {
+      announce('Could not reload the shared sketch. Your current version is unchanged.');
+    }
+  };
+
+  const preserveLocalProject = () => {
+    try {
+      const snapshot = localStorage.getItem(STORE_KEY);
+      const currentProject = latestProject.current;
+      const preservedProject = {
+        ...currentProject,
+        title: currentProject.title.endsWith(' (your version)')
+          ? currentProject.title
+          : `${currentProject.title} (your version)`,
+      };
+      const nextHistory = withSavedProject(readProjectHistory(), preservedProject);
+      localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
+      persistedProjectSnapshot.current = snapshot;
+      hasUnsavedProjectChanges.current = false;
+      projectConflict.current = false;
+      setStorageConflict(false);
+      setProjectHistory(nextHistory);
+      setProject(projectFromSnapshot(snapshot));
+      announce('Your version was saved separately in Saved sketches. The newer shared sketch is now open.');
+    } catch {
+      announce('Could not save your version separately. Your sketch and the newer shared version are unchanged.');
+    }
+  };
+
+  useEffect(() => {
+    if (projectConflict.current) return;
+    hasUnsavedProjectChanges.current = JSON.stringify(project) !== persistedProjectSnapshot.current;
     setSavedStatus('Saving…');
     const timer = window.setTimeout(() => {
-      try {
-        localStorage.setItem(STORE_KEY, JSON.stringify(project));
-        setSavedStatus('Saved in this browser');
-        void refreshStorageEstimate();
-      } catch {
-        setSavedStatus('Storage is full');
-      }
+      persistProjectIfCurrent(project);
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [project, refreshStorageEstimate]);
+  }, [project, persistProjectIfCurrent]);
 
   useEffect(() => {
     // Account navigation must not cancel the last debounced project save.
     const flush = () => {
-      try { localStorage.setItem(STORE_KEY, JSON.stringify(latestProject.current)); }
-      catch { setSavedStatus('Storage is full'); }
+      persistProjectIfCurrent(latestProject.current);
     };
     window.addEventListener('pagehide', flush);
     return () => { window.removeEventListener('pagehide', flush); flush(); };
-  }, []);
+  }, [persistProjectIfCurrent]);
 
   useEffect(() => {
     project.layers.forEach(layer => {
@@ -583,6 +924,23 @@ function Home() {
     });
   }, [project.layers, project.width, project.height, draft, renderStroke]);
 
+  useEffect(() => {
+    if (!exportMenuOpen) {
+      setPdfArtworkPreview(null);
+      return;
+    }
+    let current = true;
+    setPdfArtworkPreview(null);
+    void createPdfArtworkPreview(project, canvasRefs.current)
+      .then(preview => {
+        if (current) setPdfArtworkPreview(preview);
+      })
+      .catch(() => {
+        if (current) setPdfArtworkPreview(null);
+      });
+    return () => { current = false; };
+  }, [exportMenuOpen, project]);
+
   const updateProject = (updater: (current: Project) => Project) => setProject(current => updater(current));
   const setPhotoView = (zoom: number, pan: { x: number; y: number }) => updateProject(current => {
     if (current.photoZoom === zoom && current.photoPan.x === pan.x && current.photoPan.y === pan.y) return current;
@@ -593,6 +951,42 @@ function Home() {
   };
 
   const openPhoto = () => fileInput.current?.click();
+  const invalidatePhotoImports = (keepStorageWaiters = false) => {
+    photoImportId.current += 1;
+    const activeImport = activePhotoImport.current;
+    activePhotoImport.current = null;
+    if (activeImport) {
+      activeImport.reader.onload = null;
+      activeImport.reader.onerror = null;
+      activeImport.reader.onabort = null;
+      if (activeImport.reader.readyState === FileReader.LOADING) {
+        try {
+          activeImport.reader.abort();
+        } catch {
+          // A read may finish between the ready-state check and abort().
+        }
+      }
+      if (activeImport.image) {
+        activeImport.image.onload = null;
+        activeImport.image.onerror = null;
+        try {
+          activeImport.image.src = '';
+        } catch {
+          // The import is invalidated even if the browser cannot clear the image source.
+        }
+      }
+      if (!keepStorageWaiters || activeImport.stage !== 'storage') activeImport.finish();
+    }
+    if (!keepStorageWaiters) {
+      for (const finish of [...photoImportFinishers.current.values()]) finish();
+    }
+    setPhotoLoading(photoImportsInProgress.current > 0);
+  };
+  const cancelPhotoImport = () => {
+    if (!photoLoading) return;
+    invalidatePhotoImports();
+    announce('Photo import cancelled. Your sketch is unchanged.');
+  };
   const useGeneratedReference = (source: string, prompt: string): Promise<void> => new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = async () => {
@@ -601,6 +995,7 @@ function Home() {
       const nextProject: Project = {
         image: source, width, height, layers: [layer], selectedLayerId: layer.id,
         title: prompt.slice(0, 42) || 'Generated idea', photoZoom: 1, photoPan: { x: 0, y: 0 },
+        referencePhotoVisible: true, referencePhotoOpacity: 100,
       };
       const estimate = await refreshStorageEstimate();
       const currentProject = latestProject.current;
@@ -626,11 +1021,11 @@ function Home() {
     image.onerror = () => reject(new Error('Generated image could not be opened.'));
     image.src = source;
   });
-  const restoreProject = async (savedProject: Project) => {
+  const restoreProject = async (savedProject: SavedProject) => {
     const estimate = await refreshStorageEstimate();
     const currentProject = latestProject.current;
     const nextHistory = withSavedProject(projectHistory, currentProject);
-    const nextProject = normalizeProjectView(savedProject);
+    const nextProject = normalizeProjectView(projectWithoutSavedId(savedProject));
     if (!confirmHistoryWriteIfStorageIsLow(estimate, nextProject, nextHistory)) return;
     try {
       localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
@@ -643,10 +1038,16 @@ function Home() {
     setDrawingClipboard(null);
     setProject(nextProject);
     void refreshStorageEstimate();
-    announce(`Restored “${savedProject.title}”.`);
+    announce(RECOVERED_PROJECTS.has(nextProject)
+      ? 'Some saved sketch data was invalid and has been repaired or skipped. The remaining artwork was restored.'
+      : `Restored “${savedProject.title}”.`);
   };
-  const deleteSavedProject = (index: number) => {
-    const nextHistory = projectHistory.filter((_, currentIndex) => currentIndex !== index);
+  const deleteSavedProject = (savedId: string) => {
+    if (!projectHistory.some(savedProject => savedProject.savedId === savedId)) {
+      announce('Could not delete this saved sketch. Nothing changed.');
+      return;
+    }
+    const nextHistory = projectHistory.filter(savedProject => savedProject.savedId !== savedId);
     try {
       localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
     } catch {
@@ -659,42 +1060,114 @@ function Home() {
   const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    invalidatePhotoImports(true);
+    const importId = photoImportId.current;
     if (!file.type.startsWith('image/')) {
       announce('Choose an image file to begin.');
       event.target.value = '';
       return;
     }
+    photoImportsInProgress.current += 1;
+    setPhotoLoading(true);
+    let importFinished = false;
+    const finishImport = () => {
+      if (importFinished) return;
+      importFinished = true;
+      photoImportsInProgress.current = Math.max(0, photoImportsInProgress.current - 1);
+      photoImportFinishers.current.delete(importId);
+      if (activePhotoImport.current?.id === importId) activePhotoImport.current = null;
+      setPhotoLoading(photoImportsInProgress.current > 0);
+    };
     const reader = new FileReader();
+    const pendingImport: ActivePhotoImport = {
+      id: importId, reader, image: null, stage: 'reading', finish: finishImport,
+    };
+    activePhotoImport.current = pendingImport;
+    photoImportFinishers.current.set(importId, finishImport);
     reader.onload = () => {
+      if (importId !== photoImportId.current) {
+        finishImport();
+        return;
+      }
+      const source = String(reader.result);
       const image = new Image();
-      image.onload = () => {
+      pendingImport.image = image;
+      pendingImport.stage = 'decoding';
+      image.onload = async () => {
+        if (importId !== photoImportId.current) {
+          finishImport();
+          return;
+        }
+        pendingImport.stage = 'storage';
         const { width, height } = getScaledImageDimensions(image.naturalWidth, image.naturalHeight);
         const layer = createLayer('Sketch layer');
-        setPanMode(false);
-        setDrawingClipboard(null);
-        setProject(current => ({
-          ...current, image: String(reader.result), width, height,
+        const estimate = await refreshStorageEstimate();
+        if (importId !== photoImportId.current) {
+          finishImport();
+          return;
+        }
+        const currentProject = latestProject.current;
+        const nextProject: Project = {
+          ...currentProject, image: source, width, height,
           layers: [layer], selectedLayerId: layer.id,
           title: file.name.replace(/\.[^.]+$/, '').slice(0, 42) || 'Untitled idea',
           photoZoom: 1, photoPan: { x: 0, y: 0 },
-        }));
-        announce('Photo added. Your original stays untouched.');
+          referencePhotoVisible: true, referencePhotoOpacity: 100,
+        };
+        const nextHistory = withSavedProject(readProjectHistory(), currentProject);
+        if (!confirmHistoryWriteIfStorageIsLow(estimate, nextProject, nextHistory)) {
+          finishImport();
+          announce('Photo replacement cancelled. Your sketch is unchanged.');
+          return;
+        }
+        try {
+          localStorage.setItem(PROJECT_HISTORY_KEY, JSON.stringify(nextHistory));
+        } catch {
+          finishImport();
+          announce('Could not save a recovery copy of your current sketch. Your project is unchanged.');
+          return;
+        }
+        setProjectHistory(nextHistory);
+        setPanMode(false);
+        setDrawingClipboard(null);
+        setProject(nextProject);
+        finishImport();
+        announce('Photo added. Your previous sketch is saved in Saved sketches.');
       };
-      image.onerror = () => announce('That photo could not be opened. Try another image.');
-      image.src = String(reader.result);
+      image.onerror = () => {
+        finishImport();
+        if (importId === photoImportId.current) announce('That photo could not be opened. Try another image.');
+      };
+      try {
+        image.src = source;
+      } catch {
+        finishImport();
+        if (importId === photoImportId.current) announce('That photo could not be opened. Try another image.');
+      }
     };
-    reader.onerror = () => announce('Could not read that file. Please try again.');
-    reader.readAsDataURL(file);
+    const handleReadError = () => {
+      finishImport();
+      if (importId === photoImportId.current) announce('Could not read that file. Please try again.');
+    };
+    reader.onerror = handleReadError;
+    reader.onabort = handleReadError;
+    try {
+      reader.readAsDataURL(file);
+    } catch {
+      handleReadError();
+    }
     event.target.value = '';
   };
 
   const startBlank = () => {
+    invalidatePhotoImports();
     setDrawingClipboard(null);
     const layer = createLayer('Layer 1');
     setPanMode(false);
     setProject(current => ({
       ...current, image: null, width: 1200, height: 800, layers: [layer], selectedLayerId: layer.id,
       title: 'Untitled idea', photoZoom: 1, photoPan: { x: 0, y: 0 },
+      referencePhotoVisible: true, referencePhotoOpacity: 100,
     }));
     announce('A fresh transparent canvas is ready.');
   };
@@ -708,12 +1181,23 @@ function Home() {
   };
   const beginStroke = (event: PointerEvent<HTMLCanvasElement>, layer: PaintLayer) => {
     if (event.button !== 0 || !layer.visible) return;
+    if (backgroundMode) {
+      if (panMode || layer.id !== project.selectedLayerId) return;
+      changeLayer(layer.id, current => current.visible
+        ? { ...current, strokes: [...current.strokes, { kind: 'background-fill', color }], redo: [] }
+        : current);
+      return;
+    }
     event.currentTarget.setPointerCapture(event.pointerId);
     drawingRef.current = true;
     const point = pointFromEvent(event);
     setDraft({
       layerId: layer.id,
-      stroke: createInstrumentStroke(tool, point, color, brushSize * (project.width / stageSize.width), brushStyle, Math.floor(Math.random() * 4294967296)),
+      stroke: createInstrumentStroke(
+        tool, point, color, brushSize * (project.width / stageSize.width), brushStyle,
+        Math.floor(Math.random() * 4294967296), normalizePointerPressure(event.pointerType, event.pressure),
+        penPressureSensitivity,
+      ),
     });
   };
   const beginPhotoPan = (event: PointerEvent<HTMLDivElement>) => {
@@ -818,7 +1302,13 @@ function Home() {
       const last = current.stroke.points[current.stroke.points.length - 1];
       // Stationary touch/pointer events must not grow the stroke or darken its texture.
       if (last.x === point.x && last.y === point.y) return current;
-      return { ...current, stroke: { ...current.stroke, points: [...current.stroke.points, point] } };
+      const pressure = current.stroke.instrument?.kind === 'pen' && current.stroke.instrument.version === 2
+        ? { ...current.stroke.pressure!, samples: [...current.stroke.pressure!.samples, normalizePointerPressure(event.pointerType, event.pressure)] }
+        : current.stroke.pressure;
+      return {
+        ...current,
+        stroke: { ...current.stroke, points: [...current.stroke.points, point], ...(pressure ? { pressure } : {}) },
+      };
     });
   };
   const finishStroke = () => {
@@ -826,6 +1316,11 @@ function Home() {
     drawingRef.current = false;
     const finished = draft;
     changeLayer(finished.layerId, layer => ({ ...layer, strokes: [...layer.strokes, finished.stroke], redo: [] }));
+    setDraft(null);
+  };
+  const cancelStroke = () => {
+    if (!drawingRef.current) return;
+    drawingRef.current = false;
     setDraft(null);
   };
 
@@ -838,6 +1333,7 @@ function Home() {
     changeLayer(selectedLayer.id, redoDrawing);
   };
   const clipboardLayer = project.layers.find(layer => layer.id === project.selectedLayerId);
+  const canCopyLayerDrawing = hasDrawing(clipboardLayer);
   const copyLayerDrawing = () => {
     const snapshot = copyDrawing(clipboardLayer);
     if (!snapshot) { setToast('Nothing to copy: select a layer with drawings.'); return; }
@@ -893,6 +1389,154 @@ function Home() {
     if (nextZoom === 1) setPanMode(false);
   };
 
+  const exportProjectBackup = () => {
+    try {
+      const contents = createEditableProjectBackup(project);
+      const downloadUrl = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
+      const link = document.createElement('a');
+      const title = project.title.trim().replace(/[^\w-]+/g, '-') || 'cloudpainter-idea';
+      link.download = `${title}.cloudpainter.json`;
+      link.href = downloadUrl;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      announce('Editable project backup downloaded. It stays on your device.');
+    } catch (error) {
+      announce(error instanceof Error ? error.message : 'Could not create this project backup.');
+    }
+  };
+
+  const applyProjectBackupContents = async (contents: string, photoRequestAtStart: number): Promise<boolean> => {
+    try {
+      const nextProject = parseProjectBackup(contents);
+      if (nextProject.image) {
+        const photo = new Image();
+        photo.src = nextProject.image;
+        try {
+          await photo.decode();
+        } catch {
+          throw new Error('The reference photo in this backup could not be opened. Your sketch is unchanged.');
+        }
+        if (photo.naturalWidth < 1 || photo.naturalHeight < 1
+          || photo.naturalWidth > 2000 || photo.naturalHeight > 2000) {
+          throw new Error('The reference photo in this backup is outside the supported size. Your sketch is unchanged.');
+        }
+      }
+      if (photoRequestAtStart !== photoImportId.current || photoLoading) {
+        throw new Error('A photo import started while this backup was being checked. Your sketch is unchanged.');
+      }
+
+      const estimate = await refreshStorageEstimate();
+      const currentProject = latestProject.current;
+      const nextHistory = withSavedProject(readProjectHistory(), currentProject);
+      if (!confirmHistoryWriteIfStorageIsLow(estimate, nextProject, nextHistory)) {
+        announce('Project import cancelled. Your sketch is unchanged.');
+        return false;
+      }
+
+      const currentSnapshot = localStorage.getItem(STORE_KEY);
+      const currentSerialized = JSON.stringify(currentProject);
+      if (projectConflict.current
+        || (currentSnapshot !== persistedProjectSnapshot.current && currentSnapshot !== currentSerialized)) {
+        reportProjectConflict();
+        announce('Another tab has newer sketch changes. Resolve that conflict before importing a backup.');
+        return false;
+      }
+
+      const nextSnapshot = JSON.stringify(nextProject);
+      const nextHistorySnapshot = JSON.stringify(nextHistory);
+      const previousHistorySnapshot = localStorage.getItem(PROJECT_HISTORY_KEY);
+      try {
+        localStorage.setItem(PROJECT_HISTORY_KEY, nextHistorySnapshot);
+        localStorage.setItem(STORE_KEY, nextSnapshot);
+      } catch {
+        try {
+          if (previousHistorySnapshot === null) localStorage.removeItem(PROJECT_HISTORY_KEY);
+          else localStorage.setItem(PROJECT_HISTORY_KEY, previousHistorySnapshot);
+        } catch {
+          // The active sketch remains in memory; a failed history rollback only leaves its recovery copy.
+        }
+        throw new Error('Could not save this backup in browser storage. Your current sketch is unchanged.');
+      }
+
+      persistedProjectSnapshot.current = nextSnapshot;
+      projectConflict.current = false;
+      setStorageConflict(false);
+      setProjectHistory(nextHistory);
+      setDraft(null);
+      drawingRef.current = false;
+      panningRef.current = null;
+      touchPointersRef.current.clear();
+      setPanMode(false);
+      setDrawingClipboard(null);
+      setProject(nextProject);
+      setExportMenuOpen(false);
+      void refreshStorageEstimate();
+      announce('Editable project imported. Your previous sketch is saved in Saved sketches.');
+      return true;
+    } catch (error) {
+      announce(error instanceof Error ? error.message : 'Could not read this project backup. Your sketch is unchanged.');
+      return false;
+    }
+  };
+
+  const importProjectBackupFile = async (file: File): Promise<boolean> => {
+    if (photoLoading || projectBackupLoading) {
+      announce('Wait for the current file to finish before importing a project backup.');
+      return false;
+    }
+    if (file.size > MAX_PROJECT_BACKUP_BYTES) {
+      announce('This project backup is larger than 2 MB. Choose a smaller project or photo.');
+      return false;
+    }
+    const photoRequestAtStart = photoImportId.current;
+    setProjectBackupLoading(true);
+    try {
+      const bytes = await file.arrayBuffer();
+      if (bytes.byteLength > MAX_PROJECT_BACKUP_BYTES) {
+        throw new Error('This project backup is larger than 2 MB. Choose a smaller project or photo.');
+      }
+      let contents: string;
+      try {
+        contents = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      } catch {
+        throw new Error('This file is not a readable CloudPainter project backup.');
+      }
+      return await applyProjectBackupContents(contents, photoRequestAtStart);
+    } catch (error) {
+      announce(error instanceof Error ? error.message : 'Could not read this project backup. Your sketch is unchanged.');
+      return false;
+    } finally {
+      setProjectBackupLoading(false);
+    }
+  };
+
+  const importCloudProjectBackup = async (contents: string): Promise<boolean> => {
+    if (photoLoading || projectBackupLoading) {
+      announce('Wait for the current file to finish before restoring a project backup.');
+      return false;
+    }
+    const photoRequestAtStart = photoImportId.current;
+    setProjectBackupLoading(true);
+    try {
+      if (new TextEncoder().encode(contents).byteLength > MAX_PROJECT_BACKUP_BYTES) {
+        throw new Error('This project backup is larger than 2 MB. Your current sketch is unchanged.');
+      }
+      return await applyProjectBackupContents(contents, photoRequestAtStart);
+    } catch (error) {
+      announce(error instanceof Error ? error.message : 'Could not restore this account backup. Your sketch is unchanged.');
+      return false;
+    } finally {
+      setProjectBackupLoading(false);
+    }
+  };
+
+  const importProjectBackup = (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) void importProjectBackupFile(file);
+  };
+
   const exportPng = async () => {
     try {
       const { canvas } = await composeProjectCanvas(project, canvasRefs.current, exportSize, paperOrientation);
@@ -933,7 +1577,7 @@ function Home() {
       link.href = downloadUrl;
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-      announce('PDF exported. Your browser saved the print-ready page.');
+      announce('PDF exported. Your browser saved the page.');
     } catch {
       announce('Could not create the PDF export. Try again or use a smaller sketch.');
     }
@@ -985,53 +1629,181 @@ function Home() {
           <span className="privacy-note"><Save size={13} /> Projects and photos stay here unless you explicitly send one to Poe for upscaling.</span>
           <span className="save-state" data-testid="status-save">{savedStatus}</span>
           <div className="top-actions">
-              <ActionTooltip description="View five CloudPainter logo design directions."><Link href="/logo-options" className="button button-quiet logo-options-link" data-testid="link-logo-options">Logo directions</Link></ActionTooltip>
-            <label className="export-size-control">
-              <span>PNG size</span>
-              <select aria-label="PNG export size" data-testid="select-export-size" value={exportSize} onChange={event => setExportSize(event.target.value as ExportSize)}>
-                <option value={1}>Original size</option>
-                <option value={2}>2× high resolution</option>
-                <option value="letter">US Letter · 8.5 × 11 in</option>
-                <option value="a4">A4 · 210 × 297 mm</option>
-              </select>
-            </label>
-            {(exportSize === 'letter' || exportSize === 'a4') && (
-              <label className="export-size-control">
-                <span>Orientation</span>
-                <select aria-label="Paper orientation" data-testid="select-export-orientation" value={paperOrientation} onChange={event => setPaperOrientation(event.target.value as PaperOrientation)}>
-                  <option value="match-sketch">Match sketch</option>
-                  <option value="portrait">Portrait</option>
-                  <option value="landscape">Landscape</option>
-                </select>
-              </label>
-            )}
-            <TooltipButton description="Export the reference photo and visible drawing layers as a PNG." className="button button-primary" onClick={exportPng} data-testid="button-export"><Upload size={14} /> Export PNG</TooltipButton>
-            <label className="export-size-control">
-              <span>PDF paper</span>
-              <select aria-label="PDF paper size" data-testid="select-pdf-paper" value={pdfPaperSize} onChange={event => setPdfPaperSize(event.target.value as PdfPaperSize)}>
-                <option value="letter">US Letter</option>
-                <option value="a4">A4</option>
-              </select>
-            </label>
-            <label className="export-size-control">
-              <span>PDF orientation</span>
-              <select aria-label="PDF orientation" data-testid="select-pdf-orientation" value={pdfOrientation} onChange={event => setPdfOrientation(event.target.value as PdfOrientation)}>
-                <option value="portrait">Portrait</option>
-                <option value="landscape">Landscape</option>
-              </select>
-            </label>
-            <label className="export-size-control">
-              <span>Safe margin</span>
-              <select aria-label="PDF print-safe margin" data-testid="select-pdf-margin" value={pdfSafeMargin} onChange={event => setPdfSafeMargin(event.target.value as PdfSafeMargin)}>
-                <option value="0.25">¼ in</option>
-                <option value="0.5">½ in</option>
-                <option value="0.75">¾ in</option>
-              </select>
-            </label>
-            <TooltipButton description="Download the full sketch centered inside the selected print-safe margin on a Letter or A4 page." className="button" onClick={exportPdf} data-testid="button-export-pdf"><FileDown size={14} /> Export PDF</TooltipButton>
+            <ActionTooltip description="View five CloudPainter logo design directions."><Link href="/logo-options" className="button button-quiet logo-options-link" data-testid="link-logo-options">Logo directions</Link></ActionTooltip>
+            <Popover open={exportMenuOpen} onOpenChange={setExportMenuOpen}>
+              <PopoverTrigger asChild>
+                <button type="button" className="button button-primary export-menu-trigger" aria-label="Export" data-testid="button-export-menu">
+                  Export <ChevronDown size={16} aria-hidden="true" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="export-menu-content" align="end" sideOffset={8} collisionPadding={12} aria-label="Export settings" data-testid="export-menu">
+                <div className="export-menu-heading">
+                  <h2>Export artwork</h2>
+                  <p>Choose a format and its settings.</p>
+                </div>
+                <div className="export-format-grid">
+                  <section className="export-format" aria-labelledby="png-export-heading">
+                    <h3 id="png-export-heading">PNG</h3>
+                    <label className="export-menu-field">
+                      PNG size
+                      <select aria-label="PNG export size" data-testid="select-export-size" value={exportSize} onChange={event => setExportSize(event.target.value as ExportSize)}>
+                        <option value="1">Original size</option>
+                        <option value="2">2× high resolution</option>
+                        <option value="letter">US Letter · 8.5 × 11 in</option>
+                        <option value="a4">A4 · 210 × 297 mm</option>
+                      </select>
+                    </label>
+                    {(exportSize === 'letter' || exportSize === 'a4') && (
+                      <label className="export-menu-field">
+                        Orientation
+                        <select aria-label="Paper orientation" data-testid="select-export-orientation" value={paperOrientation} onChange={event => setPaperOrientation(event.target.value as PaperOrientation)}>
+                          <option value="match-sketch">Match sketch</option>
+                          <option value="portrait">Portrait</option>
+                          <option value="landscape">Landscape</option>
+                        </select>
+                      </label>
+                    )}
+                    <TooltipButton description="Export the reference photo and visible drawing layers as a PNG." className="button button-primary export-menu-action" onClick={() => { setExportMenuOpen(false); void exportPng(); }} data-testid="button-export"><Upload size={14} /> Export PNG</TooltipButton>
+                  </section>
+                  <section className="export-format" aria-labelledby="pdf-export-heading">
+                    <h3 id="pdf-export-heading">PDF</h3>
+                    <label className="export-menu-field">
+                      Paper
+                      <select aria-label="PDF paper size" data-testid="select-pdf-paper" value={pdfPaperSize} onChange={event => setPdfPaperSize(event.target.value as PdfPaperSize)}>
+                        <option value="letter">US Letter</option>
+                        <option value="a4">A4</option>
+                      </select>
+                    </label>
+                    <label className="export-menu-field">
+                      Orientation
+                      <select aria-label="PDF orientation" data-testid="select-pdf-orientation" value={pdfOrientation} onChange={event => setPdfOrientation(event.target.value as PdfOrientation)}>
+                        <option value="portrait">Portrait</option>
+                        <option value="landscape">Landscape</option>
+                      </select>
+                    </label>
+                    <label className="export-menu-field">
+                      Safe margin
+                      <select aria-label="PDF print-safe margin" data-testid="select-pdf-margin" value={pdfSafeMargin} onChange={event => setPdfSafeMargin(event.target.value as PdfSafeMargin)}>
+                        <option value="0.25">¼ in</option>
+                        <option value="0.5">½ in</option>
+                        <option value="0.75">¾ in</option>
+                      </select>
+                    </label>
+                    <div className="pdf-layout-preview" data-testid="pdf-layout-preview">
+                      <svg
+                        className="pdf-layout-page"
+                        viewBox={`0 0 ${pdfLayout.pageWidth} ${pdfLayout.pageHeight}`}
+                        role="img"
+                        aria-label={`${pdfPaperSize === 'letter' ? 'US Letter' : 'A4'} ${pdfOrientation} layout preview. Dashed outline marks the print-safe area; the sketch is centered inside it.`}
+                        data-page-width={pdfLayout.pageWidth}
+                        data-page-height={pdfLayout.pageHeight}
+                        data-safe-margin={pdfLayout.margin}
+                      >
+                        <rect className="pdf-layout-page-paper" x="0" y="0" width={pdfLayout.pageWidth} height={pdfLayout.pageHeight} />
+                        <rect
+                          className="pdf-layout-safe-area"
+                          x={pdfLayout.margin}
+                          y={pdfLayout.margin}
+                          width={pdfLayout.printableWidth}
+                          height={pdfLayout.printableHeight}
+                          data-testid="pdf-layout-safe-area"
+                        />
+                        <rect
+                          className="pdf-layout-artwork"
+                          x={pdfLayout.artworkX}
+                          y={pdfLayout.artworkY}
+                          width={pdfLayout.artworkWidth}
+                          height={pdfLayout.artworkHeight}
+                          data-testid="pdf-layout-artwork"
+                        />
+                        {pdfArtworkPreview && (
+                          <image
+                            href={pdfArtworkPreview}
+                            x={pdfLayout.artworkX}
+                            y={pdfLayout.artworkY}
+                            width={pdfLayout.artworkWidth}
+                            height={pdfLayout.artworkHeight}
+                            preserveAspectRatio="none"
+                            data-testid="pdf-layout-artwork-image"
+                          />
+                        )}
+                      </svg>
+                      <p className="pdf-layout-caption">Dashed line: print-safe area · Shaded box: sketch placement</p>
+                    </div>
+                    <p
+                      className="pdf-resolution-status"
+                      data-quality={pdfEffectivePpi < 300 ? 'limited' : 'above-reference'}
+                      data-testid="pdf-resolution-status"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      Approx. {pdfEffectivePpi} PPI at this print size. {pdfEffectivePpi < 300
+                        ? 'Fine details may look soft at this size.'
+                        : 'At least 300 PPI at this print size.'}
+                    </p>
+                    <TooltipButton description="Download the full sketch centered inside the selected print-safe margin on a Letter or A4 page." className="button export-menu-action" onClick={() => { setExportMenuOpen(false); void exportPdf(); }} data-testid="button-export-pdf"><FileDown size={14} /> Export PDF</TooltipButton>
+                  </section>
+                </div>
+                <section className="project-backup-actions" aria-labelledby="project-backup-heading">
+                  <div>
+                    <h3 id="project-backup-heading">Editable project backup</h3>
+                    <p>Keep a local copy with its photo, layers, strokes, and canvas settings. Backups are limited to 2 MB.</p>
+                  </div>
+                  <div className="project-backup-buttons">
+                    <TooltipButton
+                      description="Download a versioned, editable copy of this project to your device."
+                      className="button"
+                      onClick={exportProjectBackup}
+                      data-testid="button-export-project-backup"
+                    >
+                      <Download size={14} /> Download backup
+                    </TooltipButton>
+                    <TooltipButton
+                      description="Open a local project backup. The current sketch is saved in Saved sketches first."
+                      className="button button-primary"
+                      onClick={() => projectBackupInput.current?.click()}
+                      disabled={projectBackupLoading || photoLoading}
+                      data-testid="button-import-project-backup"
+                    >
+                      <Upload size={14} /> {projectBackupLoading ? 'Checking backup…' : 'Import backup'}
+                    </TooltipButton>
+                    <input
+                      ref={projectBackupInput}
+                      hidden
+                      type="file"
+                      accept="application/json,.json"
+                      onChange={event => { void importProjectBackup(event); }}
+                      data-testid="input-project-backup"
+                    />
+                  </div>
+                </section>
+                <CloudProjectBackups
+                  project={project}
+                  open={exportMenuOpen}
+                  onRestore={importCloudProjectBackup}
+                />
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       </header>
+
+      {storageConflict && (
+        <section className="storage-conflict" role="alert" data-testid="storage-conflict">
+          <div>
+            <strong>This sketch changed in another tab.</strong>
+            <p>Your version has not been saved over it. Load the newer sketch, or keep your version as a separate saved sketch.</p>
+          </div>
+          <div className="storage-conflict-actions">
+            <button type="button" className="button button-quiet" onClick={reloadSharedProject} data-testid="button-conflict-reload">
+              Reload newer sketch
+            </button>
+            <button type="button" className="button button-primary" onClick={preserveLocalProject} data-testid="button-conflict-preserve">
+              Save my version separately
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="workspace">
         <div className="intro-row">
@@ -1051,7 +1823,7 @@ function Home() {
             <p className="section-label">Reference photo</p>
             <div className="source-card-frame">
               <TooltipButton
-                description={project.image ? 'Choose a new reference photo, replacing the current photo and drawing layers.' : 'Choose a reference photo and start a fresh drawing layer; the original photo stays unchanged.'}
+                description={project.image ? 'Choose a new reference photo. Your current sketch is saved in Saved sketches before its photo and drawing layers are replaced.' : 'Choose a reference photo and start a fresh drawing layer; your current sketch is saved in Saved sketches.'}
                 type="button"
                 className={`source-card ${project.image ? 'loaded' : ''}`}
                 onClick={openPhoto}
@@ -1069,13 +1841,72 @@ function Home() {
                 )}
               </TooltipButton>
               {project.image && (
-                <TooltipButton description="Remove the reference photo and keep your drawing layers." type="button" className="icon-button source-remove" aria-label="Remove photo" onClick={() => { resetPhotoView(); updateProject(current => ({ ...current, image: null })); }} data-testid="button-remove-photo"><X size={14} /></TooltipButton>
+                <TooltipButton description="Remove the reference photo and keep your drawing layers." type="button" className="icon-button source-remove" aria-label="Remove photo" onClick={() => { invalidatePhotoImports(); resetPhotoView(); updateProject(current => ({ ...current, image: null, referencePhotoVisible: true, referencePhotoOpacity: 100 })); }} data-testid="button-remove-photo"><X size={14} /></TooltipButton>
               )}
             </div>
             <div className="source-actions">
               <TooltipButton description="Start a fresh transparent canvas, replacing the current photo and all drawing layers." className="button" onClick={startBlank} data-testid="button-blank"><Plus size={13} /> Blank canvas</TooltipButton>
               <input ref={fileInput} hidden type="file" accept="image/*" onChange={handleFile} data-testid="input-photo" />
             </div>
+            {photoLoading && (
+              <div className="photo-import-status-row">
+                <p className="photo-import-status" role="status" aria-live="polite" data-testid="status-photo-import">
+                  Loading reference photo…
+                </p>
+                <TooltipButton description="Stop this photo import and keep your current sketch unchanged." type="button" className="button button-small" onClick={cancelPhotoImport} data-testid="button-cancel-photo-import">
+                  Cancel
+                </TooltipButton>
+              </div>
+            )}
+            {project.image && (
+              <div className="reference-photo-display" role="group" aria-label="Reference photo display controls">
+                <TooltipButton
+                  description={project.referencePhotoVisible ? 'Hide the reference photo beneath your drawing without removing it.' : 'Show the reference photo beneath your drawing again.'}
+                  type="button"
+                  className="button"
+                  aria-label={project.referencePhotoVisible ? 'Hide reference photo' : 'Show reference photo'}
+                  aria-pressed={project.referencePhotoVisible}
+                  onClick={() => updateProject(current => ({ ...current, referencePhotoVisible: !current.referencePhotoVisible }))}
+                  data-testid="button-reference-photo-visibility"
+                >
+                  {project.referencePhotoVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {project.referencePhotoVisible ? 'Hide photo' : 'Show photo'}
+                </TooltipButton>
+                <TooltipButton
+                  description="Show the reference photo at 100% opacity without changing the photo or your drawings."
+                  type="button"
+                  className="button reference-photo-reset"
+                  onClick={() => updateProject(current => ({
+                    ...current,
+                    referencePhotoVisible: true,
+                    referencePhotoOpacity: 100,
+                  }))}
+                  data-testid="button-reset-reference-photo-display"
+                >
+                  <RotateCcw size={13} /> Show photo at 100%
+                </TooltipButton>
+                <label className="reference-photo-opacity">
+                  <span className="reference-photo-opacity-label">
+                    <span>Reference photo opacity</span>
+                    <output htmlFor="reference-photo-opacity" aria-live="polite" data-testid="reference-photo-opacity-value">
+                      {project.referencePhotoOpacity}%
+                    </output>
+                  </span>
+                  <input
+                    id="reference-photo-opacity"
+                    className="range-input"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={project.referencePhotoOpacity}
+                    onChange={event => updateProject(current => ({ ...current, referencePhotoOpacity: Number(event.target.value) }))}
+                    aria-label="Reference photo opacity"
+                    data-testid="input-reference-photo-opacity"
+                  />
+                </label>
+              </div>
+            )}
             {storageEstimate && (
               <p className="storage-usage" role="status" aria-live="polite" data-testid="storage-usage">
                 CloudPainter storage: about {formatStorageSize(storageEstimate.cloudPainterBytes)}
@@ -1090,7 +1921,7 @@ function Home() {
                 <p className="section-label">Saved sketches · {projectHistory.length}</p>
                 <div className="saved-sketch-list">
                   {projectHistory.map((savedProject, index) => (
-                    <div className="saved-sketch-row" key={`${savedProject.title}-${index}`}>
+                    <div className="saved-sketch-row" key={savedProject.savedId}>
                       <TooltipButton
                         description={`Restore “${savedProject.title}”. Your current sketch is saved first.`}
                         className="button saved-sketch-button"
@@ -1104,9 +1935,10 @@ function Home() {
                         description={`Delete “${savedProject.title}” from saved sketches.`}
                         type="button"
                         className="button icon-button saved-sketch-delete"
-                        onClick={() => deleteSavedProject(index)}
+                        onClick={() => deleteSavedProject(savedProject.savedId)}
                         aria-label={`Delete saved sketch: ${savedProject.title}`}
                         data-testid={`button-delete-project-${index}`}
+                        data-saved-project-id={savedProject.savedId}
                       >
                         <Trash2 size={14} />
                       </TooltipButton>
@@ -1139,7 +1971,7 @@ function Home() {
             </div>
             <TooltipButton description="Add and select a new transparent drawing layer above the others." className="add-layer" onClick={addLayer} data-testid="button-add-layer"><Plus size={14} /> Add a drawing layer</TooltipButton>
             <div className="layer-clipboard-controls">
-              <TooltipButton className="add-layer" description={clipboardLayer?.strokes.length ? 'Copy this layer’s complete drawing, including erasing, to the app clipboard. The original stays unchanged; layer settings and the photo are not copied.' : 'Nothing to copy: select a layer with drawing content. An earlier copy stays available.'} onClick={copyLayerDrawing} disabled={!clipboardLayer?.strokes.length || !!draft} data-testid="button-copy-drawing"><Copy size={14} /> Copy drawing</TooltipButton>
+              <TooltipButton className="add-layer" description={canCopyLayerDrawing ? 'Copy this layer’s complete drawing, including erasing, to the app clipboard. The original stays unchanged; layer settings and the photo are not copied.' : 'Nothing to copy: select a layer with drawing content. An earlier copy stays available.'} onClick={copyLayerDrawing} disabled={!canCopyLayerDrawing || !!draft} data-testid="button-copy-drawing"><Copy size={14} /> Copy drawing</TooltipButton>
               <TooltipButton className="add-layer" description={!drawingClipboard?.length ? 'Copy a layer drawing first. The drawing clipboard is local to this open app and clears on reload.' : !clipboardLayer ? 'Select an existing destination layer before pasting.' : 'Append the copied drawing to this layer without changing existing content. Copied erasers affect only the copy; one Undo removes the paste.'} onClick={pasteLayerDrawing} disabled={!drawingClipboard?.length || !clipboardLayer || !!draft} data-testid="button-paste-drawing"><ClipboardPaste size={14} /> Paste drawing</TooltipButton>
             </div>
             <p className="layer-footnote">Your photograph stays safely underneath, unchanged. Drawings live on their own layers.</p>
@@ -1152,18 +1984,28 @@ function Home() {
                   ['brush', 'Brush', Paintbrush], ['pencil', 'Pencil', Pencil],
                   ['pen', 'Pen', PenTool], ['eraser', 'Eraser', Eraser],
                 ] as const).map(([instrument, label, Icon]) => (
-                  <TooltipButton key={instrument} description={TOOL_GUIDANCE[instrument]} className={`tool-button instrument-button ${tool === instrument ? 'selected' : ''}`} aria-label={`${label} tool`} aria-pressed={tool === instrument} onClick={() => selectTool(instrument)} data-testid={`button-tool-${instrument}`}>
+                  <TooltipButton key={instrument} description={TOOL_GUIDANCE[instrument]} className={`tool-button instrument-button ${!backgroundMode && tool === instrument ? 'selected' : ''}`} aria-label={`${label} tool`} aria-pressed={!backgroundMode && tool === instrument} onClick={() => selectTool(instrument)} data-testid={`button-tool-${instrument}`}>
                     <Icon size={17} /><span>{label}</span>
                   </TooltipButton>
                 ))}
+                <TooltipButton
+                  description={BACKGROUND_TOOL_GUIDANCE}
+                  className={`tool-button instrument-button background-tool-button ${backgroundMode ? 'selected' : ''}`}
+                  aria-label="Background tool"
+                  aria-pressed={backgroundMode}
+                  onClick={selectBackgroundTool}
+                  data-testid="button-tool-background"
+                >
+                  <PaintBucket size={17} /><span>Background</span>
+                </TooltipButton>
                 <span className="tool-divider" />
                 <TooltipButton description={project.image ? 'Preview contours from the visible photo with local detection, hosted AI, or edge tracing. Nothing is drawn until you accept.' : 'Import a reference photo before outlining a subject.'} className="tool-button" aria-label="Outline" onClick={openOutline} disabled={!project.image || !selectedLayer.visible || outlineOpening} data-testid="button-outline"><Sparkles size={17} /></TooltipButton>
-                <TooltipButton description={selectedLayer?.strokes.length ? 'Undo the most recent stroke or whole paste on the selected layer.' : 'Nothing to undo: the selected layer has no drawing actions.'} className="tool-button" aria-label="Undo" onClick={undo} disabled={!selectedLayer?.strokes.length} data-testid="button-undo"><Undo2 size={17} /></TooltipButton>
-                <TooltipButton description={selectedLayer?.redo.length ? 'Restore the last undone stroke or whole paste on the selected layer.' : 'Nothing to redo: undo a drawing action on the selected layer first.'} className="tool-button" aria-label="Redo" onClick={redo} disabled={!selectedLayer?.redo.length} data-testid="button-redo"><Redo2 size={17} /></TooltipButton>
+                <TooltipButton description={selectedLayer?.strokes.length ? 'Undo the most recent stroke, paste, or layer clear on the selected layer.' : 'Nothing to undo: the selected layer has no drawing actions.'} className="tool-button" aria-label="Undo" onClick={undo} disabled={!selectedLayer?.strokes.length} data-testid="button-undo"><Undo2 size={17} /></TooltipButton>
+                <TooltipButton description={selectedLayer?.redo.length ? 'Restore the last undone stroke, paste, or layer clear on the selected layer.' : 'Nothing to redo: undo a drawing action on the selected layer first.'} className="tool-button" aria-label="Redo" onClick={redo} disabled={!selectedLayer?.redo.length} data-testid="button-redo"><Redo2 size={17} /></TooltipButton>
               </div>
               <div className="tool-group">
                 <span className="canvas-meta">{project.width} × {project.height}</span>
-                <TooltipButton description="Remove all drawings and undo/redo history from the selected layer; keep the photo and other layers." className="tool-button" aria-label="Clear selected layer" onClick={() => { if (selectedLayer) changeLayer(selectedLayer.id, layer => ({ ...layer, strokes: [], redo: [] })); }} data-testid="button-clear-layer"><RotateCcw size={15} /></TooltipButton>
+                <TooltipButton description="Clear drawings from the selected layer as one undoable action; the photo and other layers stay unchanged." className="tool-button" aria-label="Clear selected layer" onClick={() => { if (selectedLayer) changeLayer(selectedLayer.id, clearDrawing); }} data-testid="button-clear-layer"><RotateCcw size={15} /></TooltipButton>
               </div>
             </div>
 
@@ -1209,7 +2051,15 @@ function Home() {
                   onPointerUp={finishPhotoPan}
                   onPointerCancel={finishPhotoPan}
                 >
-                  {project.image && <img className="base-photo" src={project.image} alt="" draggable={false} />}
+                  {project.image && (
+                    <img
+                      className="base-photo"
+                      src={project.image}
+                      alt=""
+                      draggable={false}
+                      style={{ opacity: project.referencePhotoVisible ? project.referencePhotoOpacity / 100 : 0 }}
+                    />
+                  )}
                   {project.layers.map((layer, index) => (
                     <canvas
                       key={layer.id}
@@ -1219,7 +2069,7 @@ function Home() {
                       onPointerDown={event => beginStroke(event, layer)}
                       onPointerMove={continueStroke}
                       onPointerUp={finishStroke}
-                      onPointerCancel={finishStroke}
+                      onPointerCancel={cancelStroke}
                       aria-label={`Drawing surface for ${layer.name}`}
                       data-testid={`canvas-layer-${layer.id}`}
                     />
@@ -1237,8 +2087,12 @@ function Home() {
               </div>
             </div>
             <div className="statusbar">
-              <span className="hint"><span className="keyboard-key">⌘ Z</span> undo <span className="keyboard-key">⇧ ⌘ Z</span> redo</span>
-              <span>{panMode ? 'Drag the photo to reposition it; your drawing stays unchanged.' : TOOL_GUIDANCE[tool]}</span>
+              <span className="hint">
+                <span className="keyboard-key">⌘/Ctrl Z</span> undo
+                <span className="keyboard-key">⌘/Ctrl Y</span> or
+                <span className="keyboard-key">⇧⌘/Ctrl Z</span> redo
+              </span>
+              <span>{panMode ? 'Drag the photo to reposition it; your drawing stays unchanged.' : backgroundMode ? BACKGROUND_TOOL_GUIDANCE : TOOL_GUIDANCE[tool]}</span>
             </div>
           </section>
 
@@ -1246,17 +2100,34 @@ function Home() {
             <div className="panel-title-row"><h2 className="panel-title">Drawing & feel</h2><span className="panel-kicker">02</span></div>
             <div hidden={tool !== 'brush'}>
             <BrushDisclosure title="Brush style" id="style" defaultOpen summary={BRUSH_STYLES.find(brush => brush.style === brushStyle)?.label}>
-              <BrushStyleControl embedded value={brushStyle} color={color} onChange={setBrushStyle} />
+              <BrushStyleControl embedded value={brushStyle} color={color} onChange={style => { drawingDefaultsTouched.current = true; setBrushStyle(style); }} />
             </BrushDisclosure>
+            </div>
+            <div hidden={tool !== 'pen'}>
+              <BrushDisclosure title="Pressure sensitivity" id="pressure-sensitivity" summary={`${penPressureSensitivity}%`}>
+                <p style={{ margin: '0 0 8px', color: '#747d73', fontSize: 10, lineHeight: 1.4 }}>Set how strongly pen pressure changes ink width. Lower values make pressure feel steadier; higher values make it more responsive.</p>
+                <input
+                  className="range-input"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={penPressureSensitivity}
+                  onChange={event => setPenPressureSensitivity(Number(event.target.value))}
+                  aria-label="Pen pressure sensitivity"
+                  data-testid="input-pen-pressure-sensitivity"
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9aa097', fontSize: 9, marginTop: 7 }}><span>Steady</span><span>Responsive</span></div>
+              </BrushDisclosure>
             </div>
             <BrushDisclosure title="Color" id="color" defaultOpen summary={<>
               <span className="header-color-preview" style={{ background: color }} aria-hidden="true" />
-              <span>{color.toUpperCase()} · {tool.toUpperCase()}</span>
+              <span>{color.toUpperCase()} · {backgroundMode ? 'BACKGROUND' : tool.toUpperCase()}</span>
             </>}>
-              <DrawingColorControl color={color} tool={tool} onChange={nextColor => { setColor(nextColor); selectTool(toolAfterColorSelection(tool, lastDrawingTool.current)); }} />
+              <DrawingColorControl color={color} tool={tool} onChange={nextColor => { setColor(nextColor); if (!backgroundMode) selectTool(toolAfterColorSelection(tool, lastDrawingTool.current)); }} />
             </BrushDisclosure>
             <BrushDisclosure title={`${tool[0].toUpperCase()}${tool.slice(1)} size`} id="size" summary={`${brushSize} px`}>
-              <input className="range-input" type="range" min="1" max="48" value={brushSize} onChange={event => setToolSizes(current => ({ ...current, [tool]: Number(event.target.value) }))} aria-label={`${tool[0].toUpperCase()}${tool.slice(1)} size`} data-testid="input-brush-size" />
+              <input className="range-input" type="range" min="1" max="48" value={brushSize} onChange={event => { drawingDefaultsTouched.current = true; setToolSizes(current => ({ ...current, [tool]: Number(event.target.value) })); }} aria-label={`${tool[0].toUpperCase()}${tool.slice(1)} size`} data-testid="input-brush-size" />
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9aa097', fontSize: 9, marginTop: 7 }}><span>Fine</span><span>Bold</span></div>
             </BrushDisclosure>
             <BrushDisclosure title="Layer opacity" id="opacity" summary={`${Math.round((selectedLayer?.opacity ?? 1) * 100)}%`}>
@@ -1269,7 +2140,23 @@ function Home() {
           </aside>
         </div>
       </section>
-      {toast && <div className="toast-message" role="status" data-testid="status-toast">{toast}</div>}
+      {toast && (
+        <div className="toast-message" role="status" data-testid="status-toast">
+          <span>{toast}</span>
+          <button
+            type="button"
+            className="toast-dismiss"
+            aria-label="Dismiss message"
+            onClick={() => {
+              window.clearTimeout(toastTimer.current);
+              toastTimer.current = undefined;
+              setToast('');
+            }}
+          >
+            <X size={15} aria-hidden="true" />
+          </button>
+        </div>
+      )}
     </main>
   );
 }
@@ -1382,14 +2269,14 @@ function LogoOptions({ directions }: { directions: typeof logoDirections }) {
 
 const queryClient = new QueryClient();
 function Router() {
-  return <Switch><Route path="/" component={Home} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/logo-options">{() => <LogoOptions directions={logoDirections} />}</Route><Route component={NotFound} /></Switch>;
+  return <Switch><Route path="/" component={Home} /><Route path="/settings" component={SettingsPage} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/logo-options">{() => <LogoOptions directions={logoDirections} />}</Route><Route path="/admin" component={AdminAccountsPage} /><Route component={NotFound} /></Switch>;
 }
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={350} skipDelayDuration={100}>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <ErrorBoundary><AccountProvider><Router /></AccountProvider></ErrorBoundary>
+          <ErrorBoundary><AccountProvider><AccountSettingsProvider><Router /></AccountSettingsProvider></AccountProvider></ErrorBoundary>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>
@@ -1399,9 +2286,21 @@ function App() {
 
 export default App;
 
-function withSavedProject(history: Project[], project: Project): Project[] {
-  const serializedProject = JSON.stringify(project);
-  return [project, ...history.filter(saved => JSON.stringify(saved) !== serializedProject)];
+function projectWithoutSavedId(project: Project | SavedProject): Project {
+  const original = project as SavedProject;
+  const { savedId: _savedId, ...snapshot } = original;
+  if (RECOVERED_PROJECTS.has(original)) RECOVERED_PROJECTS.add(snapshot);
+  return snapshot;
+}
+
+function withSavedProject(history: SavedProject[], project: Project): SavedProject[] {
+  const projectSnapshot = projectWithoutSavedId(project);
+  const serializedProject = JSON.stringify(projectSnapshot);
+  const savedId = createSavedProjectId(new Set(history.map(saved => saved.savedId)));
+  return [
+    { ...projectSnapshot, savedId },
+    ...history.filter(saved => JSON.stringify(projectWithoutSavedId(saved)) !== serializedProject),
+  ];
 }
 
 type PdfOrientation = 'portrait' | 'landscape';
@@ -1482,3 +2381,5 @@ async function readBrowserStorageEstimate(): Promise<BrowserStorageEstimate | nu
 }
 
 const LOCAL_STORAGE_QUOTA_GUIDELINE_BYTES = 5 * 1024 * 1024;
+
+const RECOVERY_MESSAGE = 'Some saved sketch data was invalid and has been repaired or skipped. The remaining artwork is available.';

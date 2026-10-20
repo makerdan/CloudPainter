@@ -41,3 +41,34 @@ making a storage-denial regression fail before reaching its assertions.
 
 **How to apply:** Freeze time only when deterministic timer control is needed,
 and derive the pause point from the current browser clock.
+
+After changing selection in an autosaved editor, wait for the selected ID to
+persist before using it to identify the next layer or history target.
+
+**Why:** The UI updates before debounced local storage, so an immediate storage
+read can return the previous selection and make a valid layer-history test target
+the wrong layer.
+
+**How to apply:** Wait for the expected selected ID and layer count in the saved
+project before drawing on, switching to, or asserting history for the new layer.
+
+In multi-tab Chromium checks, background-page autosave timers may fire much later
+than their configured debounce interval; a 500 ms timer took about 10 seconds in
+the headless test context.
+
+**Why:** Browser background-tab throttling can distort timing-based assumptions
+without changing which tab ultimately wrote the shared snapshot.
+
+**How to apply:** Observe the actual persisted revision/snapshot to establish
+write order, record elapsed time, and do not treat the debounce interval as a
+guaranteed cross-tab deadline.
+
+Compare persisted values at the same serialization layer; do not compare a
+UI-normalized project with a raw recovery-history snapshot.
+
+**Why:** A history assertion treated default-valued photo fields as absent in
+the open project while the stored recovery snapshot retained them, producing a
+false persistence failure.
+
+**How to apply:** When checking a current project against saved history, either
+use raw persisted values for both or normalize both sides consistently.

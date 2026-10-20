@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createInstrumentStroke, toolAfterColorSelection } from './drawingTools.ts';
+import { createInstrumentStroke, normalizePointerPressure, toolAfterColorSelection } from './drawingTools.ts';
 import { PENCIL_PASSES, renderStroke, type Stroke } from './strokeRenderer.ts';
 
 function replay(stroke: Stroke) {
@@ -11,6 +11,7 @@ function replay(stroke: Stroke) {
     save() { stack.push({ ...state }); },
     restore() { Object.assign(state, stack.pop()); },
     beginPath() { operations.push(['begin']); },
+    closePath() { operations.push(['close']); },
     moveTo(...args: number[]) { operations.push(['move', ...args]); },
     lineTo(...args: number[]) { operations.push(['line', ...args]); },
     arc(...args: number[]) { operations.push(['arc', ...args]); },
@@ -45,6 +46,7 @@ for (const tool of ['brush', 'pencil', 'pen', 'eraser'] as const) {
   test(`${tool} captures settings and replays unchanged through serialization and history`, { timeout: 1000 }, () => {
     const stroke = createInstrumentStroke(tool, point, '#ee806b', 12, 'dry', 42);
     stroke.points.push({ x: 0.7, y: 0.6 });
+    if (tool === 'pen') stroke.pressure!.samples.push(0.5);
     const original = JSON.stringify(stroke);
     const expected = replay(stroke);
     const strokes: Stroke[] = [JSON.parse(original)];
@@ -67,10 +69,51 @@ test('pencil is translucent seeded texture, ink is crisp, and taps remain distin
     assert.equal(new Set(outputs.map(value => JSON.stringify(value))).size, 3);
     assert.ok(outputs[1].some(op => op[0] === 'globalAlpha' && Number(op[1]) < 0.2));
     assert.equal(outputs[1].filter(op => op[0] === 'dash').length, PENCIL_PASSES);
-    assert.ok(outputs[2].some(op => op[0] === 'lineCap' && op[1] === 'butt'));
+    assert.ok(outputs[2].some(op => op[0] === 'close'));
+    assert.ok(outputs[2].some(op => op[0] === 'fill'));
   }
   const pencil = createInstrumentStroke('pencil', point, '#315d4d', 12, 'round', 42);
   assert.notDeepEqual(replay(pencil), replay({ ...pencil, instrument: { ...pencil.instrument!, seed: 43 } }));
+});
+
+test('pen samples keep real stylus pressure and use the same stable fallback for mouse and touch', { timeout: 1000 }, () => {
+  assert.equal(normalizePointerPressure('pen', 0.18), 0.18);
+  assert.equal(normalizePointerPressure('pen', 0.84), 0.84);
+  assert.equal(normalizePointerPressure('pen', 0), 0.5);
+  assert.equal(normalizePointerPressure('pen', Number.NaN), 0.5);
+  assert.equal(normalizePointerPressure('mouse', 0.9), 0.5);
+  assert.equal(normalizePointerPressure('touch', 0.2), 0.5);
+  assert.deepEqual(
+    createInstrumentStroke('pen', point, '#315d4d', 12, 'round', 1, 0.23).pressure,
+    { version: 1, samples: [0.23] },
+  );
+  assert.deepEqual(
+    createInstrumentStroke('pen', point, '#315d4d', 12, 'round', 1).pressure,
+    { version: 1, samples: [0.5] },
+  );
+});
+
+test('pen pressure sensitivity is fixed on each new stroke and defaults to the existing response', { timeout: 1000 }, () => {
+  assert.deepEqual(
+    createInstrumentStroke('pen', point, '#315d4d', 12, 'round', 1, 0.18).pressure,
+    { version: 1, samples: [0.18] },
+  );
+  assert.deepEqual(
+    createInstrumentStroke('pen', point, '#315d4d', 12, 'round', 1, 0.18, 25).pressure,
+    { version: 1, samples: [0.18], sensitivity: 25 },
+  );
+  assert.deepEqual(
+    createInstrumentStroke('pen', point, '#315d4d', 12, 'round', 1, 0.18, 100).pressure,
+    { version: 1, samples: [0.18], sensitivity: 100 },
+  );
+  assert.deepEqual(
+    createInstrumentStroke('pen', point, '#315d4d', 12, 'round', 1, 0.18, 200).pressure,
+    { version: 1, samples: [0.18], sensitivity: 100 },
+  );
+  assert.equal(
+    createInstrumentStroke('brush', point, '#315d4d', 12, 'round', 1, 0.18, 25).pressure,
+    undefined,
+  );
 });
 
 test('color preserves each instrument and returns from eraser to the last drawing tool', { timeout: 1000 }, () => {

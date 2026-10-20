@@ -5,6 +5,141 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface AdminOverview {
+  /** @minimum 0 */
+  totalAccounts: number;
+}
+
+export type AdminAccountStatusProperty = typeof AdminAccountStatusProperty[keyof typeof AdminAccountStatusProperty];
+
+
+export const AdminAccountStatusProperty = {
+  active: 'active',
+  suspended: 'suspended',
+} as const;
+
+export type AdminGenerationAccessRole = typeof AdminGenerationAccessRole[keyof typeof AdminGenerationAccessRole];
+
+
+export const AdminGenerationAccessRole = {
+  normal: 'normal',
+  admin: 'admin',
+} as const;
+
+export interface AdminGenerationAccess {
+  role: AdminGenerationAccessRole;
+  enabled: boolean;
+}
+
+export interface AdminAccount {
+  id: string;
+  /** @nullable */
+  name: string | null;
+  /** @nullable */
+  email: string | null;
+  createdAt: string;
+  status: AdminAccountStatusProperty;
+  generationAccess: AdminGenerationAccess;
+}
+
+export type AdminGenerationAccessResultRole = typeof AdminGenerationAccessResultRole[keyof typeof AdminGenerationAccessResultRole];
+
+
+export const AdminGenerationAccessResultRole = {
+  normal: 'normal',
+  admin: 'admin',
+} as const;
+
+export interface AdminGenerationAccessResult {
+  id: string;
+  role: AdminGenerationAccessResultRole;
+  enabled: boolean;
+}
+
+export interface AdminAccountPage {
+  /** @maxItems 50 */
+  accounts: AdminAccount[];
+  /** @minimum 0 */
+  totalCount: number;
+  /**
+     * @minimum 1
+     * @maximum 50
+     */
+  limit: number;
+  /**
+     * @minimum 0
+     * @maximum 10000
+     */
+  offset: number;
+}
+
+export type AdminAuditEventAction = typeof AdminAuditEventAction[keyof typeof AdminAuditEventAction];
+
+
+export const AdminAuditEventAction = {
+  suspend: 'suspend',
+  reactivate: 'reactivate',
+} as const;
+
+export type AdminAuditEventOutcome = typeof AdminAuditEventOutcome[keyof typeof AdminAuditEventOutcome];
+
+
+export const AdminAuditEventOutcome = {
+  pending: 'pending',
+  succeeded: 'succeeded',
+  failed: 'failed',
+} as const;
+
+export interface AdminAuditEvent {
+  actorId: string;
+  targetId: string;
+  action: AdminAuditEventAction;
+  outcome: AdminAuditEventOutcome;
+  createdAt: string;
+}
+
+export interface AdminAuditEventPage {
+  /** @maxItems 50 */
+  events: AdminAuditEvent[];
+  /** @minimum 0 */
+  totalCount: number;
+  /**
+     * @minimum 1
+     * @maximum 50
+     */
+  limit: number;
+  /**
+     * @maxLength 512
+     * @nullable
+     */
+  nextCursor: string | null;
+}
+
+export type AdminAccountStatusStatus = typeof AdminAccountStatusStatus[keyof typeof AdminAccountStatusStatus];
+
+
+export const AdminAccountStatusStatus = {
+  active: 'active',
+  suspended: 'suspended',
+} as const;
+
+export interface AdminAccountStatus {
+  status: AdminAccountStatusStatus;
+}
+
+export type AdminAccountStatusResultStatus = typeof AdminAccountStatusResultStatus[keyof typeof AdminAccountStatusResultStatus];
+
+
+export const AdminAccountStatusResultStatus = {
+  active: 'active',
+  suspended: 'suspended',
+} as const;
+
+export interface AdminAccountStatusResult {
+  id: string;
+  status: AdminAccountStatusResultStatus;
+}
+
 export interface OutlineInput {
   /**
      * Bare base64 PNG or JPEG inference crop; never a remote URL
@@ -130,6 +265,11 @@ export const LogoImageErrorCode = {
   PROVIDER_FAILED: 'PROVIDER_FAILED',
   INVALID_IMAGE: 'INVALID_IMAGE',
   TIMEOUT: 'TIMEOUT',
+  unauthorized: 'unauthorized',
+  authorization_denied: 'authorization_denied',
+  quota_exhausted: 'quota_exhausted',
+  rate_limited: 'rate_limited',
+  budget_unavailable: 'budget_unavailable',
 } as const;
 
 export interface LogoImageError {
@@ -158,6 +298,117 @@ export interface Palette {
   revision: number;
   /** @maxItems 64 */
   colors: PaletteColor[];
+}
+
+export type CloudPainterSettingsDrawingTool = typeof CloudPainterSettingsDrawingTool[keyof typeof CloudPainterSettingsDrawingTool];
+
+
+export const CloudPainterSettingsDrawingTool = {
+  brush: 'brush',
+  pencil: 'pencil',
+  pen: 'pen',
+} as const;
+
+export type CloudPainterSettingsBrushStyle = typeof CloudPainterSettingsBrushStyle[keyof typeof CloudPainterSettingsBrushStyle];
+
+
+export const CloudPainterSettingsBrushStyle = {
+  round: 'round',
+  chisel: 'chisel',
+  soft: 'soft',
+  dry: 'dry',
+} as const;
+
+export interface CloudPainterSettings {
+  /**
+     * @minimum 80
+     * @maximum 140
+     */
+  textSize: number;
+  drawingTool: CloudPainterSettingsDrawingTool;
+  brushStyle: CloudPainterSettingsBrushStyle;
+  /**
+     * @minimum 1
+     * @maximum 48
+     */
+  brushSize: number;
+}
+
+export interface AccountSettingsSnapshot {
+  /**
+     * @minimum 0
+     * @maximum 2147483647
+     */
+  revision: number;
+  settings: CloudPainterSettings;
+}
+
+export interface ProjectBackupInput {
+  requestId: string;
+  /**
+     * Versioned CloudPainter project JSON; server enforces the UTF-8 byte limit.
+     * @minLength 1
+     * @maxLength 2097152
+     */
+  backup: string;
+}
+
+export interface ProjectBackupSummary {
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  title: string;
+  /**
+     * @minimum 1
+     * @maximum 2097152
+     */
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface ProjectBackup {
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  title: string;
+  /**
+     * @minimum 1
+     * @maximum 2097152
+     */
+  sizeBytes: number;
+  createdAt: string;
+  /**
+     * @minLength 1
+     * @maxLength 2097152
+     */
+  backup: string;
+}
+
+export type ProjectBackupListAccountLimitBytes = typeof ProjectBackupListAccountLimitBytes[keyof typeof ProjectBackupListAccountLimitBytes];
+
+
+export const ProjectBackupListAccountLimitBytes = {
+  NUMBER_33554432: 33554432,
+} as const;
+
+export interface ProjectBackupList {
+  /** @maxItems 20 */
+  backups: ProjectBackupSummary[];
+  /**
+     * @minimum 0
+     * @maximum 33554432
+     */
+  totalBytes: number;
+  accountLimitBytes: ProjectBackupListAccountLimitBytes;
+}
+
+export interface ProjectBackupError {
+  /** @maxLength 256 */
+  error: string;
 }
 
 export interface HealthStatus {
@@ -250,6 +501,65 @@ export interface ImageGenerationError {
  * Safe error message; rate limits include Retry-After
  */
 export type LogoImageErrorResponse = LogoImageError;
+
+export type ListAdminAccountsParams = {
+/**
+ * @minimum 1
+ * @maximum 50
+ */
+limit?: number;
+/**
+ * @minimum 0
+ * @maximum 10000
+ */
+offset?: number;
+/**
+ * @maxLength 100
+ */
+query?: string;
+};
+
+export type ListAdminAuditEventsParams = {
+/**
+ * @minimum 1
+ * @maximum 50
+ */
+limit?: number;
+/**
+ * @maxLength 512
+ */
+cursor?: string;
+/**
+ * Restrict history to one account status action
+ */
+action?: ListAdminAuditEventsAction;
+/**
+ * Restrict history to one audit outcome
+ */
+outcome?: ListAdminAuditEventsOutcome;
+};
+
+export type ListAdminAuditEventsAction = typeof ListAdminAuditEventsAction[keyof typeof ListAdminAuditEventsAction];
+
+
+export const ListAdminAuditEventsAction = {
+  suspend: 'suspend',
+  reactivate: 'reactivate',
+} as const;
+
+export type ListAdminAuditEventsOutcome = typeof ListAdminAuditEventsOutcome[keyof typeof ListAdminAuditEventsOutcome];
+
+
+export const ListAdminAuditEventsOutcome = {
+  pending: 'pending',
+  succeeded: 'succeeded',
+  failed: 'failed',
+} as const;
+
+export type SaveSettings409 = {
+  error: string;
+  current: AccountSettingsSnapshot;
+};
 
 export type GetImageGenerationConfig200 = {
   configured: boolean;

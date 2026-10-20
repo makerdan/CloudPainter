@@ -15,6 +15,109 @@ test('preset and custom colors survive drawing, undo/redo, reload and PNG export
     args: ['--no-sandbox'],
   });
   try {
+    const defaultsContext = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
+    const defaultsPage = await defaultsContext.newPage();
+    defaultsPage.setDefaultTimeout(10_000);
+    await defaultsPage.goto(url);
+    await defaultsPage.getByTestId('selected-color').waitFor();
+    assert.match(await defaultsPage.getByTestId('selected-color').innerText(), /Black\s+#000000/);
+    assert.equal(await defaultsPage.getByRole('button', { name: 'Choose Black (#000000)', exact: true }).getAttribute('aria-pressed'), 'true');
+
+    const defaultsCanvas = defaultsPage.locator('canvas.draw-surface');
+    await defaultsCanvas.scrollIntoViewIfNeeded();
+    const defaultsBounds = await defaultsCanvas.boundingBox();
+    assert.ok(defaultsBounds);
+    const defaultEntries = [];
+    for (const [index, instrument] of ['brush', 'pencil', 'pen'].entries()) {
+      await defaultsPage.getByTestId(`button-tool-${instrument}`).click();
+      const x = defaultsBounds.x + defaultsBounds.width * (0.16 + index * 0.24);
+      const y = defaultsBounds.y + defaultsBounds.height * 0.3;
+      await defaultsPage.mouse.move(x, y);
+      await defaultsPage.mouse.down();
+      await defaultsPage.mouse.move(x + 12, y + 8, { steps: 3 });
+      await defaultsPage.mouse.up();
+      await defaultsPage.waitForFunction(expected => {
+        const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') || '{}');
+        return project.layers?.[0]?.strokes?.length === expected;
+      }, index + 1);
+      defaultEntries.push(await defaultsPage.evaluate(() => {
+        const strokes = JSON.parse(localStorage.getItem('cloudpainter-project-v1')).layers[0].strokes;
+        return strokes[strokes.length - 1];
+      }));
+    }
+    assert.deepEqual(defaultEntries.map(({ tool, color }) => ({ tool, color })), [
+      { tool: 'brush', color: '#000000' },
+      { tool: 'pencil', color: '#000000' },
+      { tool: 'pen', color: '#000000' },
+    ]);
+
+    await defaultsPage.getByTestId('button-tool-background').click();
+    await defaultsPage.mouse.click(
+      defaultsBounds.x + defaultsBounds.width * 0.88,
+      defaultsBounds.y + defaultsBounds.height * 0.72,
+    );
+    await defaultsPage.waitForFunction(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') || '{}');
+      return project.layers?.[0]?.strokes?.length === 4;
+    });
+    const defaultFill = await defaultsPage.evaluate(() =>
+      JSON.parse(localStorage.getItem('cloudpainter-project-v1')).layers[0].strokes[3]);
+    assert.deepEqual(defaultFill, { kind: 'background-fill', color: '#000000' });
+
+    await defaultsPage.getByTestId('input-color-hex').fill('2367cd');
+    await defaultsPage.getByTestId('button-apply-color').click();
+    await defaultsPage.getByTestId('button-tool-background').click();
+    await defaultsPage.mouse.click(
+      defaultsBounds.x + defaultsBounds.width * 0.92,
+      defaultsBounds.y + defaultsBounds.height * 0.84,
+    );
+    await defaultsPage.waitForFunction(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') || '{}');
+      return project.layers?.[0]?.strokes?.length === 5;
+    });
+    assert.deepEqual(await defaultsPage.evaluate(() =>
+      JSON.parse(localStorage.getItem('cloudpainter-project-v1')).layers[0].strokes[4]),
+    { kind: 'background-fill', color: '#2367cd' });
+
+    await defaultsPage.getByRole('button', { name: 'Choose Blue (#2563EB)', exact: true }).click();
+    await defaultsPage.getByTestId('button-tool-background').click();
+    await defaultsPage.mouse.click(
+      defaultsBounds.x + defaultsBounds.width * 0.94,
+      defaultsBounds.y + defaultsBounds.height * 0.9,
+    );
+    await defaultsPage.waitForFunction(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') || '{}');
+      return project.layers?.[0]?.strokes?.length === 6;
+    });
+    assert.deepEqual(await defaultsPage.evaluate(() =>
+      JSON.parse(localStorage.getItem('cloudpainter-project-v1')).layers[0].strokes[5]),
+    { kind: 'background-fill', color: '#2563eb' });
+
+    await defaultsPage.getByTestId('button-tool-brush').click();
+    await defaultsPage.mouse.move(
+      defaultsBounds.x + defaultsBounds.width * 0.68,
+      defaultsBounds.y + defaultsBounds.height * 0.82,
+    );
+    await defaultsPage.mouse.down();
+    await defaultsPage.mouse.move(
+      defaultsBounds.x + defaultsBounds.width * 0.7,
+      defaultsBounds.y + defaultsBounds.height * 0.84,
+      { steps: 3 },
+    );
+    await defaultsPage.mouse.up();
+    await defaultsPage.waitForFunction(() => {
+      const project = JSON.parse(localStorage.getItem('cloudpainter-project-v1') || '{}');
+      return project.layers?.[0]?.strokes?.length === 7;
+    });
+    assert.deepEqual(await defaultsPage.evaluate(() => {
+      const { tool, color } = JSON.parse(localStorage.getItem('cloudpainter-project-v1')).layers[0].strokes[6];
+      return { tool, color };
+    }), { tool: 'brush', color: '#2563eb' });
+
+    await defaultsPage.getByTestId('button-tool-pen').click();
+    assert.match(await defaultsPage.getByTestId('selected-color').innerText(), /#2563EB/);
+    await defaultsContext.close();
+
     const context = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
     const page = await context.newPage();
     page.setDefaultTimeout(10_000);

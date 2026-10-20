@@ -1,6 +1,11 @@
-import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { expect, test, type Browser, type Download, type Page } from '../tests/browser-safety-fixtures';
+import { installProviderRequestGuard } from '../tests/provider-request-guard.mjs';
 
 const STORE_KEY = 'cloudpainter-project-v1';
+const PROJECT_HISTORY_KEY = 'cloudpainter-project-history-v1';
+const PREVIOUS_PROJECT_KEY = 'cloudpainter-previous-project-v1';
+const PROJECT_CONFLICT_STATUS = 'Changes from another tab need attention';
 
 const zoomPanTargets = [
   { zoomSteps: 2, panX: 38, panY: -24, x: 0.24, y: 0.32, photoColor: [229, 57, 53] },
@@ -8,20 +13,139 @@ const zoomPanTargets = [
   { zoomSteps: 11, panX: 72, panY: -42, x: 0.47, y: 0.52, photoColor: [30, 136, 229] },
 ];
 async function savedProject(page: Page) {
+  return page.evaluate(key => {
+    const project = JSON.parse(localStorage.getItem(key) ?? 'null');
+    // Current storage writes photo-display defaults explicitly. For legacy
+    // fixture comparisons, those values are equivalent to omitted fields.
+    if (project?.referencePhotoVisible === true) delete project.referencePhotoVisible;
+    if (project?.referencePhotoOpacity === 100) delete project.referencePhotoOpacity;
+    return project;
+  }, STORE_KEY);
+}
+
+async function savedProjectRaw(page: Page) {
   return page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? 'null'), STORE_KEY);
 }
 
-async function png(page: Page, name: string, width: number, height: number) {
-  const data = await page.evaluate(({ width, height }) => {
+async function savedProjectHistory(page: Page) {
+  return page.evaluate(key => {
+    const history = JSON.parse(localStorage.getItem(key) ?? '[]');
+    return history.map((project: Record<string, unknown>) => {
+      const { savedId: _savedId, ...snapshot } = project;
+      return snapshot;
+    });
+  }, PROJECT_HISTORY_KEY);
+}
+
+async function savedProjectHistoryRaw(page: Page) {
+  return page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '[]'), PROJECT_HISTORY_KEY);
+}
+
+async function canvasPixel(page: Page, testId: string, x: number, y: number) {
+  return page.getByTestId(testId).evaluate((element, point) => {
+    const canvas = element as HTMLCanvasElement;
+    return Array.from(canvas.getContext('2d')!.getImageData(point.x, point.y, 1, 1).data);
+  }, { x, y });
+}
+
+async function openSyntheticProjectTabs(browser: Browser, project: object) {
+  const baseURL = process.env.CLOUDPAINTER_TEST_URL;
+  if (!baseURL) throw new Error('Set CLOUDPAINTER_TEST_URL to the running CloudPainter preview URL.');
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const assertNoProviderRequests = await installProviderRequestGuard(context);
+  await context.route('**/api/images/config', route => route.fulfill({
+    json: { configured: false, signedIn: false, allowed: false, dailyLimit: 0, remaining: 0, globalRemaining: 0 },
+  }));
+  await context.route('**/api/images/generate', route => route.fulfill({
+    status: 401,
+    json: { error: 'Sign in is required to generate images.' },
+  }));
+  await context.addInitScript(({ key, project }) => {
+    const marker = `${key}-multitab-test-seeded`;
+    if (sessionStorage.getItem(marker)) return;
+    localStorage.setItem(key, JSON.stringify(project));
+    sessionStorage.setItem(marker, 'true');
+  }, { key: STORE_KEY, project });
+
+  const [tabA, tabB] = await Promise.all([context.newPage(), context.newPage()]);
+  await Promise.all([tabA.goto(baseURL), tabB.goto(baseURL)]);
+  for (const tab of [tabA, tabB]) {
+    await expect(tab.getByTestId('button-photo-card')).toBeVisible();
+    await expect(tab.getByTestId('status-save')).toHaveText('Saved in this browser');
+    await expect.poll(() => savedProject(tab)).toEqual(project);
+  }
+  return { context, tabA, tabB, assertNoProviderRequests };
+}
+
+async function addSyntheticStroke(page: Page) {
+  const surface = page.locator('canvas.draw-surface');
+  const bounds = await surface.boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.mouse.move(bounds!.x + bounds!.width * 0.3, bounds!.y + bounds!.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(bounds!.x + bounds!.width * 0.7, bounds!.y + bounds!.height * 0.65, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+}
+
+async function drawNormalizedLine(page: Page, start: { x: number; y: number }, end: { x: number; y: number }) {
+  const bounds = await page.locator('canvas.draw-surface').boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.mouse.move(bounds!.x + bounds!.width * start.x, bounds!.y + bounds!.height * start.y);
+  await page.mouse.down();
+  await page.mouse.move(bounds!.x + bounds!.width * end.x, bounds!.y + bounds!.height * end.y, { steps: 8 });
+  await page.mouse.up();
+}
+
+async function normalizedDrawingPixel(page: Page, point: { x: number; y: number }) {
+  return page.locator('canvas.draw-surface').evaluate((canvas, point) => {
+    const surface = canvas as HTMLCanvasElement;
+    const x = Math.round(point.x * (surface.width - 1));
+    const y = Math.round(point.y * (surface.height - 1));
+    return Array.from(surface.getContext('2d')!.getImageData(x, y, 1, 1).data);
+  }, point);
+}
+
+async function png(page: Page, name: string, width: number, height: number, color = '#87a6c0') {
+  const data = await page.evaluate(({ width, height, color }) => {
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext('2d')!;
-    context.fillStyle = '#87a6c0';
+    context.fillStyle = color;
     context.fillRect(0, 0, width, height);
     return canvas.toDataURL('image/png').split(',')[1];
-  }, { width, height });
+  }, { width, height, color });
   return { name, mimeType: 'image/png', buffer: Buffer.from(data, 'base64') };
+}
+
+async function holdPhotoRead(page: Page, name: string, dataUrl: string) {
+  await page.evaluate(({ name, dataUrl }) => {
+    const controls = window as Window & {
+      releaseHeldPhotoRead?: () => void;
+      heldPhotoReadAbortCount?: number;
+    };
+    controls.heldPhotoReadAbortCount = 0;
+    const prototype = FileReader.prototype;
+    const readAsDataURL = prototype.readAsDataURL;
+    prototype.readAsDataURL = function (file) {
+      if (file.name !== name) {
+        readAsDataURL.call(this, file);
+        return;
+      }
+      const reader = this;
+      const lateLoad = reader.onload;
+      Object.defineProperty(reader, 'readyState', { configurable: true, value: FileReader.LOADING });
+      reader.abort = () => {
+        controls.heldPhotoReadAbortCount = (controls.heldPhotoReadAbortCount ?? 0) + 1;
+      };
+      controls.releaseHeldPhotoRead = () => {
+        Object.defineProperty(reader, 'result', { configurable: true, value: dataUrl });
+        lateLoad?.call(reader, new ProgressEvent('load'));
+        controls.releaseHeldPhotoRead = undefined;
+      };
+    };
+  }, { name, dataUrl });
 }
 
 async function markedPhoto(page: Page, name: string) {
@@ -42,6 +166,32 @@ async function markedPhoto(page: Page, name: string) {
   })));
   return { name, mimeType: 'image/png', buffer: Buffer.from(data, 'base64') };
 }
+
+async function inspectDownloadedPng(page: Page, download: Download, points: { x: number; y: number }[]) {
+  const path = await download.path();
+  const base64 = (await readFile(path)).toString('base64');
+  return page.evaluate(async ({ base64, points }) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${base64}`;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d')!;
+    context.drawImage(image, 0, 0);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let nonTransparentPixels = 0;
+    for (let index = 3; index < pixels.length; index += 4) {
+      if (pixels[index] > 0) nonTransparentPixels += 1;
+    }
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      samples: points.map(({ x, y }) => Array.from(pixels.slice((y * canvas.width + x) * 4, (y * canvas.width + x) * 4 + 4))),
+      nonTransparentPixels,
+    };
+  }, { base64, points });
+}
 async function trackPicker(page: Page) {
   await page.getByTestId('input-photo').evaluate(input => {
     input.setAttribute('data-picker-clicks', '0');
@@ -51,10 +201,365 @@ async function trackPicker(page: Page) {
   });
 }
 
+function layerRenameLifecycleProject(image: string) {
+  const stroke = (color: string, y: number) => ({
+    points: [{ x: 0.2, y }, { x: 0.7, y }],
+    color, size: 8, tool: 'pen',
+  });
+  return {
+    image,
+    width: 480,
+    height: 320,
+    title: 'Layer rename persistence',
+    selectedLayerId: 'lifecycle-middle',
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+    layers: [
+      {
+        id: 'lifecycle-bottom',
+        name: 'Background lines',
+        visible: true,
+        opacity: 0.65,
+        strokes: [stroke('#e53935', 0.25)],
+        redo: [stroke('#ff9800', 0.3)],
+      },
+      {
+        id: 'lifecycle-middle',
+        name: 'Selected details',
+        visible: true,
+        opacity: 0.45,
+        strokes: [stroke('#1e88e5', 0.5), stroke('#8e24aa', 0.55)],
+        redo: [stroke('#00acc1', 0.6)],
+      },
+      {
+        id: 'lifecycle-top',
+        name: 'Hidden highlights',
+        visible: false,
+        opacity: 0.8,
+        strokes: [stroke('#43a047', 0.75)],
+        redo: [stroke('#3949ab', 0.8)],
+      },
+    ],
+  };
+}
+
+async function seedLayerRenameLifecycleProject(page: Page, marker: string, project: object) {
+  await page.addInitScript(({ key, marker, project }) => {
+    if (sessionStorage.getItem(marker)) return;
+    localStorage.setItem(key, JSON.stringify(project));
+    sessionStorage.setItem(marker, 'true');
+  }, { key: STORE_KEY, marker: `${STORE_KEY}-${marker}`, project });
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toBeVisible();
+  await expect.poll(() => savedProject(page)).toEqual(project);
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+}
+
+async function freezeProjectAutosave(page: Page) {
+  const pageTime = await page.evaluate(() => Date.now());
+  await page.clock.install({ time: pageTime });
+}
+
 test.beforeEach(async ({ page }) => {
+  await page.route('**/api/images/config', route => route.fulfill({
+    json: { configured: false, signedIn: false, allowed: false, dailyLimit: 0, remaining: 0, globalRemaining: 0 },
+  }));
+  await page.route('**/api/images/generate', route => route.fulfill({
+    status: 401,
+    json: { error: 'Sign in is required to generate images.' },
+  }));
   await page.goto('./');
   await expect(page.getByTestId('button-photo-card')).toBeVisible();
   await trackPicker(page);
+});
+
+const sameNamedSavedSketches = [
+  {
+    image: null,
+    width: 640,
+    height: 480,
+    title: 'Shared title',
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+    selectedLayerId: 'same-title-layer-a',
+    layers: [{ id: 'same-title-layer-a', name: 'Drawing A', visible: true, opacity: 1, strokes: [], redo: [] }],
+  },
+  {
+    image: null,
+    width: 320,
+    height: 240,
+    title: 'Shared title',
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+    selectedLayerId: 'same-title-layer-b',
+    layers: [{ id: 'same-title-layer-b', name: 'Drawing B', visible: true, opacity: 1, strokes: [], redo: [] }],
+  },
+];
+
+async function seedSavedSketches(page: Page, sketches: object[]) {
+  await expect.poll(() => savedProject(page)).not.toBeNull();
+  await page.evaluate(({ key, sketches }) => localStorage.setItem(key, JSON.stringify(sketches)), {
+    key: PROJECT_HISTORY_KEY,
+    sketches,
+  });
+  await page.reload();
+  await expect(page.locator('.saved-sketch-delete')).toHaveCount(sketches.length);
+  await expect.poll(async () => {
+    const history = await savedProjectHistoryRaw(page);
+    return history.length === sketches.length && history.every((project: { savedId?: unknown }) =>
+      typeof project.savedId === 'string' && project.savedId.length > 0,
+    );
+  }).toBe(true);
+}
+
+test('a rejected saved-sketch deletion leaves history and active artwork unchanged', async ({ page }) => {
+  await seedSavedSketches(page, [sameNamedSavedSketches[0]]);
+  const activeBefore = await savedProjectRaw(page);
+  const historyBefore = await savedProjectHistoryRaw(page);
+  const deleteButton = page.locator(`[data-saved-project-id="${historyBefore[0].savedId}"]`);
+
+  await page.evaluate(historyKey => {
+    const originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (this === window.localStorage && key === historyKey) {
+        throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, key, value);
+    };
+  }, PROJECT_HISTORY_KEY);
+  await deleteButton.click();
+
+  await expect(page.getByTestId('status-toast')).toContainText('Could not delete this saved sketch. Nothing changed.');
+  await expect(deleteButton).toBeVisible();
+  expect(await savedProjectRaw(page)).toEqual(activeBefore);
+  expect(await savedProjectHistoryRaw(page)).toEqual(historyBefore);
+
+  await page.reload();
+  await expect(page.locator(`[data-saved-project-id="${historyBefore[0].savedId}"]`)).toBeVisible();
+  expect(await savedProjectRaw(page)).toEqual(activeBefore);
+  expect(await savedProjectHistoryRaw(page)).toEqual(historyBefore);
+});
+
+for (const selectedIndex of [0, 1] as const) {
+  test(`deleting same-named saved sketch ${selectedIndex + 1} removes only its stable ID`, async ({ page }) => {
+    await seedSavedSketches(page, sameNamedSavedSketches);
+    const activeBefore = await savedProjectRaw(page);
+    const historyBefore = await savedProjectHistoryRaw(page);
+    const selected = historyBefore[selectedIndex];
+    const survivor = historyBefore[1 - selectedIndex];
+
+    await page.locator(`[data-saved-project-id="${selected.savedId}"]`).click();
+
+    await expect.poll(() => savedProjectHistoryRaw(page)).toEqual([survivor]);
+    await expect(page.locator(`[data-saved-project-id="${survivor.savedId}"]`)).toBeVisible();
+    await expect(page.locator('.saved-sketch-delete')).toHaveCount(1);
+    expect(await savedProjectRaw(page)).toEqual(activeBefore);
+
+    await page.reload();
+    await expect(page.locator(`[data-saved-project-id="${survivor.savedId}"]`)).toBeVisible();
+    await expect.poll(() => savedProjectHistoryRaw(page)).toEqual([survivor]);
+    await page.getByTestId('button-restore-project-0').click();
+    await expect.poll(async () => {
+      const restored = await savedProjectRaw(page);
+      return {
+        title: restored.title,
+        width: restored.width,
+        layerId: restored.layers[0].id,
+      };
+    }).toEqual({
+      title: survivor.title,
+      width: survivor.width,
+      layerId: survivor.layers[0].id,
+    });
+  });
+}
+
+const syntheticMultiTabProject = {
+  image: null,
+  width: 320,
+  height: 180,
+  title: 'Synthetic multi-tab sketch',
+  selectedLayerId: 'multitab-main',
+  photoZoom: 1,
+  photoPan: { x: 0, y: 0 },
+  layers: [{
+    id: 'multitab-main',
+    name: 'Main drawing',
+    visible: true,
+    opacity: 1,
+    strokes: [],
+    redo: [],
+  }],
+};
+
+for (const firstWriter of ['A', 'B'] as const) {
+  test(`tab ${firstWriter} then the other tab cannot silently overwrite a newer sketch`, async ({ browser }) => {
+    const { context, tabA, tabB, assertNoProviderRequests } = await openSyntheticProjectTabs(browser, syntheticMultiTabProject);
+    try {
+      const first = firstWriter === 'A' ? tabA : tabB;
+      const stale = firstWriter === 'A' ? tabB : tabA;
+      await first.bringToFront();
+      await addSyntheticStroke(first);
+      await expect(first.getByTestId('status-save')).toHaveText('Saved in this browser');
+      const savedByFirst = await savedProject(first);
+      expect(savedByFirst.layers[0].strokes).toHaveLength(1);
+
+      await stale.bringToFront();
+      await expect(stale.getByTestId('status-save')).toHaveText(PROJECT_CONFLICT_STATUS);
+      await addSyntheticStroke(stale);
+      await stale.waitForTimeout(700);
+
+      // The first tab's saved stroke is protected, while the stale tab still
+      // shows its own unsaved work and explicitly reports the conflict.
+      expect(await savedProject(stale)).toEqual(savedByFirst);
+      expect((await savedProject(stale)).layers[0].strokes).toHaveLength(1);
+      await expect(stale.getByTestId('button-undo')).toBeEnabled();
+      await expect(stale.getByTestId('status-save')).toHaveText(PROJECT_CONFLICT_STATUS);
+      await expect(first.getByTestId('button-undo')).toBeEnabled();
+    } finally {
+      try {
+        assertNoProviderRequests();
+      } finally {
+        await context.close();
+      }
+    }
+  });
+}
+
+test('a stale tab pagehide and reload cannot replace the newer saved sketch', async ({ browser }) => {
+  const { context, tabA, tabB, assertNoProviderRequests } = await openSyntheticProjectTabs(browser, syntheticMultiTabProject);
+  try {
+    await tabA.bringToFront();
+    await addSyntheticStroke(tabA);
+    await expect(tabA.getByTestId('status-save')).toHaveText('Saved in this browser');
+    const newerProject = await savedProject(tabA);
+    expect(newerProject.layers[0].strokes).toHaveLength(1);
+
+    await tabB.bringToFront();
+    await expect(tabB.getByTestId('status-save')).toHaveText(PROJECT_CONFLICT_STATUS);
+    await addSyntheticStroke(tabB);
+    await tabB.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+    await expect(tabB.getByTestId('status-save')).toHaveText(PROJECT_CONFLICT_STATUS);
+    expect(await savedProject(tabB)).toEqual(newerProject);
+
+    // Real reload exercises the pagehide flush as navigation occurs, then
+    // confirms the stale tab rehydrates the newer saved project.
+    await tabB.reload();
+    await expect(tabB.getByTestId('status-save')).toHaveText('Saved in this browser');
+    expect(await savedProject(tabB)).toEqual(newerProject);
+    await expect(tabB.getByTestId('button-undo')).toBeEnabled();
+  } finally {
+    try {
+      assertNoProviderRequests();
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test('signed-out Settings access directs users to sign in without changing browser-local artwork', async ({ page }) => {
+  await expect(page.getByText('Saved in this browser', { exact: true })).toBeVisible();
+  const projectBefore = await page.evaluate(key => localStorage.getItem(key), STORE_KEY);
+  const settingsLink = page.getByTestId('link-account-settings');
+  await expect(settingsLink).toBeVisible();
+  await settingsLink.evaluate(element => (element as HTMLAnchorElement).click());
+  await expect(page).toHaveURL(/\/sign-in(?:\/|$)/);
+  await expect(page.getByText(/palettes and personal preferences are saved to your account/i)).toBeVisible();
+  expect(await page.evaluate(key => localStorage.getItem(key), STORE_KEY)).toBe(projectBefore);
+});
+
+test('the compact Export menu is keyboard-operable and stays within desktop and phone layouts', async ({ page }) => {
+  const trigger = page.getByTestId('button-export-menu');
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  const menu = page.getByTestId('export-menu');
+  await expect(menu).toBeVisible();
+  await expect(page.getByTestId('select-export-size')).toHaveValue('1');
+  await expect(page.getByTestId('select-pdf-paper')).toHaveValue('letter');
+  await expect(page.getByTestId('select-pdf-orientation')).toHaveValue('portrait');
+  await expect(page.getByTestId('select-pdf-margin')).toHaveValue('0.5');
+  await expect(page.getByTestId('select-export-orientation')).toHaveCount(0);
+
+  const pngSize = page.getByTestId('select-export-size');
+  await pngSize.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(pngSize).toHaveValue('2');
+  await expect(page.getByTestId('select-export-orientation')).toHaveCount(0);
+  await pngSize.focus();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await expect(pngSize).toHaveValue('a4');
+  const pngOrientation = page.getByTestId('select-export-orientation');
+  await expect(pngOrientation).toBeVisible();
+  await pngOrientation.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(pngOrientation).toHaveValue('portrait');
+
+  const pdfPaper = page.getByTestId('select-pdf-paper');
+  await pdfPaper.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(pdfPaper).toHaveValue('a4');
+  const pdfOrientation = page.getByTestId('select-pdf-orientation');
+  await pdfOrientation.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(pdfOrientation).toHaveValue('landscape');
+  const pdfMargin = page.getByTestId('select-pdf-margin');
+  await pdfMargin.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(pdfMargin).toHaveValue('0.75');
+
+  for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }, { width: 320, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    if (await menu.isVisible()) {
+      await trigger.focus();
+      await page.keyboard.press('Enter');
+      await expect(menu).toBeHidden();
+    }
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(menu).toBeVisible();
+    await expect(page.locator('.brand')).toBeVisible();
+    await expect(page.locator('.account-controls, .account-note').first()).toBeVisible();
+    await expect(page.getByTestId('link-logo-options')).toBeVisible();
+    await expect(page.locator('.privacy-note')).toBeVisible();
+    await expect(page.locator('.intro-row .save-state')).toBeVisible();
+    const bounds = await menu.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+    expect(await menu.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+
+  const [pngDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('button-export').focus().then(() => page.keyboard.press('Enter')),
+  ]);
+  expect(pngDownload.suggestedFilename()).toBe('Untitled-idea.png');
+
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  const [pdfDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('button-export-pdf').focus().then(() => page.keyboard.press('Enter')),
+  ]);
+  expect(pdfDownload.suggestedFilename()).toBe('Untitled-idea-a4-landscape.pdf');
 });
 
 test('the entire empty card opens the picker once, without a duplicate upload action', async ({ page }) => {
@@ -106,6 +611,15 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
   // Include a layer before replacement to guard the existing import-reset behavior.
   await page.getByTestId('button-add-layer').click();
   await zoomAndPan(page);
+  await page.getByTestId('button-pan-mode').click();
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[1]?.strokes.length).toBe(1);
+  const originalSketch = await savedProject(page);
+  const storedOriginalSketch = {
+    ...originalSketch,
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+  };
   const replacement = page.waitForEvent('filechooser');
   await preview.click();
   await (await replacement).setFiles(portrait);
@@ -113,6 +627,10 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
     const project = await savedProject(page);
     return project && { width: project.width, height: project.height, title: project.title, layers: project.layers.length };
   }).toEqual({ width: 300, height: 500, title: 'portrait', layers: 1 });
+  await expect(page.getByTestId('status-toast')).toHaveText(
+    'Photo added. Your previous sketch is saved in Saved sketches.',
+  );
+  expect((await savedProjectHistory(page))[0]).toEqual(storedOriginalSketch);
   const dimensions = await preview.evaluate(image => {
     const img = image as HTMLImageElement;
     return { width: img.naturalWidth, height: img.naturalHeight, fit: getComputedStyle(img).objectFit };
@@ -131,6 +649,688 @@ test('replacing a zoomed and panned landscape fits and centers the new portrait'
     return { stage: view.stage, content: view.content };
   }).toEqual({ stage, content: stage });
   await expect(page.getByTestId('input-photo')).toHaveAttribute('data-picker-clicks', '2');
+
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${portrait.buffer.toString('base64')}`,
+  );
+  expect((await savedProjectHistory(page))[0]).toEqual(storedOriginalSketch);
+  await page.getByTestId('button-restore-project-0').click();
+  await expect.poll(() => savedProject(page)).toEqual(originalSketch);
+});
+
+test('multiple photo replacements keep every earlier sketch restorable after reload', async ({ page }) => {
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  const initialProject = await savedProject(page);
+  const stages = [
+    { photo: await png(page, 'recovery-alpha.png', 320, 200), strokes: 1 },
+    { photo: await png(page, 'recovery-beta.png', 400, 240), strokes: 2 },
+    { photo: await png(page, 'recovery-gamma.png', 480, 300), strokes: 3 },
+    { photo: await png(page, 'recovery-current.png', 240, 360), strokes: 0 },
+  ];
+  const input = page.getByTestId('input-photo');
+  const savedSketches: Awaited<ReturnType<typeof savedProject>>[] = [];
+
+  for (let index = 0; index < stages.length; index += 1) {
+    const { photo, strokes } = stages[index];
+    await input.setInputFiles(photo);
+    await expect.poll(async () => (await savedProject(page))?.title).toBe(photo.name.replace(/\.png$/, ''));
+    for (let stroke = 0; stroke < strokes; stroke += 1) {
+      await addSyntheticStroke(page);
+    }
+    await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(strokes);
+    await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+    if (index < stages.length - 1) savedSketches.push(await savedProject(page));
+  }
+
+  const expectedHistory = [...savedSketches].reverse();
+  const allSavedSketches = [...expectedHistory, initialProject];
+  expect((await savedProjectHistory(page))).toEqual(allSavedSketches);
+
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${stages[3].photo.buffer.toString('base64')}`,
+  );
+  await expect.poll(() => savedProjectHistory(page)).toEqual(allSavedSketches);
+
+  for (const sketch of allSavedSketches) {
+    await page.getByRole('button', { name: `Restore saved sketch: ${sketch.title}`, exact: true }).click();
+    await expect.poll(() => savedProject(page)).toEqual(sketch);
+    if (sketch.image) {
+      await expect(page.getByTestId('img-reference')).toHaveAttribute('src', sketch.image);
+    } else {
+      await expect(page.getByTestId('img-reference')).toHaveCount(0);
+    }
+    await expect.poll(async () => savedProjectHistory(page)).toEqual(
+      expect.arrayContaining(allSavedSketches),
+    );
+  }
+});
+
+test('a delayed earlier file read cannot replace newer work or hide pending feedback', async ({ page }) => {
+  const slowPhoto = await png(page, 'slow-first.png', 160, 100);
+  const fastPhoto = await png(page, 'fast-second.png', 240, 120);
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  await page.evaluate(targetImage => {
+    const prototype = FileReader.prototype;
+    const readAsDataURL = prototype.readAsDataURL;
+    prototype.readAsDataURL = function (file) {
+      if (file.name === 'unreadable.png') {
+        const reader = this;
+        (window as Window & { releasePhotoReadFailure?: () => void }).releasePhotoReadFailure = () => {
+          reader.onerror?.call(reader, new ProgressEvent('error'));
+        };
+        return;
+      }
+      if (file.name !== 'slow-first.png') {
+        readAsDataURL.call(this, file);
+        return;
+      }
+      const reader = this;
+      const delayedOnload = reader.onload;
+      reader.onload = null;
+      reader.addEventListener('load', () => {
+        (window as Window & { releaseSlowPhotoRead?: () => void }).releaseSlowPhotoRead = () => {
+          if (typeof delayedOnload === 'function') delayedOnload.call(reader, new ProgressEvent('load'));
+        };
+      }, { once: true });
+      readAsDataURL.call(reader, file);
+    };
+    const imagePrototype = HTMLImageElement.prototype;
+    const srcDescriptor = Object.getOwnPropertyDescriptor(imagePrototype, 'src');
+    if (!srcDescriptor?.get || !srcDescriptor.set) throw new Error('Image source descriptor is unavailable.');
+    Object.defineProperty(imagePrototype, 'src', {
+      ...srcDescriptor,
+      set(value: string) {
+        if (!this.isConnected && value === targetImage) {
+          (window as Window & { releaseSlowPhotoDecode?: () => void }).releaseSlowPhotoDecode = () => {
+            srcDescriptor.set!.call(this, value);
+          };
+          return;
+        }
+        srcDescriptor.set!.call(this, value);
+      },
+    });
+  }, `data:image/png;base64,${slowPhoto.buffer.toString('base64')}`);
+
+  const input = page.getByTestId('input-photo');
+  await input.setInputFiles(slowPhoto);
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releaseSlowPhotoRead?: () => void }).releaseSlowPhotoRead,
+  )).toBe('function');
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+  await expect(page.getByTestId('status-photo-import')).toHaveText('Loading reference photo…');
+  await expect(page.getByTestId('status-photo-import')).toHaveAttribute('aria-live', 'polite');
+  await expect(page.getByTestId('status-toast')).toHaveCount(0);
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+
+  await input.setInputFiles(fastPhoto);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { title: project.title, width: project.width, height: project.height };
+  }).toEqual({ title: 'fast-second', width: 240, height: 120 });
+  await expect(page.getByTestId('status-toast')).toHaveText(
+    'Photo added. Your previous sketch is saved in Saved sketches.',
+  );
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+
+  const surface = page.locator('canvas.draw-surface');
+  const box = await surface.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width * 0.3, box!.y + box!.height * 0.35);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.65);
+  await page.mouse.up();
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  const fastProject = await savedProject(page);
+  expect(fastProject.title).toBe('fast-second');
+  expect(fastProject.layers[0].strokes).toHaveLength(1);
+
+  await page.evaluate(() => {
+    (window as Window & { releaseSlowPhotoRead?: () => void }).releaseSlowPhotoRead?.();
+  });
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releaseSlowPhotoDecode?: () => void }).releaseSlowPhotoDecode,
+  )).toBe('undefined');
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && {
+      title: project.title,
+      width: project.width,
+      height: project.height,
+      image: project.image,
+      layers: project.layers.map((layer: { strokes: unknown[] }) => layer.strokes.length),
+    };
+  }).toEqual({
+    title: 'fast-second',
+    width: 240,
+    height: 120,
+    image: `data:image/png;base64,${fastPhoto.buffer.toString('base64')}`,
+    layers: [1],
+  });
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${fastPhoto.buffer.toString('base64')}`,
+  );
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+
+  const persistedFastProject = await savedProject(page);
+  const persistedFastHistory = await savedProjectHistory(page);
+  await input.setInputFiles(await png(page, 'unreadable.png', 40, 30));
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releasePhotoReadFailure?: () => void }).releasePhotoReadFailure,
+  )).toBe('function');
+  await page.evaluate(() => {
+    (window as Window & { releasePhotoReadFailure?: () => void }).releasePhotoReadFailure?.();
+  });
+  await expect(page.getByTestId('status-toast')).toHaveText('Could not read that file. Please try again.');
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect.poll(() => savedProject(page)).toEqual(persistedFastProject);
+  expect(await savedProjectHistory(page)).toEqual(persistedFastHistory);
+
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', persistedFastProject.image);
+  await expect.poll(() => savedProject(page)).toEqual(persistedFastProject);
+  expect(await savedProjectHistory(page)).toEqual(persistedFastHistory);
+  expect((await savedProject(page)).layers[0].strokes).toHaveLength(1);
+});
+
+test('cancelling a photo read aborts it and ignores a late read completion', async ({ page }) => {
+  const photo = await png(page, 'cancel-this-import.png', 240, 160);
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  const projectBefore = await savedProject(page);
+  const historyBefore = await savedProjectHistory(page);
+  await holdPhotoRead(page, photo.name, `data:image/png;base64,${photo.buffer.toString('base64')}`);
+
+  await page.getByTestId('input-photo').setInputFiles(photo);
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+  await expect(page.getByTestId('button-cancel-photo-import')).toBeVisible();
+  await page.getByTestId('button-cancel-photo-import').click();
+
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect(page.getByTestId('status-toast')).toHaveText('Photo import cancelled. Your sketch is unchanged.');
+  expect(await page.evaluate(() => (window as Window & { heldPhotoReadAbortCount?: number }).heldPhotoReadAbortCount)).toBe(1);
+  expect(await savedProject(page)).toEqual(projectBefore);
+  expect(await savedProjectHistory(page)).toEqual(historyBefore);
+
+  await page.evaluate(() => (window as Window & { releaseHeldPhotoRead?: () => void }).releaseHeldPhotoRead?.());
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect(page.getByTestId('img-reference')).toHaveCount(0);
+  await expect.poll(() => savedProject(page)).toEqual(projectBefore);
+  expect(await savedProjectHistory(page)).toEqual(historyBefore);
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveCount(0);
+  expect(await savedProject(page)).toEqual(projectBefore);
+});
+
+for (const action of ['remove', 'blank'] as const) {
+  test(`${action === 'remove' ? 'removing the photo' : 'starting blank'} invalidates a pending import`, async ({ page }) => {
+    const currentPhoto = await png(page, `current-${action}.png`, 320, 200);
+    const pendingPhoto = await png(page, `pending-${action}.png`, 240, 160);
+    await page.getByTestId('input-photo').setInputFiles(currentPhoto);
+    await expect.poll(async () => (await savedProject(page))?.title).toBe(`current-${action}`);
+    await addSyntheticStroke(page);
+    await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+    const projectBefore = await savedProject(page);
+    const historyBefore = await savedProjectHistory(page);
+    await holdPhotoRead(page, pendingPhoto.name, `data:image/png;base64,${pendingPhoto.buffer.toString('base64')}`);
+
+    await page.getByTestId('input-photo').setInputFiles(pendingPhoto);
+    await expect(page.getByTestId('status-photo-import')).toBeVisible();
+    if (action === 'remove') {
+      await page.getByTestId('button-remove-photo').click();
+      await expect.poll(() => savedProject(page)).toEqual({ ...projectBefore, image: null });
+    } else {
+      await page.getByTestId('button-blank').click();
+      await expect.poll(async () => {
+        const project = await savedProject(page);
+        return project && {
+          image: project.image, width: project.width, height: project.height,
+          title: project.title, strokes: project.layers[0].strokes.length,
+        };
+      }).toEqual({ image: null, width: 1200, height: 800, title: 'Untitled idea', strokes: 0 });
+    }
+    const chosenProject = await savedProject(page);
+    await page.evaluate(() => (window as Window & { releaseHeldPhotoRead?: () => void }).releaseHeldPhotoRead?.());
+    await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+    await expect.poll(() => savedProject(page)).toEqual(chosenProject);
+    expect(await savedProjectHistory(page)).toEqual(historyBefore);
+    if (action === 'remove') {
+      expect(chosenProject).toEqual({ ...projectBefore, image: null });
+      expect(chosenProject.layers[0].strokes).toHaveLength(1);
+    }
+
+    await page.reload();
+    await expect(page.getByTestId('img-reference')).toHaveCount(0);
+    await expect.poll(() => savedProject(page)).toEqual(chosenProject);
+    expect(await savedProjectHistory(page)).toEqual(historyBefore);
+  });
+}
+
+test('only the newer photo installs when an earlier import is waiting on a storage estimate', async ({ page }) => {
+  const currentPhoto = await png(page, 'storage-current.png', 320, 200);
+  const olderPhoto = await png(page, 'storage-older.png', 240, 160);
+  const newerPhoto = await png(page, 'storage-newer.png', 420, 280);
+  await page.getByTestId('input-photo').setInputFiles(currentPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('storage-current');
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  const outgoingProject = await savedProjectRaw(page);
+  const historyBeforeReplacement = await savedProjectHistory(page);
+
+  await page.evaluate(() => {
+    let calls = 0;
+    const controls = window as Window & {
+      releaseStorageEstimate1?: () => void;
+      releaseStorageEstimate2?: () => void;
+      storageEstimateCalls?: number;
+    };
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: {
+        estimate: () => {
+          calls += 1;
+          controls.storageEstimateCalls = calls;
+          if (calls > 2) return Promise.resolve({ usage: 0, quota: 1_000_000_000 });
+          return new Promise(resolve => {
+            const releaseKey = calls === 1 ? 'releaseStorageEstimate1' : 'releaseStorageEstimate2';
+            controls[releaseKey] = () => {
+              resolve({ usage: 0, quota: 1_000_000_000 });
+              controls[releaseKey] = undefined;
+            };
+          });
+        },
+      },
+    });
+  });
+
+  await page.getByTestId('input-photo').setInputFiles(olderPhoto);
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releaseStorageEstimate1?: () => void }).releaseStorageEstimate1,
+  )).toBe('function');
+  await page.getByTestId('input-photo').setInputFiles(newerPhoto);
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releaseStorageEstimate2?: () => void }).releaseStorageEstimate2,
+  )).toBe('function');
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+
+  await page.evaluate(() => (window as Window & { releaseStorageEstimate2?: () => void }).releaseStorageEstimate2?.());
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('storage-newer');
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+  await expect.poll(() => savedProjectHistory(page)).toEqual([outgoingProject, ...historyBeforeReplacement]);
+  const newerProject = await savedProject(page);
+
+  await page.evaluate(() => (window as Window & { releaseStorageEstimate1?: () => void }).releaseStorageEstimate1?.());
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect.poll(() => savedProject(page)).toEqual(newerProject);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${newerPhoto.buffer.toString('base64')}`,
+  );
+  expect(await savedProjectHistory(page)).toEqual([outgoingProject, ...historyBeforeReplacement]);
+  await expect(page.getByTestId('status-toast')).toHaveText(
+    'Photo added. Your previous sketch is saved in Saved sketches.',
+  );
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${newerPhoto.buffer.toString('base64')}`,
+  );
+  await expect.poll(() => savedProject(page)).toEqual(newerProject);
+  expect(await savedProjectHistory(page)).toEqual([outgoingProject, ...historyBeforeReplacement]);
+});
+
+test('photo read and decode failures preserve the sketch until a valid retry decodes', async ({ page }) => {
+  const initialPhoto = await png(page, 'keep-this-sketch.png', 320, 200);
+  await page.getByTestId('input-photo').setInputFiles(initialPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('keep-this-sketch');
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  const input = page.getByTestId('input-photo');
+  const originalProject = await savedProject(page);
+  const originalHistory = await savedProjectHistory(page);
+
+  await page.evaluate(() => {
+    const prototype = FileReader.prototype;
+    const readAsDataURL = prototype.readAsDataURL;
+    prototype.readAsDataURL = function (file) {
+      if (file.name !== 'unreadable.png') {
+        readAsDataURL.call(this, file);
+        return;
+      }
+      setTimeout(() => this.onerror?.call(this, new ProgressEvent('error')), 0);
+    };
+  });
+  await input.setInputFiles(await png(page, 'unreadable.png', 240, 160));
+  await expect(page.getByTestId('status-toast')).toHaveText('Could not read that file. Please try again.');
+  expect(await savedProject(page)).toEqual(originalProject);
+  expect(await savedProjectHistory(page)).toEqual(originalHistory);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', originalProject.image);
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+
+  const decodeFailure = await png(page, 'decode-failure.png', 240, 160);
+  await page.evaluate(() => {
+    const controls = window as Window & {
+      failNextPhotoDecode?: boolean;
+      holdNextPhotoDecode?: boolean;
+      releasePhotoDecode?: () => void;
+      restoreNativeImage?: () => void;
+    };
+    const nativeImage = window.Image;
+    const nativeSource = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    if (!nativeSource?.set) throw new Error('Image source descriptor is unavailable.');
+    controls.failNextPhotoDecode = true;
+    controls.holdNextPhotoDecode = false;
+    class ControlledImage extends nativeImage {
+      constructor() {
+        super();
+        const image = this;
+        Object.defineProperty(image, 'src', {
+          configurable: true,
+          set(value: string) {
+            if (controls.failNextPhotoDecode) {
+              controls.failNextPhotoDecode = false;
+              setTimeout(() => image.onerror?.call(image, new Event('error')), 0);
+              return;
+            }
+            if (controls.holdNextPhotoDecode) {
+              controls.holdNextPhotoDecode = false;
+              controls.releasePhotoDecode = () => {
+                nativeSource.set!.call(image, value);
+                controls.releasePhotoDecode = undefined;
+              };
+              return;
+            }
+            nativeSource.set!.call(image, value);
+          },
+        });
+      }
+    }
+    Object.defineProperty(window, 'Image', {
+      configurable: true,
+      writable: true,
+      value: ControlledImage,
+    });
+    controls.restoreNativeImage = () => {
+      Object.defineProperty(window, 'Image', {
+        configurable: true,
+        writable: true,
+        value: nativeImage,
+      });
+    };
+  });
+  await input.setInputFiles(decodeFailure);
+  await expect(page.getByTestId('status-toast')).toHaveText(
+    'That photo could not be opened. Try another image.',
+  );
+  expect(await savedProject(page)).toEqual(originalProject);
+  expect(await savedProjectHistory(page)).toEqual(originalHistory);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', originalProject.image);
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+
+  const retryPhoto = await png(page, 'successful-retry.png', 360, 240, '#43a047');
+  await page.evaluate(() => {
+    const controls = window as Window & {
+      holdNextPhotoDecode?: boolean;
+      releasePhotoDecode?: () => void;
+    };
+    controls.holdNextPhotoDecode = true;
+  });
+  await input.setInputFiles(retryPhoto);
+  await expect(page.getByTestId('status-photo-import')).toBeVisible();
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releasePhotoDecode?: () => void }).releasePhotoDecode,
+  )).toBe('function');
+  expect(await savedProject(page)).toEqual(originalProject);
+  expect(await savedProjectHistory(page)).toEqual(originalHistory);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', originalProject.image);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(2);
+  const projectBeforeSuccessfulRetry = await savedProject(page);
+  expect(projectBeforeSuccessfulRetry.layers[0].strokes).toHaveLength(2);
+  await page.evaluate(() => {
+    (window as Window & { releasePhotoDecode?: () => void }).releasePhotoDecode?.();
+  });
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { title: project.title, width: project.width, height: project.height };
+  }).toEqual({ title: 'successful-retry', width: 360, height: 240 });
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${retryPhoto.buffer.toString('base64')}`,
+  );
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+  await expect(page.getByTestId('status-toast')).toHaveText(
+    'Photo added. Your previous sketch is saved in Saved sketches.',
+  );
+  expect((await savedProjectHistory(page))[0]).toEqual(projectBeforeSuccessfulRetry);
+  await expect.poll(() => savedProject(page)).toEqual(expect.objectContaining({
+    image: `data:image/png;base64,${retryPhoto.buffer.toString('base64')}`,
+    width: 360,
+    height: 240,
+  }));
+  await page.evaluate(() => {
+    (window as Window & { restoreNativeImage?: () => void }).restoreNativeImage?.();
+  });
+});
+
+test('different photos with the same filename replace according to the selected content', async ({ page }) => {
+  const firstPhoto = await png(page, 'shared-photo.png', 320, 200, '#e53935');
+  const secondPhoto = await png(page, 'shared-photo.png', 420, 260, '#43a047');
+  expect(firstPhoto.buffer.equals(secondPhoto.buffer)).toBe(false);
+  const input = page.getByTestId('input-photo');
+
+  await input.setInputFiles(firstPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('shared-photo');
+  await page.getByTestId('button-add-layer').click();
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[1]?.strokes.length).toBe(1);
+  await zoomAndPan(page);
+  const firstProject = await savedProject(page);
+  expect(firstProject.image).toBe(`data:image/png;base64,${firstPhoto.buffer.toString('base64')}`);
+
+  await input.setInputFiles(secondPhoto);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { image: project.image, width: project.width, height: project.height };
+  }).toEqual({
+    image: `data:image/png;base64,${secondPhoto.buffer.toString('base64')}`,
+    width: 420,
+    height: 260,
+  });
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${secondPhoto.buffer.toString('base64')}`,
+  );
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect(page.getByTestId('button-pan-mode')).toHaveAttribute('aria-pressed', 'false');
+  const stageBounds = await page.getByTestId('canvas-stage').boundingBox();
+  expect(stageBounds).not.toBeNull();
+  await expect.poll(async () => {
+    const view = await photoView(page);
+    return { stage: view.stage, content: view.content };
+  }).toEqual({ stage: stageBounds, content: stageBounds });
+  const replacedProject = await savedProject(page);
+  expect(replacedProject.layers).toHaveLength(1);
+  expect(replacedProject.layers[0].strokes).toEqual([]);
+  expect((await savedProjectHistory(page))[0]).toEqual(firstProject);
+
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute(
+    'src', `data:image/png;base64,${secondPhoto.buffer.toString('base64')}`,
+  );
+  await expect.poll(() => savedProject(page)).toEqual(replacedProject);
+});
+
+test('an unsupported file leaves the sketch and photo view unchanged and allows a valid retry', async ({ page }) => {
+  const firstPhoto = await png(page, 'keep-after-rejection.png', 320, 200, '#e53935');
+  await page.getByTestId('input-photo').setInputFiles(firstPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('keep-after-rejection');
+  await page.getByTestId('button-add-layer').click();
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[1]?.strokes.length).toBe(1);
+  await zoomAndPan(page);
+  const projectBeforeReject = await savedProject(page);
+  const historyBeforeReject = await savedProjectHistory(page);
+  const viewBeforeReject = await photoView(page);
+  const input = page.getByTestId('input-photo');
+
+  await input.setInputFiles({
+    name: 'notes.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('not an image'),
+  });
+  await expect(page.getByTestId('status-toast')).toHaveText('Choose an image file to begin.');
+  await expect(input).toHaveValue('');
+  expect(await savedProject(page)).toEqual(projectBeforeReject);
+  expect(await savedProjectHistory(page)).toEqual(historyBeforeReject);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', projectBeforeReject.image);
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
+  await expect(page.getByTestId('button-pan-mode')).toHaveAttribute('aria-pressed', 'true');
+  expect(await photoView(page)).toEqual(viewBeforeReject);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+
+  const retryPhoto = await png(page, 'valid-after-rejection.png', 400, 240, '#43a047');
+  await input.setInputFiles(retryPhoto);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { image: project.image, title: project.title, width: project.width, height: project.height };
+  }).toEqual({
+    image: `data:image/png;base64,${retryPhoto.buffer.toString('base64')}`,
+    title: 'valid-after-rejection',
+    width: 400,
+    height: 240,
+  });
+  expect((await savedProjectHistory(page))[0]).toEqual(projectBeforeReject);
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+});
+
+test('a photo replacement is blocked if its recovery copy cannot be saved', async ({ page }) => {
+  const initialPhoto = await png(page, 'recover-before-replace.png', 320, 200);
+  await page.getByTestId('input-photo').setInputFiles(initialPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('recover-before-replace');
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  const activeProject = await savedProject(page);
+  const activeHistory = await savedProjectHistory(page);
+
+  await page.evaluate(key => {
+    const originalSetItem = Storage.prototype.setItem;
+    (window as typeof window & { restoreHistoryStorage?: () => void }).restoreHistoryStorage = () => {
+      Storage.prototype.setItem = originalSetItem;
+    };
+    Storage.prototype.setItem = function (storageKey, value) {
+      if (this === localStorage && storageKey === key) {
+        throw new DOMException('Test history quota exceeded', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, storageKey, value);
+    };
+  }, PROJECT_HISTORY_KEY);
+
+  await page.getByTestId('input-photo').setInputFiles(await png(page, 'must-not-replace.png', 240, 120));
+  await expect(page.getByTestId('status-toast')).toHaveText(
+    'Could not save a recovery copy of your current sketch. Your project is unchanged.',
+  );
+  expect(await savedProject(page)).toEqual(activeProject);
+  expect(await savedProjectHistory(page)).toEqual(activeHistory);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', activeProject.image);
+
+  await page.evaluate(() => {
+    (window as typeof window & { restoreHistoryStorage?: () => void }).restoreHistoryStorage?.();
+  });
+});
+
+test('superseded image load and error callbacks do not change the active project or feedback', async ({ page }) => {
+  const slowPhoto = await png(page, 'slow-image.png', 160, 100);
+  const fastPhoto = await png(page, 'fast-image.png', 240, 120);
+  const slowSource = `data:image/png;base64,${slowPhoto.buffer.toString('base64')}`;
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  await page.evaluate(slowSource => {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    if (!descriptor?.get || !descriptor.set) throw new Error('Image src descriptor is unavailable.');
+    Object.defineProperty(HTMLImageElement.prototype, 'src', {
+      configurable: true,
+      get: descriptor.get,
+      set(value: string) {
+        if (String(value) === slowSource) {
+          (window as Window & { delayedPhotoImage?: HTMLImageElement }).delayedPhotoImage = this;
+          return;
+        }
+        descriptor.set!.call(this, value);
+      },
+    });
+  }, slowSource);
+
+  const input = page.getByTestId('input-photo');
+  await input.setInputFiles(slowPhoto);
+  await expect.poll(() => page.evaluate(
+    () => Boolean((window as Window & { delayedPhotoImage?: HTMLImageElement }).delayedPhotoImage),
+  )).toBe(true);
+  await input.setInputFiles(fastPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('fast-image');
+
+  const surface = page.locator('canvas.draw-surface');
+  const box = await surface.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width * 0.3, box!.y + box!.height * 0.35);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.65);
+  await page.mouse.up();
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+
+  await expect(page.getByTestId('status-toast')).toHaveCount(0);
+  const activeProject = await savedProject(page);
+  await page.evaluate(() => {
+    const image = (window as Window & { delayedPhotoImage?: HTMLImageElement }).delayedPhotoImage!;
+    image.onload?.(new Event('load'));
+    image.onerror?.(new Event('error'));
+  });
+  await expect.poll(() => savedProject(page)).toEqual(activeProject);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', activeProject.image);
+  await expect(page.getByTestId('status-toast')).toHaveCount(0);
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
+});
+
+test('a superseded file-read error does not change the active project or feedback', async ({ page }) => {
+  const slowPhoto = await png(page, 'slow-read-error.png', 160, 100);
+  const fastPhoto = await png(page, 'fast-after-read-error.png', 240, 120);
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  await page.evaluate(() => {
+    const prototype = FileReader.prototype;
+    const readAsDataURL = prototype.readAsDataURL;
+    prototype.readAsDataURL = function (file) {
+      if (file.name !== 'slow-read-error.png') {
+        readAsDataURL.call(this, file);
+        return;
+      }
+      const reader = this;
+      const delayedOnerror = reader.onerror;
+      reader.onload = null;
+      reader.onerror = null;
+      (window as Window & { releaseSlowPhotoReadError?: () => void }).releaseSlowPhotoReadError = () => {
+        if (typeof delayedOnerror === 'function') delayedOnerror.call(reader, new ProgressEvent('error'));
+      };
+      readAsDataURL.call(reader, file);
+    };
+  });
+
+  const input = page.getByTestId('input-photo');
+  await input.setInputFiles(slowPhoto);
+  await expect.poll(() => page.evaluate(
+    () => typeof (window as Window & { releaseSlowPhotoReadError?: () => void }).releaseSlowPhotoReadError,
+  )).toBe('function');
+  await input.setInputFiles(fastPhoto);
+  await expect.poll(async () => (await savedProject(page))?.title).toBe('fast-after-read-error');
+  const activeProject = await savedProject(page);
+  await expect(page.getByTestId('status-toast')).toHaveCount(0);
+  await page.evaluate(() => {
+    (window as Window & { releaseSlowPhotoReadError?: () => void }).releaseSlowPhotoReadError?.();
+  });
+  await expect.poll(() => savedProject(page)).toEqual(activeProject);
+  await expect(page.getByTestId('status-toast')).toHaveCount(0);
+  await expect(page.getByTestId('status-photo-import')).toHaveCount(0);
 });
 
 test('choosing the identical photo again handles change and saves a fresh fitted sketch', async ({ page }) => {
@@ -226,6 +1426,10 @@ test('cancelling replacement preserves zoom, pan, and saved photo, dimensions, t
     return project?.layers[1]?.strokes.length;
   }).toBe(1);
   await zoomAndPan(page);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return { photoZoom: project?.photoZoom, photoPan: project?.photoPan };
+  }).toEqual({ photoZoom: 1.5, photoPan: { x: 42, y: -26 } });
   const before = await savedProject(page);
   const viewBefore = await photoView(page);
   const replacement = page.waitForEvent('filechooser');
@@ -325,6 +1529,7 @@ for (const action of ['undo', 'redo'] as const) {
       color, size: 8, tool: 'pen',
     });
     const before = {
+      photoZoom: 1, photoPan: { x: 0, y: 0 },
       image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
       width: 480, height: 320, title: 'Independent drawing histories',
       selectedLayerId: 'history-bottom',
@@ -412,6 +1617,7 @@ for (const action of ['undo', 'redo'] as const) {
       color, size: 8, tool: 'pen',
     });
     const before = {
+      photoZoom: 1, photoPan: { x: 0, y: 0 },
       image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
       width: 480, height: 320, title: 'Immediate history reload',
       selectedLayerId: 'immediate-middle',
@@ -452,9 +1658,9 @@ for (const action of ['undo', 'redo'] as const) {
     };
     // Freeze time so even a slow test runner cannot accidentally let the
     // 500ms debounce save first and mask a broken pagehide flush.
-    const frozenTime = new Date('2026-10-11T12:00:00Z');
-    await page.clock.install({ time: frozenTime });
-    await page.clock.pauseAt(frozenTime);
+    await page.clock.install();
+    const pauseTime = new Date(await page.evaluate(() => Date.now() + 1_000));
+    await page.clock.pauseAt(pauseTime);
     await page.getByTestId(`button-${action}`).click();
     await page.reload();
 
@@ -483,6 +1689,7 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
       points: [{ x: 0.2, y }, { x: 0.7, y }], color, size: 8, tool: 'pen',
     });
     const before = {
+      photoZoom: 1, photoPan: { x: 0, y: 0 },
       image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
       width: 480, height: 320, title: 'Previously saved artwork',
       selectedLayerId: 'storage-main',
@@ -507,9 +1714,9 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
     expect(await savedProject(page)).toEqual(before);
     const storedBytes = await page.evaluate(key => localStorage.getItem(key), STORE_KEY);
 
-    const frozenTime = new Date('2026-10-11T12:00:00Z');
-    await page.clock.install({ time: frozenTime });
-    await page.clock.pauseAt(frozenTime);
+    await page.clock.install();
+    const pauseTime = new Date(await page.evaluate(() => Date.now() + 1_000));
+    await page.clock.pauseAt(pauseTime);
     await page.evaluate(key => {
       const originalSetItem = Storage.prototype.setItem;
       const attempts: string[] = [];
@@ -549,12 +1756,19 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
       }
       await expect(page.getByTestId('status-save')).toHaveText('Storage is full');
       await expect(page.getByText('Saved in this browser', { exact: true })).toHaveCount(0);
+      expect(await page.evaluate(() => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        return event.defaultPrevented;
+      })).toBe(true);
       const attempts = await page.evaluate(() => (
         window as typeof window & { storageFailureFixture: { attempts: string[] } }
       ).storageFailureFixture.attempts);
       expect(attempts).toHaveLength(savePath === 'debounced autosave' ? 1 : 2);
       expect(JSON.parse(attempts.at(-1)!)).toEqual({
         ...before,
+        referencePhotoVisible: true,
+        referencePhotoOpacity: 100,
         layers: [
           { ...before.layers[0], strokes: before.layers[0].strokes.slice(0, -1),
             redo: [...before.layers[0].redo, before.layers[0].strokes[1]] },
@@ -578,6 +1792,119 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
     }
   });
 }
+
+test('unsaved drawing stays editable and saves after browser storage recovers', async ({ page }) => {
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  const storedBefore = await page.evaluate(key => localStorage.getItem(key), STORE_KEY);
+  expect(storedBefore).not.toBeNull();
+
+  await page.clock.install();
+  const pauseTime = new Date(await page.evaluate(() => Date.now() + 1_000));
+  await page.clock.pauseAt(pauseTime);
+  await page.evaluate(key => {
+    const originalSetItem = Storage.prototype.setItem;
+    const fixture = {
+      writable: false,
+      originalSetItem,
+      attempts: [] as string[],
+    };
+    (window as typeof window & { projectStorageFailureFixture?: typeof fixture })
+      .projectStorageFailureFixture = fixture;
+    Storage.prototype.setItem = function (storageKey, value) {
+      if (this === localStorage && storageKey === key && !fixture.writable) {
+        fixture.attempts.push(value);
+        throw new DOMException('Test project quota exceeded', 'QuotaExceededError');
+      }
+      return originalSetItem.call(this, storageKey, value);
+    };
+  }, STORE_KEY);
+
+  try {
+    await addSyntheticStroke(page);
+    await expect(page.getByTestId('status-save')).toHaveText('Saving…');
+    await page.clock.runFor(500);
+    await expect(page.getByTestId('status-save')).toHaveText('Storage is full');
+    await expect(page.getByText('Saved in this browser', { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('button-undo')).toBeEnabled();
+    expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.475 }))[3]).toBeGreaterThan(0);
+    expect(await page.evaluate(key => localStorage.getItem(key), STORE_KEY)).toBe(storedBefore);
+
+    await page.evaluate(() => {
+      const fixture = (window as typeof window & {
+        projectStorageFailureFixture: { writable: boolean };
+      }).projectStorageFailureFixture;
+      fixture.writable = true;
+    });
+    await addSyntheticStroke(page);
+    await expect(page.getByTestId('status-save')).toHaveText('Saving…');
+    await page.clock.runFor(500);
+    await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+    expect(await page.evaluate(() => {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    })).toBe(false);
+
+    const recovered = await savedProject(page);
+    expect(recovered.layers[0].strokes).toHaveLength(2);
+    const attempts = await page.evaluate(() => (
+      window as typeof window & { projectStorageFailureFixture: { attempts: string[] } }
+    ).projectStorageFailureFixture.attempts);
+    expect(attempts).toHaveLength(1);
+    expect(JSON.parse(attempts[0]).layers[0].strokes).toHaveLength(1);
+
+    await page.reload();
+    await page.clock.runFor(500);
+    await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+    expect((await savedProject(page)).layers[0].strokes).toHaveLength(2);
+    await expect(page.getByTestId('button-undo')).toBeEnabled();
+  } finally {
+    await page.evaluate(() => {
+      const fixtureWindow = window as typeof window & {
+        projectStorageFailureFixture?: { originalSetItem: typeof Storage.prototype.setItem };
+      };
+      const fixture = fixtureWindow.projectStorageFailureFixture;
+      if (fixture) Storage.prototype.setItem = fixture.originalSetItem;
+      delete fixtureWindow.projectStorageFailureFixture;
+    });
+  }
+});
+
+test('normal navigation proceeds without a leave warning after the sketch is saved', async ({ page }) => {
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  const dialogs: string[] = [];
+  page.on('dialog', async dialog => {
+    dialogs.push(dialog.type);
+    await dialog.accept();
+  });
+
+  await page.goto('about:blank');
+
+  await expect(page).toHaveURL('about:blank');
+  expect(dialogs).toEqual([]);
+});
+
+test('an in-progress stroke warns before leaving and clears the warning after it is saved', async ({ page }) => {
+  const surface = page.locator('canvas.draw-surface');
+  const bounds = await surface.boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.mouse.move(bounds!.x + bounds!.width * 0.3, bounds!.y + bounds!.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(bounds!.x + bounds!.width * 0.7, bounds!.y + bounds!.height * 0.65, { steps: 6 });
+  expect(await page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  })).toBe(true);
+
+  await page.mouse.up();
+  await expect(page.getByTestId('status-save')).toHaveText('Saved in this browser');
+  expect(await page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  })).toBe(false);
+});
 
 for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) {
   test(`denied initial project reads keep drawing usable and report failed ${savePath}`, async ({ page }) => {
@@ -675,13 +2002,10 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
         };
       }, STORE_KEY);
       expect(result.reads).toBeGreaterThan(0);
-      expect(writesBeforeSave).toBeGreaterThan(0); // Initial fallback autosave was also denied.
-      expect(result.writes).toHaveLength(writesBeforeSave + 1);
-      const attempted = JSON.parse(result.writes.at(-1)!);
-      expect(attempted.title).toBe('Untitled idea');
-      expect(attempted.image).toBeNull();
-      expect(attempted.layers).toHaveLength(2);
-      expect(attempted.layers.find((layer: { id: string }) => layer.id === attempted.selectedLayerId).strokes).toHaveLength(1);
+      // Do not replace a saved project with a fresh fallback when its current
+      // snapshot cannot be read and compared.
+      expect(writesBeforeSave).toBe(0);
+      expect(result.writes).toHaveLength(0);
       expect(result.storedBytes).toBe(storedBytes);
       expect(JSON.parse(result.storedBytes!)).toEqual(before);
       expect({ unrelated: result.unrelated, session: result.session })
@@ -702,7 +2026,9 @@ for (const savePath of ['debounced autosave', 'pagehide persistence'] as const) 
 }
 
 for (const redoOnly of [false, true]) {
-test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, remains safe when already empty,' : 'strokes and redo history'} and persists after reload`, async ({ page }) => {
+test(redoOnly
+  ? 'clearing a redo-only layer remains a safe no-op for undo and preserves neighboring artwork'
+  : 'clearing a hidden selected layer is undoable and preserves neighboring rendered artwork', async ({ page }) => {
   const photo = await png(page, 'clear-layer-reference.png', 480, 320);
   const stroke = (color: string, y: number) => ({
     points: [{ x: 0.2, y }, { x: 0.7, y }],
@@ -710,13 +2036,15 @@ test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, rema
   });
   // Select the middle layer; protect both neighbors' artwork and history.
   const before = {
+    photoZoom: 1, photoPan: { x: 0, y: 0 },
     image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
+    referencePhotoVisible: true, referencePhotoOpacity: 37,
     width: 480, height: 320, title: 'Keep the rest of my sketch',
     selectedLayerId: 'layer-clear-target',
     layers: [
       { id: 'layer-keep-bottom', name: 'Background lines', visible: true, opacity: 0.65,
         strokes: [stroke('#e53935', 0.25)], redo: [stroke('#ff9800', 0.3)] },
-      { id: 'layer-clear-target', name: 'Draft to clear', visible: true, opacity: 0.45,
+      { id: 'layer-clear-target', name: 'Draft to clear', visible: redoOnly, opacity: 0.45,
         strokes: redoOnly ? [] : [stroke('#1e88e5', 0.5), stroke('#8e24aa', 0.55)], redo: [stroke('#00acc1', 0.6)] },
       { id: 'layer-keep-top', name: 'Hidden details', visible: false, opacity: 0.8,
         strokes: [stroke('#43a047', 0.75)], redo: [stroke('#3949ab', 0.8)] },
@@ -737,30 +2065,75 @@ test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, rema
   else await expect(page.getByTestId('button-undo')).toBeEnabled();
   await expect(page.getByTestId('button-redo')).toBeEnabled();
   await expect.poll(() => savedProject(page)).toEqual(before);
+  await expect.poll(async () => (await canvasPixel(page, 'canvas-layer-layer-keep-bottom', 240, 80))[3])
+    .toBeGreaterThan(0);
+  const neighborPixel = await canvasPixel(page, 'canvas-layer-layer-keep-bottom', 240, 80);
+  const targetPixel = redoOnly ? null : await canvasPixel(page, 'canvas-layer-layer-clear-target', 240, 160);
+  if (!redoOnly) {
+    await expect.poll(async () => (await canvasPixel(page, 'canvas-layer-layer-clear-target', 240, 160))[3])
+      .toBeGreaterThan(0);
+    expect(targetPixel![3]).toBeGreaterThan(0);
+  }
+  if (!redoOnly) {
+    await expect(page.getByTestId('button-visibility-layer-clear-target')).toHaveAttribute('aria-label', 'Show layer');
+  }
 
   const after = {
     ...before,
     layers: before.layers.map(layer => layer.id === before.selectedLayerId
-      ? { ...layer, strokes: [], redo: [] }
+      ? redoOnly
+        ? { ...layer, strokes: [], redo: [] }
+        : { ...layer, strokes: [...layer.strokes, { kind: 'clear' }], redo: [] }
       : layer),
   };
   await page.getByRole('button', { name: 'Clear selected layer', exact: true }).click();
   // Full equality guards all untouched layer properties and histories, the
   // photo bytes, dimensions, title, layer ordering, and selected layer ID.
   await expect.poll(() => savedProject(page)).toEqual(after);
-  await expect(page.getByTestId('button-undo')).toBeDisabled();
+  await expect(page.getByTestId('button-undo')).toBeEnabled({ enabled: !redoOnly });
   await expect(page.getByTestId('button-redo')).toBeDisabled();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0.37');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
   await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
+  expect(await canvasPixel(page, 'canvas-layer-layer-keep-bottom', 240, 80)).toEqual(neighborPixel);
+  if (!redoOnly) {
+    await expect.poll(() => canvasPixel(page, 'canvas-layer-layer-clear-target', 240, 160))
+      .toEqual([0, 0, 0, 0]);
+  }
 
   await page.reload();
   await expect(page.getByTestId('img-reference')).toBeVisible();
   await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0.37');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
   await expect(page.getByTestId(`layer-row-${before.selectedLayerId}`)).toHaveClass(/active/);
-  await expect(page.getByTestId('button-undo')).toBeDisabled();
+  await expect(page.getByTestId('button-undo')).toBeEnabled({ enabled: !redoOnly });
   await expect(page.getByTestId('button-redo')).toBeDisabled();
   await expect(page.getByTestId('button-visibility-layer-keep-top')).toHaveAttribute('aria-label', 'Show layer');
   await expect.poll(() => savedProject(page)).toEqual(after);
+
+  if (!redoOnly) {
+    const undone = {
+      ...before,
+      layers: before.layers.map(layer => layer.id === before.selectedLayerId
+        ? { ...layer, redo: [{ kind: 'clear' }] }
+        : layer),
+    };
+    await page.getByTestId('button-undo').click();
+    await expect.poll(() => savedProject(page)).toEqual(undone);
+    await expect(page.getByTestId('button-undo')).toBeEnabled();
+    await expect(page.getByTestId('button-redo')).toBeEnabled();
+    await expect.poll(() => canvasPixel(page, 'canvas-layer-layer-clear-target', 240, 160))
+      .toEqual(targetPixel);
+    expect(await canvasPixel(page, 'canvas-layer-layer-keep-bottom', 240, 80)).toEqual(neighborPixel);
+
+    await page.getByTestId('button-redo').click();
+    await expect.poll(() => savedProject(page)).toEqual(after);
+    await expect.poll(() => canvasPixel(page, 'canvas-layer-layer-clear-target', 240, 160))
+      .toEqual([0, 0, 0, 0]);
+    expect(await canvasPixel(page, 'canvas-layer-layer-keep-bottom', 240, 80)).toEqual(neighborPixel);
+  }
 
   if (redoOnly) {
     // Clear again after rehydrating the now completely empty target. Neither
@@ -778,6 +2151,97 @@ test(`Clear selected layer clears only its ${redoOnly ? 'redo-only history, rema
   }
 });
 }
+
+test('the only layer can be cleared, undone, redone, and drawn on without losing the right history', async ({ page }) => {
+  const photo = await png(page, 'single-layer-clear.png', 480, 320);
+  const originalStroke = {
+    points: [{ x: 0.2, y: 0.4 }, { x: 0.7, y: 0.4 }],
+    color: '#e53935', size: 8, tool: 'pen',
+  };
+  const obsoleteRedo = {
+    points: [{ x: 0.2, y: 0.7 }, { x: 0.7, y: 0.7 }],
+    color: '#ff9800', size: 8, tool: 'pen',
+  };
+  const before = {
+    photoZoom: 1, photoPan: { x: 0, y: 0 },
+    image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
+    referencePhotoVisible: true, referencePhotoOpacity: 100,
+    width: 480, height: 320, title: 'One layer remains usable',
+    selectedLayerId: 'only-layer',
+    layers: [{
+      id: 'only-layer', name: 'Layer 1', visible: true, opacity: 1,
+      strokes: [originalStroke], redo: [obsoleteRedo],
+    }],
+  };
+  await page.addInitScript(({ key, project }) => {
+    const marker = `${key}-single-layer-clear-seeded`;
+    if (sessionStorage.getItem(marker)) return;
+    localStorage.setItem(key, JSON.stringify(project));
+    sessionStorage.setItem(marker, 'true');
+  }, { key: STORE_KEY, project: before });
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toBeVisible();
+  await expect.poll(() => savedProject(page)).toEqual(before);
+  await expect.poll(async () => (await canvasPixel(page, 'canvas-layer-only-layer', 240, 128))[3])
+    .toBeGreaterThan(0);
+  const originalPixel = await canvasPixel(page, 'canvas-layer-only-layer', 240, 128);
+
+  const cleared = {
+    ...before,
+    layers: [{ ...before.layers[0], strokes: [...before.layers[0].strokes, { kind: 'clear' }], redo: [] }],
+  };
+  await page.getByTestId('button-clear-layer').click();
+  await expect.poll(() => savedProject(page)).toEqual(cleared);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+  await expect.poll(() => canvasPixel(page, 'canvas-layer-only-layer', 240, 128)).toEqual([0, 0, 0, 0]);
+
+  await page.getByTestId('button-undo').click();
+  const clearUndone = {
+    ...before,
+    layers: [{ ...before.layers[0], redo: [{ kind: 'clear' }] }],
+  };
+  await expect.poll(() => savedProject(page)).toEqual(clearUndone);
+  await expect.poll(() => canvasPixel(page, 'canvas-layer-only-layer', 240, 128)).toEqual(originalPixel);
+  await expect(page.getByTestId('button-redo')).toBeEnabled();
+
+  await page.getByTestId('button-redo').click();
+  await expect.poll(() => savedProject(page)).toEqual(cleared);
+  await expect.poll(() => canvasPixel(page, 'canvas-layer-only-layer', 240, 128)).toEqual([0, 0, 0, 0]);
+
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(3);
+  const afterDrawing = await savedProject(page);
+  expect(afterDrawing.layers[0].strokes.slice(0, 2)).toEqual(cleared.layers[0].strokes);
+  expect(afterDrawing.layers[0].redo).toEqual([]);
+
+  await page.getByTestId('button-undo').click();
+  const drawingUndone = {
+    ...cleared,
+    layers: [{ ...cleared.layers[0], redo: [afterDrawing.layers[0].strokes[2]] }],
+  };
+  await expect.poll(() => savedProject(page)).toEqual(drawingUndone);
+  await expect(page.getByTestId('button-redo')).toBeEnabled();
+
+  await page.getByTestId('button-undo').click();
+  const clearAndDrawingUndone = {
+    ...before,
+    layers: [{
+      ...before.layers[0],
+      redo: [afterDrawing.layers[0].strokes[2], { kind: 'clear' }],
+    }],
+  };
+  await expect.poll(() => savedProject(page)).toEqual(clearAndDrawingUndone);
+  await expect.poll(() => canvasPixel(page, 'canvas-layer-only-layer', 240, 128)).toEqual(originalPixel);
+
+  await page.getByTestId('button-redo').click();
+  await expect.poll(() => savedProject(page)).toEqual(drawingUndone);
+  await expect.poll(() => canvasPixel(page, 'canvas-layer-only-layer', 240, 128)).toEqual([0, 0, 0, 0]);
+  await page.getByTestId('button-redo').click();
+  await expect.poll(() => savedProject(page)).toEqual(afterDrawing);
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+});
 
 for (const deleteSelected of [true, false]) {
   test(`deleting ${deleteSelected ? 'a selected' : 'an unselected'} layer preserves the other artwork and survives reload`, async ({ page }) => {
@@ -881,6 +2345,7 @@ test('layer moves preserve selection, artwork, properties and history across rel
   const photo = await png(page, 'layer-order.png', 480, 320);
   const ids = ['order-bottom', 'order-middle', 'order-top'];
   const before = {
+    photoZoom: 1, photoPan: { x: 0, y: 0 },
     image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
     width: 480, height: 320, title: 'Layer ordering', selectedLayerId: ids[1],
     layers: ids.map((id, index) => ({
@@ -949,6 +2414,8 @@ test.describe('layer rename regression', () => {
       const photo = await png(page, 'rename-switch-reference.png', 480, 320);
       const ids = ['switch-bottom', 'switch-middle', 'switch-top'];
       const before = {
+        photoZoom: 1, photoPan: { x: 0, y: 0 },
+        referencePhotoVisible: true, referencePhotoOpacity: 100,
         image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
         width: 480, height: 320, title: 'Independent rename drafts', selectedLayerId: ids[1],
         layers: ids.map((id, index) => ({
@@ -1061,6 +2528,8 @@ test.describe('layer rename regression', () => {
         // Independent fixture: each layer has distinct artwork, redo history,
         // opacity and a stable ID. The unselected target is deliberately hidden.
         const before = {
+          photoZoom: 1, photoPan: { x: 0, y: 0 },
+          referencePhotoVisible: true, referencePhotoOpacity: 100,
           image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
           width: 480, height: 320, title: 'Preserve my named sketch',
           selectedLayerId: 'rename-middle',
@@ -1147,6 +2616,127 @@ test.describe('layer rename regression', () => {
       });
     }
   }
+
+  test('a confirmed rename survives a reload before the 500ms autosave', async ({ page }) => {
+    const photo = await png(page, 'rename-immediate-reload.png', 480, 320);
+    const before = layerRenameLifecycleProject(`data:image/png;base64,${photo.buffer.toString('base64')}`);
+    await seedLayerRenameLifecycleProject(page, 'immediate-reload', before);
+    await freezeProjectAutosave(page);
+
+    const id = 'lifecycle-top';
+    const input = page.getByTestId(`input-rename-${id}`);
+    await page.getByTestId(`button-rename-${id}`).click();
+    await expect(input).toHaveValue('Hidden highlights');
+    await input.fill('Renamed highlights');
+    await input.press('Enter');
+
+    // The frozen debounce proves localStorage is still at the old snapshot;
+    // navigation must persist the committed project through pagehide.
+    expect(await savedProject(page)).toEqual(before);
+    await expect(page.getByTestId('status-save')).toHaveText('Saving…');
+    await page.reload();
+
+    const expected = {
+      ...before,
+      layers: before.layers.map(layer => layer.id === id
+        ? { ...layer, name: 'Renamed highlights' }
+        : layer),
+    };
+    await expect.poll(() => savedProject(page)).toEqual(expected);
+    await expect(page.getByTestId(`button-select-layer-${id}`)).toHaveText('Renamed highlights');
+    await expect(page.getByTestId('layer-row-lifecycle-middle')).toHaveClass(/active/);
+  });
+
+  for (const [draft, label] of [['', 'empty'], ['   ', 'whitespace-only']] as const) {
+    test(`a ${label} second draft cannot replace the first layer name`, async ({ page }) => {
+      const photo = await png(page, `rename-${label}-second-draft.png`, 480, 320);
+      const before = layerRenameLifecycleProject(`data:image/png;base64,${photo.buffer.toString('base64')}`);
+      await seedLayerRenameLifecycleProject(page, `second-draft-${label}`, before);
+      await freezeProjectAutosave(page);
+
+      const firstId = 'lifecycle-bottom';
+      const secondId = 'lifecycle-middle';
+      const thirdId = 'lifecycle-top';
+      const firstInput = page.getByTestId(`input-rename-${firstId}`);
+      const secondInput = page.getByTestId(`input-rename-${secondId}`);
+      const thirdInput = page.getByTestId(`input-rename-${thirdId}`);
+
+      await page.getByTestId(`button-rename-${firstId}`).click();
+      await firstInput.fill('Confirmed background');
+      // Clicking the next rename control commits the first draft on blur.
+      await page.getByTestId(`button-rename-${secondId}`).click();
+      await expect(secondInput).toHaveValue('Selected details');
+      await secondInput.fill(draft);
+      // Blur the blank second draft while opening a third field.
+      await page.getByTestId(`button-rename-${thirdId}`).click();
+      await expect(thirdInput).toHaveValue('Hidden highlights');
+      await thirdInput.press('Escape');
+
+      const expected = {
+        ...before,
+        layers: before.layers.map(layer => layer.id === firstId
+          ? { ...layer, name: 'Confirmed background' }
+          : layer),
+      };
+      await page.clock.runFor(600);
+      await expect.poll(() => savedProject(page)).toEqual(expected);
+      await page.reload();
+      await expect.poll(() => savedProject(page)).toEqual(expected);
+      for (const layer of expected.layers) {
+        await expect(page.getByTestId(`button-select-layer-${layer.id}`)).toHaveText(layer.name);
+      }
+      await expect(page.getByTestId('layer-row-lifecycle-middle')).toHaveClass(/active/);
+    });
+  }
+
+  test('cancelling a pending second rename reopens with saved names and accepts a fresh draft', async ({ page }) => {
+    const photo = await png(page, 'rename-reopen-cancelled.png', 480, 320);
+    const before = layerRenameLifecycleProject(`data:image/png;base64,${photo.buffer.toString('base64')}`);
+    await seedLayerRenameLifecycleProject(page, 'reopen-cancelled', before);
+    await freezeProjectAutosave(page);
+
+    const firstId = 'lifecycle-bottom';
+    const secondId = 'lifecycle-top';
+    const firstInput = page.getByTestId(`input-rename-${firstId}`);
+    const secondInput = page.getByTestId(`input-rename-${secondId}`);
+
+    await page.getByTestId(`button-rename-${firstId}`).click();
+    await firstInput.fill('Confirmed background');
+    // This commits the first name and opens the second field while its
+    // debounced localStorage write is deliberately held.
+    await page.getByTestId(`button-rename-${secondId}`).click();
+    await expect(secondInput).toHaveValue('Hidden highlights');
+    expect(await savedProject(page)).toEqual(before);
+    await expect(page.getByTestId('status-save')).toHaveText('Saving…');
+
+    await secondInput.fill('Discarded highlights');
+    await secondInput.press('Escape');
+    expect(await savedProject(page)).toEqual(before);
+
+    await page.getByTestId(`button-rename-${firstId}`).click();
+    await expect(firstInput).toHaveValue('Confirmed background');
+    await firstInput.press('Escape');
+    await page.getByTestId(`button-rename-${secondId}`).click();
+    await expect(secondInput).toHaveValue('Hidden highlights');
+    await secondInput.fill('Fresh highlights');
+    await secondInput.press('Enter');
+
+    const expected = {
+      ...before,
+      layers: before.layers.map(layer => {
+        if (layer.id === firstId) return { ...layer, name: 'Confirmed background' };
+        if (layer.id === secondId) return { ...layer, name: 'Fresh highlights' };
+        return layer;
+      }),
+    };
+    await page.clock.runFor(600);
+    await expect.poll(() => savedProject(page)).toEqual(expected);
+    await page.reload();
+    await expect.poll(() => savedProject(page)).toEqual(expected);
+    await expect(page.getByTestId(`button-select-layer-${firstId}`)).toHaveText('Confirmed background');
+    await expect(page.getByTestId(`button-select-layer-${secondId}`)).toHaveText('Fresh highlights');
+    await expect(page.getByTestId('layer-row-lifecycle-middle')).toHaveClass(/active/);
+  });
 });
 
 test('strokes stay on the same photo details across zoom and pan, and hidden layers allow photo dragging', async ({ page }) => {
@@ -1189,7 +2779,7 @@ test('strokes stay on the same photo details across zoom and pan, and hidden lay
       const photoContext = photoCanvas.getContext('2d')!;
       photoContext.drawImage(photo, 0, 0);
       return {
-        pixel: Array.from(context.getImageData(x, y, 1, 1).data).slice(0, 3),
+        pixel: Array.from(context.getImageData(x, y, 1, 1).data),
         photoPixel: Array.from(photoContext.getImageData(
           Math.round(point.x * (photoCanvas.width - 1)),
           Math.round(point.y * (photoCanvas.height - 1)),
@@ -1201,7 +2791,7 @@ test('strokes stay on the same photo details across zoom and pan, and hidden lay
     }, { x: marker.x, y: marker.y });
     expect(verification.strokes[index].points[0].x).toBeCloseTo(marker.x, 2);
     expect(verification.strokes[index].points[0].y).toBeCloseTo(marker.y, 2);
-    expect(verification.pixel).toEqual([49, 93, 77]);
+    expect(verification.pixel).toEqual([0, 0, 0, 255]);
     expect(verification.photoPixel).toEqual(marker.photoColor);
   }
 
@@ -1231,13 +2821,17 @@ test('undo and redo preserve the zoomed and panned photo while moving the exact 
   await page.mouse.down();
   await page.mouse.move(box!.x + box!.width * 0.6, box!.y + box!.height * 0.6, { steps: 8 });
   await page.mouse.up();
-  // Wait for the debounced save before establishing history and view baselines.
+  // Wait for the stroke save before changing the view.
   await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  await zoomAndPan(page);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return { photoZoom: project?.photoZoom, photoPan: project?.photoPan };
+  }).toEqual({ photoZoom: 1.5, photoPan: { x: 42, y: -26 } });
   const before = await savedProject(page);
   expect(before.layers[0].redo).toEqual([]);
   expect(before.layers[0].strokes[0].points.length).toBeGreaterThan(1);
 
-  await zoomAndPan(page);
   await page.getByTestId('button-pan-mode').click();
   const viewBefore = await photoView(page);
   expect(viewBefore.content!.width / viewBefore.stage!.width).toBeCloseTo(1.5, 2);
@@ -1289,6 +2883,765 @@ test('undo and redo preserve the zoomed and panned photo while moving the exact 
   await assertViewUnchanged();
 });
 
+for (const referencePhotoVisible of [false, true]) {
+test(`undo and redo preserve ${referencePhotoVisible ? 'visible' : 'hidden'} reference photo settings and unrelated drawing data across reloads`, async ({ page }) => {
+  const photo = await png(page, 'undo-redo-photo-settings.png', 480, 320);
+  const stroke = (color: string, y: number) => ({
+    points: [{ x: 0.2, y }, { x: 0.7, y }],
+    color, size: 8, tool: 'pen',
+  });
+  const before = {
+    image: `data:image/png;base64,${photo.buffer.toString('base64')}`,
+    width: 480, height: 320, title: 'Photo settings and drawing history',
+    selectedLayerId: 'settings-main',
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    layers: [
+      { id: 'settings-main', name: 'Main drawing', visible: true, opacity: 0.65,
+        strokes: [stroke('#1e88e5', 0.3), stroke('#8e24aa', 0.5)],
+        redo: [stroke('#00acc1', 0.7)] },
+      { id: 'settings-unrelated', name: 'Unrelated details', visible: false, opacity: 0.4,
+        strokes: [stroke('#43a047', 0.2)], redo: [stroke('#3949ab', 0.8)] },
+    ],
+  };
+  // Seed after the outgoing page's pagehide flush, and only once. Reloads below
+  // must read the application's actual saved state rather than this fixture.
+  await page.addInitScript(({ key, project }) => {
+    const marker = `${key}-photo-settings-history-seeded`;
+    if (sessionStorage.getItem(marker)) return;
+    localStorage.setItem(key, JSON.stringify(project));
+    sessionStorage.setItem(marker, 'true');
+  }, { key: STORE_KEY, project: before });
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+  await expect.poll(() => savedProjectRaw(page)).toEqual(before);
+
+  await page.getByTestId('input-reference-photo-opacity').fill('37');
+  if (!referencePhotoVisible) await page.getByTestId('button-reference-photo-visibility').click();
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', String(referencePhotoVisible));
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', referencePhotoVisible ? '0.37' : '0');
+
+  const settingsProject = {
+    ...before,
+    referencePhotoVisible,
+    referencePhotoOpacity: 37,
+  };
+  await expect.poll(() => savedProjectRaw(page)).toEqual(settingsProject);
+
+  const afterUndo = {
+    ...settingsProject,
+    layers: settingsProject.layers.map((layer, index) => index === 0
+      ? { ...layer, strokes: layer.strokes.slice(0, -1), redo: [...layer.redo, layer.strokes.at(-1)] }
+      : layer),
+  };
+  const assertCurrentProject = async (expected: typeof before) => {
+    await expect.poll(() => savedProjectRaw(page)).toEqual(expected);
+    await expect(page.getByTestId('img-reference')).toHaveAttribute('src', before.image);
+    await expect(page.locator('.stage img.base-photo')).toHaveAttribute('src', before.image);
+    await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', String(referencePhotoVisible));
+    await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
+    await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', referencePhotoVisible ? '0.37' : '0');
+  };
+
+  await page.getByTestId('button-undo').click();
+  await expect.poll(() => savedProjectRaw(page)).toEqual(afterUndo);
+  await page.reload();
+  await assertCurrentProject(afterUndo);
+
+  await page.getByTestId('button-redo').click();
+  await expect.poll(() => savedProjectRaw(page)).toEqual(settingsProject);
+  await page.reload();
+  await assertCurrentProject(settingsProject);
+});
+}
+
+test('changing visible photo opacity after undo preserves redo and the selected setting across reloads', async ({ page }) => {
+  const photo = await png(page, 'opacity-after-undo.png', 600, 400);
+  await page.getByTestId('input-photo').setInputFiles(photo);
+  const preview = page.getByTestId('img-reference');
+  await expect(preview).toBeVisible();
+  const source = await preview.getAttribute('src');
+
+  await addSyntheticStroke(page);
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  await page.getByTestId('button-undo').click();
+  await expect(page.getByTestId('button-redo')).toBeEnabled();
+  await expect.poll(async () => {
+    const project = await savedProjectRaw(page);
+    return project && [
+      project.layers[0].strokes.length,
+      project.layers[0].redo.length,
+      project.referencePhotoVisible,
+      project.referencePhotoOpacity,
+    ];
+  }).toEqual([0, 1, true, 100]);
+
+  await page.getByTestId('input-reference-photo-opacity').fill('37');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0.37');
+  await expect.poll(async () => {
+    const project = await savedProjectRaw(page);
+    return project && [
+      project.layers[0].strokes.length,
+      project.layers[0].redo.length,
+      project.referencePhotoVisible,
+      project.referencePhotoOpacity,
+    ];
+  }).toEqual([0, 1, true, 37]);
+  await expect(page.getByTestId('button-redo')).toBeEnabled();
+
+  await page.getByTestId('button-redo').click();
+  await expect.poll(async () => {
+    const project = await savedProjectRaw(page);
+    return project && [
+      project.layers[0].strokes.length,
+      project.layers[0].redo.length,
+      project.referencePhotoVisible,
+      project.referencePhotoOpacity,
+    ];
+  }).toEqual([1, 0, true, 37]);
+  await expect(page.locator('.stage img.base-photo')).toHaveAttribute('src', source!);
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0.37');
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.475 }))[3]).toBeGreaterThan(0);
+
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', source!);
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '0.37');
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+  await expect.poll(async () => {
+    const project = await savedProjectRaw(page);
+    return project && [
+      project.layers[0].strokes.length,
+      project.layers[0].redo.length,
+      project.referencePhotoVisible,
+      project.referencePhotoOpacity,
+    ];
+  }).toEqual([1, 0, true, 37]);
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.475 }))[3]).toBeGreaterThan(0);
+});
+
+test('undo restores an erased mark and redo removes it without changing the zoomed photo view', async ({ page }) => {
+  const photo = await png(page, 'eraser-history.png', 600, 400);
+  await page.getByTestId('input-photo').setInputFiles(photo);
+  const preview = page.getByTestId('img-reference');
+  await expect(preview).toBeVisible();
+  const photoSource = await preview.getAttribute('src');
+
+  await drawNormalizedLine(page, { x: 0.28, y: 0.5 }, { x: 0.72, y: 0.5 });
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  const beforeErase = await savedProject(page);
+  expect(beforeErase.layers[0].redo).toEqual([]);
+  const mark = beforeErase.layers[0].strokes[0];
+  const markPixel = await normalizedDrawingPixel(page, { x: 0.5, y: 0.5 });
+  const preservedPixel = await normalizedDrawingPixel(page, { x: 0.34, y: 0.5 });
+  expect(markPixel[3]).toBeGreaterThan(0);
+  expect(preservedPixel[3]).toBeGreaterThan(0);
+
+  await page.getByTestId('button-tool-eraser').click();
+  await expect(page.getByTestId('button-tool-eraser')).toHaveAttribute('aria-pressed', 'true');
+  await drawNormalizedLine(page, { x: 0.5, y: 0.34 }, { x: 0.5, y: 0.66 });
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(2);
+  const erasedProject = await savedProject(page);
+  const eraserStroke = erasedProject.layers[0].strokes[1];
+  expect(eraserStroke.tool).toBe('eraser');
+  expect(erasedProject).toEqual({
+    ...beforeErase,
+    layers: beforeErase.layers.map((layer: unknown, index: number) => index === 0
+      ? { ...beforeErase.layers[0], strokes: [mark, eraserStroke], redo: [] }
+      : layer),
+  });
+  await expect.poll(() => normalizedDrawingPixel(page, { x: 0.5, y: 0.5 }).then(pixel => pixel[3])).toBe(0);
+  expect(await normalizedDrawingPixel(page, { x: 0.34, y: 0.5 })).toEqual(preservedPixel);
+
+  await zoomAndPan(page);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return { photoZoom: project?.photoZoom, photoPan: project?.photoPan };
+  }).toEqual({ photoZoom: 1.5, photoPan: { x: 42, y: -26 } });
+  const transformedProject = await savedProject(page);
+  expect(transformedProject.layers[0].strokes).toEqual([mark, eraserStroke]);
+  await page.getByTestId('button-pan-mode').click();
+  const viewBefore = await photoView(page);
+  const renderedPhoto = page.locator('.base-photo');
+  const photoBounds = await renderedPhoto.boundingBox();
+  expect(viewBefore.content!.width / viewBefore.stage!.width).toBeCloseTo(1.5, 2);
+
+  const assertPhotoViewUnchanged = async () => {
+    await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
+    await expect(page.getByTestId('button-pan-mode')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('button-reset-photo-view')).toBeEnabled();
+    await expect(preview).toHaveAttribute('src', photoSource!);
+    await expect(renderedPhoto).toHaveAttribute('src', photoSource!);
+    expect(await photoView(page)).toEqual(viewBefore);
+    expect(await renderedPhoto.boundingBox()).toEqual(photoBounds);
+  };
+
+  const afterUndo = {
+    ...transformedProject,
+    layers: transformedProject.layers.map((layer: unknown, index: number) => index === 0
+      ? { ...transformedProject.layers[0], strokes: [mark], redo: [eraserStroke] }
+      : layer),
+  };
+  await expect(page.getByTestId('button-undo')).toBeEnabled();
+  await page.getByTestId('button-undo').click();
+  await expect.poll(() => savedProject(page)).toEqual(afterUndo);
+  await expect(page.getByTestId('button-redo')).toBeEnabled();
+  await expect.poll(() => normalizedDrawingPixel(page, { x: 0.5, y: 0.5 }).then(pixel => pixel[3])).toBeGreaterThan(0);
+  expect(await normalizedDrawingPixel(page, { x: 0.34, y: 0.5 })).toEqual(preservedPixel);
+  await assertPhotoViewUnchanged();
+
+  await page.getByTestId('button-redo').click();
+  await expect.poll(() => savedProject(page)).toEqual(transformedProject);
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+  await expect.poll(() => normalizedDrawingPixel(page, { x: 0.5, y: 0.5 }).then(pixel => pixel[3])).toBe(0);
+  expect(await normalizedDrawingPixel(page, { x: 0.34, y: 0.5 })).toEqual(preservedPixel);
+  await assertPhotoViewUnchanged();
+});
+
+test('drawing after multiple undos discards the old redo branch and keeps the photo view', async ({ page }) => {
+  const photo = await png(page, 'redo-branch.png', 600, 400);
+  await page.getByTestId('input-photo').setInputFiles(photo);
+  const preview = page.getByTestId('img-reference');
+  await expect(preview).toBeVisible();
+  const photoSource = await preview.getAttribute('src');
+  const paths = [
+    { start: { x: 0.2, y: 0.25 }, end: { x: 0.4, y: 0.25 } },
+    { start: { x: 0.2, y: 0.5 }, end: { x: 0.4, y: 0.5 } },
+    { start: { x: 0.2, y: 0.75 }, end: { x: 0.4, y: 0.75 } },
+  ];
+  for (let index = 0; index < paths.length; index += 1) {
+    await drawNormalizedLine(page, paths[index].start, paths[index].end);
+    await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(index + 1);
+  }
+  const originalProject = await savedProject(page);
+  const [firstStroke, secondStroke, abandonedStroke] = originalProject.layers[0].strokes;
+  expect(originalProject.layers[0].redo).toEqual([]);
+  for (const [index, stroke] of originalProject.layers[0].strokes.entries()) {
+    expect(stroke.points[0].x).toBeCloseTo(paths[index].start.x, 2);
+    expect(stroke.points[0].y).toBeCloseTo(paths[index].start.y, 2);
+    expect(stroke.points.at(-1)!.x).toBeCloseTo(paths[index].end.x, 2);
+    expect(stroke.points.at(-1)!.y).toBeCloseTo(paths[index].end.y, 2);
+  }
+
+  await zoomAndPan(page);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return { photoZoom: project?.photoZoom, photoPan: project?.photoPan };
+  }).toEqual({ photoZoom: 1.5, photoPan: { x: 42, y: -26 } });
+  await page.getByTestId('button-pan-mode').click();
+  const viewBefore = await photoView(page);
+  const renderedPhoto = page.locator('.base-photo');
+  const photoBounds = await renderedPhoto.boundingBox();
+  expect(viewBefore.content!.width / viewBefore.stage!.width).toBeCloseTo(1.5, 2);
+  const transformedProject = await savedProject(page);
+  expect(transformedProject.layers[0].strokes).toEqual([firstStroke, secondStroke, abandonedStroke]);
+
+  const assertPhotoViewUnchanged = async () => {
+    await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
+    await expect(page.getByTestId('button-pan-mode')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('button-reset-photo-view')).toBeEnabled();
+    await expect(preview).toHaveAttribute('src', photoSource!);
+    await expect(renderedPhoto).toHaveAttribute('src', photoSource!);
+    expect(await photoView(page)).toEqual(viewBefore);
+    expect(await renderedPhoto.boundingBox()).toEqual(photoBounds);
+  };
+
+  await page.getByTestId('button-undo').click();
+  const afterFirstUndo = {
+    ...transformedProject,
+    layers: transformedProject.layers.map((layer: unknown, index: number) => index === 0
+      ? { ...transformedProject.layers[0], strokes: [firstStroke, secondStroke], redo: [abandonedStroke] }
+      : layer),
+  };
+  await expect.poll(() => savedProject(page)).toEqual(afterFirstUndo);
+
+  await page.getByTestId('button-undo').click();
+  const afterSecondUndo = {
+    ...transformedProject,
+    layers: transformedProject.layers.map((layer: unknown, index: number) => index === 0
+      ? { ...transformedProject.layers[0], strokes: [firstStroke], redo: [abandonedStroke, secondStroke] }
+      : layer),
+  };
+  await expect.poll(() => savedProject(page)).toEqual(afterSecondUndo);
+  expect((await normalizedDrawingPixel(page, { x: 0.3, y: 0.25 }))[3]).toBeGreaterThan(0);
+  expect((await normalizedDrawingPixel(page, { x: 0.3, y: 0.5 }))[3]).toBe(0);
+  expect((await normalizedDrawingPixel(page, { x: 0.3, y: 0.75 }))[3]).toBe(0);
+
+  await drawNormalizedLine(page, { x: 0.62, y: 0.5 }, { x: 0.72, y: 0.5 });
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(2);
+  const branchedProject = await savedProject(page);
+  const replacementStroke = branchedProject.layers[0].strokes[1];
+  const expectedBranch = {
+    ...afterSecondUndo,
+    layers: afterSecondUndo.layers.map((layer: unknown, index: number) => index === 0
+      ? { ...afterSecondUndo.layers[0], strokes: [firstStroke, replacementStroke], redo: [] }
+      : layer),
+  };
+  expect(branchedProject).toEqual(expectedBranch);
+  expect(replacementStroke.points[0].x).toBeCloseTo(0.62, 2);
+  expect(replacementStroke.points.at(-1)!.x).toBeCloseTo(0.72, 2);
+  expect(replacementStroke.points[0].y).toBeCloseTo(0.5, 2);
+  await expect(page.getByTestId('button-redo')).toBeDisabled();
+  expect((await normalizedDrawingPixel(page, { x: 0.3, y: 0.25 }))[3]).toBeGreaterThan(0);
+  expect((await normalizedDrawingPixel(page, { x: 0.3, y: 0.5 }))[3]).toBe(0);
+  expect((await normalizedDrawingPixel(page, { x: 0.3, y: 0.75 }))[3]).toBe(0);
+  expect((await normalizedDrawingPixel(page, { x: 0.7, y: 0.5 }))[3]).toBeGreaterThan(0);
+  await assertPhotoViewUnchanged();
+});
+
+test('reference photo display defaults, legacy projects, replacements, and saved-sketch restoration', async ({ page }) => {
+  const original = await png(page, 'photo-display-legacy.png', 600, 400);
+  const image = `data:image/png;base64,${original.buffer.toString('base64')}`;
+  const legacyProject = {
+    image,
+    width: 600,
+    height: 400,
+    title: 'photo-display-legacy',
+    selectedLayerId: 'legacy-photo-layer',
+    photoZoom: 1,
+    photoPan: { x: 0, y: 0 },
+    layers: [{
+      id: 'legacy-photo-layer',
+      name: 'Layer 1',
+      visible: true,
+      opacity: 1,
+      strokes: [],
+      redo: [],
+    }],
+  };
+  const baseURL = process.env.CLOUDPAINTER_TEST_URL;
+  if (!baseURL) throw new Error('Set CLOUDPAINTER_TEST_URL to the running CloudPainter preview URL.');
+  await page.goto('about:blank');
+  await page.addInitScript(({ key, project }) => {
+    const marker = `${key}-legacy-photo-display-seeded`;
+    if (sessionStorage.getItem(marker)) return;
+    localStorage.setItem(key, JSON.stringify(project));
+    sessionStorage.setItem(marker, 'true');
+  }, { key: STORE_KEY, project: legacyProject });
+  await page.goto(baseURL);
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', image);
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('100');
+  await expect.poll(async () => {
+    const project = await savedProjectRaw(page);
+    return project && [project.referencePhotoVisible, project.referencePhotoOpacity];
+  }).toEqual([true, 100]);
+
+  // The app normalized the legacy project's omitted fields to current defaults.
+  await expect.poll(async () => {
+    const project = await savedProjectRaw(page);
+    return project && [project.referencePhotoVisible, project.referencePhotoOpacity];
+  }).toEqual([true, 100]);
+
+  await page.getByTestId('input-reference-photo-opacity').fill('37');
+  await expect(page.getByTestId('reference-photo-opacity-value')).toHaveText('37%');
+  await page.getByTestId('button-reference-photo-visibility').click();
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(() => savedProjectRaw(page)).toMatchObject({
+    referencePhotoVisible: false,
+    referencePhotoOpacity: 37,
+  });
+  const customSettings = await savedProjectRaw(page);
+  expect(customSettings).toMatchObject({
+    referencePhotoVisible: false,
+    referencePhotoOpacity: 37,
+  });
+
+  // Keep this project in saved-sketch history while importing a fresh photo.
+  await page.evaluate(({ key, project }) => localStorage.setItem(key, JSON.stringify([project])), {
+    key: PROJECT_HISTORY_KEY,
+    project: customSettings,
+  });
+  await page.reload();
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(() => savedProjectHistory(page)).toHaveLength(1);
+
+  const replacement = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Replace reference photo', exact: true }).click();
+  await (await replacement).setFiles(await png(page, 'replacement.png', 600, 400));
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('100');
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => {
+    const project = await savedProjectRaw(page);
+    return project && [project.referencePhotoVisible, project.referencePhotoOpacity];
+  }).toEqual([true, 100]);
+
+  await page.getByRole('button', { name: 'Restore saved sketch: photo-display-legacy', exact: true }).click();
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(() => savedProjectRaw(page)).toMatchObject({
+    image: customSettings.image,
+    referencePhotoVisible: false,
+    referencePhotoOpacity: 37,
+  });
+
+  await page.reload();
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', customSettings.image);
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('37');
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(() => savedProjectRaw(page)).toMatchObject({
+    image: customSettings.image,
+    referencePhotoVisible: false,
+    referencePhotoOpacity: 37,
+  });
+});
+
+test('restoring the reference photo display defaults preserves the photo and drawings after reload', async ({ page }) => {
+  await page.getByTestId('input-photo').setInputFiles(await png(page, 'photo-display-reset.png', 600, 400));
+  await expect(page.getByTestId('img-reference')).toBeVisible();
+
+  await page.getByTestId('button-add-layer').click();
+  const surface = page.locator('canvas.draw-surface');
+  const surfaceBox = await surface.boundingBox();
+  expect(surfaceBox).not.toBeNull();
+  await page.mouse.move(surfaceBox!.x + surfaceBox!.width * 0.3, surfaceBox!.y + surfaceBox!.height * 0.4);
+  await page.mouse.down();
+  await page.mouse.move(surfaceBox!.x + surfaceBox!.width * 0.7, surfaceBox!.y + surfaceBox!.height * 0.6, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await savedProject(page))?.layers[1]?.strokes.length).toBe(1);
+
+  const projectBeforeReset = await savedProjectRaw(page);
+  const sourceBeforeReset = await page.getByTestId('img-reference').getAttribute('src');
+  await page.getByTestId('input-reference-photo-opacity').fill('37');
+  await page.getByTestId('button-reference-photo-visibility').click();
+  await expect.poll(async () => {
+    const project = await savedProjectRaw(page);
+    return project && [project.referencePhotoVisible, project.referencePhotoOpacity];
+  }).toEqual([false, 37]);
+
+  await page.getByTestId('button-reset-reference-photo-display').click();
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('100');
+  await expect(page.getByTestId('reference-photo-opacity-value')).toHaveText('100%');
+  await expect(page.locator('.stage img.base-photo')).toHaveCSS('opacity', '1');
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', sourceBeforeReset!);
+  await expect.poll(() => savedProjectRaw(page)).toEqual({
+    ...projectBeforeReset,
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+  });
+
+  await page.reload();
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('100');
+  await expect(page.getByTestId('img-reference')).toHaveAttribute('src', sourceBeforeReset!);
+  await expect.poll(async () => (await savedProject(page))?.layers).toEqual(projectBeforeReset.layers);
+  await expect.poll(() => savedProjectRaw(page)).toMatchObject({
+    referencePhotoVisible: true,
+    referencePhotoOpacity: 100,
+  });
+});
+
+test('photo visibility and opacity change the canvas and PNG without changing drawing layers', async ({ page }) => {
+  await page.getByTestId('input-photo').setInputFiles(await png(page, 'display-export.png', 600, 400));
+  const photo = page.locator('.stage img.base-photo');
+  const surface = page.locator('canvas.draw-surface');
+  await expect(photo).toBeVisible();
+  await expect(photo).toHaveCSS('opacity', '1');
+
+  const surfaceBox = await surface.boundingBox();
+  expect(surfaceBox).not.toBeNull();
+  await page.mouse.move(surfaceBox!.x + surfaceBox!.width * 0.3, surfaceBox!.y + surfaceBox!.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(surfaceBox!.x + surfaceBox!.width * 0.7, surfaceBox!.y + surfaceBox!.height * 0.5, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(1);
+  const drawingBefore = await surface.evaluate(canvas => (canvas as HTMLCanvasElement).toDataURL('image/png'));
+  const layersBefore = (await savedProject(page)).layers;
+
+  const opacity = page.getByTestId('input-reference-photo-opacity');
+  await opacity.fill('0');
+  await expect(page.getByTestId('reference-photo-opacity-value')).toHaveText('0%');
+  await expect(photo).toHaveCSS('opacity', '0');
+  expect(await surface.evaluate(canvas => (canvas as HTMLCanvasElement).toDataURL('image/png'))).toBe(drawingBefore);
+  await expect.poll(async () => (await savedProject(page))?.layers).toEqual(layersBefore);
+  const zeroOpacityDownload = page.waitForEvent('download');
+  await page.getByTestId('button-export-menu').click();
+  await page.getByTestId('button-export').click();
+  const zeroOpacityPng = await inspectDownloadedPng(page, await zeroOpacityDownload, [{ x: 20, y: 20 }]);
+  expect(zeroOpacityPng.samples[0][3]).toBe(0);
+  expect(zeroOpacityPng.nonTransparentPixels).toBeGreaterThan(0);
+
+  await opacity.fill('50');
+  await expect(page.getByTestId('reference-photo-opacity-value')).toHaveText('50%');
+  await expect(photo).toHaveCSS('opacity', '0.5');
+  const halfOpacityDownload = page.waitForEvent('download');
+  await page.getByTestId('button-export-menu').click();
+  await page.getByTestId('button-export').click();
+  const halfOpacityPng = await inspectDownloadedPng(page, await halfOpacityDownload, [{ x: 20, y: 20 }]);
+  expect(halfOpacityPng.samples[0][3]).toBe(128);
+  expect(halfOpacityPng.samples[0].slice(0, 3).every((channel, index) =>
+    Math.abs(channel - [135, 166, 192][index]) <= 1)).toBe(true);
+
+  await opacity.fill('100');
+  await expect(page.getByTestId('reference-photo-opacity-value')).toHaveText('100%');
+  await expect(photo).toHaveCSS('opacity', '1');
+  const fullOpacityDownload = page.waitForEvent('download');
+  await page.getByTestId('button-export-menu').click();
+  await page.getByTestId('button-export').click();
+  const fullOpacityPng = await inspectDownloadedPng(page, await fullOpacityDownload, [{ x: 20, y: 20 }]);
+  expect(fullOpacityPng.samples[0]).toEqual([135, 166, 192, 255]);
+
+  await page.getByTestId('button-reference-photo-visibility').click();
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
+  await expect(photo).toHaveAttribute('src', await page.getByTestId('img-reference').getAttribute('src'));
+  await expect(photo).toHaveCSS('opacity', '0');
+  expect(await surface.evaluate(canvas => (canvas as HTMLCanvasElement).toDataURL('image/png'))).toBe(drawingBefore);
+  await expect.poll(async () => (await savedProject(page))?.layers).toEqual(layersBefore);
+
+  const hiddenDownload = page.waitForEvent('download');
+  await page.getByTestId('button-export-menu').click();
+  await page.getByTestId('button-export').click();
+  const hiddenPng = await inspectDownloadedPng(page, await hiddenDownload, [{ x: 20, y: 20 }]);
+  expect(hiddenPng.samples[0][3]).toBe(0);
+  expect(hiddenPng.nonTransparentPixels).toBeGreaterThan(0);
+
+  // Hiding the guide does not block editing or alter the drawing-layer content.
+  await page.mouse.move(surfaceBox!.x + surfaceBox!.width * 0.3, surfaceBox!.y + surfaceBox!.height * 0.7);
+  await page.mouse.down();
+  await page.mouse.move(surfaceBox!.x + surfaceBox!.width * 0.7, surfaceBox!.y + surfaceBox!.height * 0.7, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(2);
+  await page.getByTestId('button-reference-photo-visibility').click();
+  await expect(page.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('input-reference-photo-opacity')).toHaveValue('100');
+  await expect(photo).toHaveCSS('opacity', '1');
+});
+
+test('legacy saved and recovery sketches keep their marks through restore, edits, and reload', async ({ page }) => {
+  const stroke = (color: string, y: number) => ({
+    points: [{ x: 0.2, y }, { x: 0.8, y }],
+    color,
+    size: 12,
+    tool: 'brush',
+  });
+  const active = {
+    image: null,
+    width: 640,
+    height: 400,
+    title: 'Legacy active sketch',
+    selectedLayerId: 'legacy-active-layer',
+    layers: [{
+      id: 'legacy-active-layer', name: 'Original ink', visible: true, opacity: 1,
+      strokes: [stroke('#d32f2f', 0.3)], redo: [],
+    }],
+  };
+  const older = {
+    image: null,
+    width: 480,
+    height: 320,
+    title: 'Legacy recovery sketch',
+    selectedLayerId: 'legacy-recovery-layer',
+    layers: [{
+      id: 'legacy-recovery-layer', name: 'Older marks', visible: true, opacity: 1,
+      strokes: [stroke('#1565c0', 0.4)], redo: [],
+    }],
+  };
+  await page.addInitScript(({ storeKey, historyKey, activeProject, history }) => {
+    if (sessionStorage.getItem('legacy-sketch-recovery-seeded')) return;
+    sessionStorage.setItem('legacy-sketch-recovery-seeded', '1');
+    localStorage.setItem(storeKey, JSON.stringify(activeProject));
+    localStorage.setItem(historyKey, JSON.stringify(history));
+  }, {
+    storeKey: STORE_KEY,
+    historyKey: PROJECT_HISTORY_KEY,
+    activeProject: active,
+    history: [older],
+  });
+  await page.reload();
+
+  await expect(page.locator('canvas.draw-surface')).toBeVisible();
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes).toEqual(active.layers[0].strokes);
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.3 }))[3]).toBeGreaterThan(0);
+
+  await page.getByRole('button', { name: 'Restore saved sketch: Legacy recovery sketch' }).click();
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { title: project.title, width: project.width, height: project.height };
+  }).toEqual({ title: 'Legacy recovery sketch', width: 480, height: 320 });
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.4 }))[3]).toBeGreaterThan(0);
+
+  await drawNormalizedLine(page, { x: 0.25, y: 0.7 }, { x: 0.75, y: 0.7 });
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(2);
+  const restored = await savedProject(page);
+  expect(await savedProjectRaw(page)).toMatchObject({ photoZoom: 1, photoPan: { x: 0, y: 0 } });
+  expect(restored.layers[0].strokes[0]).toEqual(older.layers[0].strokes[0]);
+  await page.reload();
+  expect(await savedProject(page)).toEqual(restored);
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.4 }))[3]).toBeGreaterThan(0);
+});
+
+test('legacy single-project recovery remains fitted and editable without a history list', async ({ page }) => {
+  const reference = await png(page, 'legacy-recovery-reference.png', 480, 320);
+  const previous = {
+    image: `data:image/png;base64,${reference.buffer.toString('base64')}`,
+    width: 480,
+    height: 320,
+    title: 'Legacy single-project recovery',
+    selectedLayerId: 'legacy-single-project-layer',
+    layers: [{
+      id: 'legacy-single-project-layer',
+      name: 'Older drawing',
+      visible: true,
+      opacity: 1,
+      strokes: [{
+        points: [{ x: 0.2, y: 0.35 }, { x: 0.8, y: 0.35 }],
+        color: '#1565c0',
+        size: 12,
+        tool: 'brush',
+      }],
+      redo: [],
+    }],
+  };
+  const active = {
+    image: null,
+    width: 1200,
+    height: 800,
+    title: 'Current sketch',
+    selectedLayerId: 'current-layer',
+    layers: [{ id: 'current-layer', name: 'Current layer', visible: true, opacity: 1, strokes: [], redo: [] }],
+  };
+  await page.addInitScript(({ storeKey, previousKey, historyKey, currentProject, previousProject }) => {
+    if (sessionStorage.getItem('single-project-recovery-seeded')) return;
+    sessionStorage.setItem('single-project-recovery-seeded', '1');
+    localStorage.setItem(storeKey, JSON.stringify(currentProject));
+    localStorage.removeItem(historyKey);
+    localStorage.setItem(previousKey, JSON.stringify(previousProject));
+  }, {
+    storeKey: STORE_KEY,
+    previousKey: PREVIOUS_PROJECT_KEY,
+    historyKey: PROJECT_HISTORY_KEY,
+    currentProject: active,
+    previousProject: previous,
+  });
+  await page.reload();
+
+  const recovery = page.getByRole('button', { name: 'Restore saved sketch: Legacy single-project recovery' });
+  await expect(recovery).toBeVisible();
+  await recovery.click();
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { title: project.title, width: project.width, height: project.height };
+  }).toEqual({ title: previous.title, width: previous.width, height: previous.height });
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect(page.getByTestId('button-pan-mode')).toBeDisabled();
+  await expect(page.getByTestId('button-reset-photo-view')).toBeDisabled();
+  await expect.poll(() => photoPan(page)).toEqual({ x: 0, y: 0 });
+  const fittedView = await photoView(page);
+  expect(fittedView.transform).toBe('matrix(1, 0, 0, 1, 0, 0)');
+  expect(fittedView.content).toEqual(fittedView.stage);
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.35 }))[3]).toBeGreaterThan(0);
+
+  await drawNormalizedLine(page, { x: 0.25, y: 0.65 }, { x: 0.75, y: 0.65 });
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(2);
+  const restored = await savedProject(page);
+  expect(await savedProjectRaw(page)).toMatchObject({ photoZoom: 1, photoPan: { x: 0, y: 0 } });
+  await page.reload();
+  expect(await savedProject(page)).toEqual(restored);
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.35 }))[3]).toBeGreaterThan(0);
+});
+
+test('corrupt dimensions and malformed strokes are recovered without losing valid artwork', async ({ page }) => {
+  const reference = await png(page, 'corrupt-sketch-reference.png', 600, 400);
+  const validStroke = {
+    points: [{ x: 0.2, y: 0.35 }, { x: 0.8, y: 0.35 }],
+    color: '#2e7d32',
+    size: 10,
+    tool: 'pen',
+  };
+  const active = {
+    image: `data:image/png;base64,${reference.buffer.toString('base64')}`,
+    width: 0,
+    height: 480,
+    photoZoom: 1.5,
+    photoPan: { x: 0, y: 0 },
+    title: 'Corrupt active dimensions',
+    selectedLayerId: 'corrupt-active-layer',
+    layers: [{
+      id: 'corrupt-active-layer',
+      name: 'Keep this valid layer',
+      visible: true,
+      opacity: 1,
+      strokes: [
+        validStroke,
+        null,
+        { ...validStroke, points: null },
+        { ...validStroke, points: [{ x: 0.2, y: null }] },
+        { ...validStroke, size: 'bad' },
+        { ...validStroke, pressure: { version: 1, samples: null } },
+      ],
+      redo: [{ ...validStroke, color: 'red; fillRect(0,0,999,999)' }],
+    }],
+  };
+  const older = {
+    image: null,
+    width: 'not-a-width',
+    height: 320,
+    title: 'Corrupt recovery dimensions',
+    selectedLayerId: 'corrupt-recovery-layer',
+    layers: [{
+      id: 'corrupt-recovery-layer',
+      name: 'Recovery marks',
+      visible: true,
+      opacity: 1,
+      strokes: [validStroke, { ...validStroke, points: [{ x: Number.NaN, y: 0.4 }] }],
+      redo: [],
+    }],
+  };
+  await page.addInitScript(({ storeKey, historyKey, activeProject, history }) => {
+    if (sessionStorage.getItem('corrupt-sketch-recovery-seeded')) return;
+    sessionStorage.setItem('corrupt-sketch-recovery-seeded', '1');
+    localStorage.setItem(storeKey, JSON.stringify(activeProject));
+    localStorage.setItem(historyKey, JSON.stringify(history));
+  }, {
+    storeKey: STORE_KEY,
+    historyKey: PROJECT_HISTORY_KEY,
+    activeProject: active,
+    history: [older],
+  });
+  await page.reload();
+
+  await expect(page.locator('canvas.draw-surface')).toBeVisible();
+  await expect(page.getByTestId('status-toast')).toContainText('Some saved sketch data was invalid');
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('150');
+  await expect(page.getByTestId('button-pan-mode')).toBeEnabled();
+  await page.getByTestId('button-zoom-in').click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('175');
+  await expect.poll(async () => (await savedProject(page))?.photoZoom).toBe(1.75);
+  await page.getByTestId('button-reset-photo-view').click();
+  await expect(page.getByTestId('input-photo-zoom')).toHaveValue('100');
+  await expect.poll(async () => (await savedProject(page))?.photoZoom).toBe(1);
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { width: project.width, height: project.height, count: project.layers[0].strokes.length };
+  }).toEqual({ width: 720, height: 480, count: 2 });
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.35 }))[3]).toBeGreaterThan(0);
+  const recoveredStroke = (await savedProject(page)).layers[0].strokes[1];
+  expect(recoveredStroke).not.toHaveProperty('pressure');
+  expect((await savedProject(page)).layers[0].redo).toEqual([]);
+
+  await page.getByRole('button', { name: 'Restore saved sketch: Corrupt recovery dimensions' }).click();
+  await expect(page.getByTestId('status-toast')).toContainText('remaining artwork was restored');
+  await expect.poll(async () => {
+    const project = await savedProject(page);
+    return project && { title: project.title, width: project.width, height: project.height, count: project.layers[0].strokes.length };
+  }).toEqual({ title: 'Corrupt recovery dimensions', width: 480, height: 320, count: 1 });
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.35 }))[3]).toBeGreaterThan(0);
+
+  await drawNormalizedLine(page, { x: 0.2, y: 0.55 }, { x: 0.8, y: 0.55 });
+  await expect.poll(async () => (await savedProject(page))?.layers[0]?.strokes.length).toBe(2);
+  const restored = await savedProject(page);
+  await page.reload();
+  expect(await savedProject(page)).toEqual(restored);
+  expect((await normalizedDrawingPixel(page, { x: 0.5, y: 0.35 }))[3]).toBeGreaterThan(0);
+});
+
 async function photoPan(page: Page) {
   return page.evaluate(() => {
     const stage = document.querySelector('[data-testid="canvas-stage"]')!;
@@ -1334,3 +3687,127 @@ async function panBy(page: Page, deltaX: number, deltaY: number) {
   await page.mouse.move(stage!.x + stage!.width / 2 + deltaX, stage!.y + stage!.height / 2 + deltaY);
   await page.mouse.up();
 }
+
+test('editable project backups round trip between isolated browsers and reject invalid files without replacing work', async ({ browser }) => {
+  const baseURL = process.env.CLOUDPAINTER_TEST_URL;
+  if (!baseURL) throw new Error('Set CLOUDPAINTER_TEST_URL to the running CloudPainter preview URL.');
+  const sourceContext = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1000 } });
+  const targetContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const assertSourceNoProviderRequests = await installProviderRequestGuard(sourceContext);
+  const assertTargetNoProviderRequests = await installProviderRequestGuard(targetContext);
+  for (const context of [sourceContext, targetContext]) {
+    await context.route('**/api/images/config', route => route.fulfill({
+      json: { configured: false, signedIn: false, allowed: false, dailyLimit: 0, remaining: 0, globalRemaining: 0 },
+    }));
+    await context.route('**/api/images/generate', route => route.fulfill({
+      status: 401,
+      json: { error: 'Sign in is required to generate images.' },
+    }));
+  }
+
+  try {
+    const sourcePage = await sourceContext.newPage();
+    await sourcePage.goto('about:blank');
+    const image = await sourcePage.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 24;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = '#7699b2';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/png');
+    });
+    const sourceProject = {
+      image,
+      width: 640,
+      height: 480,
+      layers: [
+        {
+          id: 'backup-ink',
+          name: 'Ink layer',
+          visible: true,
+          opacity: 0.74,
+          strokes: [{ points: [{ x: 0.2, y: 0.3 }, { x: 0.7, y: 0.4 }], color: '#173f55', size: 8, tool: 'pen' }],
+          redo: [{ kind: 'clear' }],
+        },
+        {
+          id: 'backup-color',
+          name: 'Color notes',
+          visible: false,
+          opacity: 0.42,
+          strokes: [{ kind: 'background-fill', color: '#fffefa' }],
+          redo: [],
+        },
+      ],
+      selectedLayerId: 'backup-ink',
+      title: 'Portable sketch',
+      photoZoom: 1.5,
+      photoPan: { x: 14, y: -9 },
+      referencePhotoVisible: false,
+      referencePhotoOpacity: 42,
+    };
+    await sourceContext.addInitScript(({ key, project }) => {
+      localStorage.setItem(key, JSON.stringify(project));
+    }, { key: STORE_KEY, project: sourceProject });
+    await sourcePage.goto(baseURL);
+    await expect(sourcePage.getByTestId('img-reference')).toHaveAttribute('src', image);
+    await expect.poll(() => savedProjectRaw(sourcePage)).toMatchObject(sourceProject);
+
+    await sourcePage.getByTestId('button-export-menu').click();
+    const downloadPromise = sourcePage.waitForEvent('download');
+    await sourcePage.getByTestId('button-export-project-backup').click();
+    const download = await downloadPromise;
+    const downloadedPath = await download.path();
+    expect(downloadedPath).not.toBeNull();
+    const backupBytes = await readFile(downloadedPath!);
+
+    const targetPage = await targetContext.newPage();
+    await targetPage.goto(baseURL);
+    await targetPage.getByTestId('button-export-menu').click();
+    await targetPage.getByTestId('input-project-backup').setInputFiles({
+      name: download.suggestedFilename(),
+      mimeType: 'application/json',
+      buffer: backupBytes,
+    });
+    await expect(targetPage.getByTestId('status-toast')).toContainText('Editable project imported');
+    await expect(targetPage.getByTestId('img-reference')).toHaveAttribute('src', image);
+    await expect(targetPage.getByTestId('input-photo-zoom')).toHaveValue('150');
+    await expect(targetPage.getByTestId('input-reference-photo-opacity')).toHaveValue('42');
+    await expect(targetPage.getByTestId('button-reference-photo-visibility')).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(() => savedProjectRaw(targetPage)).toMatchObject(sourceProject);
+    await expect(targetPage.getByTestId('canvas-layer-backup-ink')).toBeVisible();
+    await expect(targetPage.getByTestId('canvas-layer-backup-color')).toHaveCSS('opacity', '0');
+
+    await drawNormalizedLine(targetPage, { x: 0.2, y: 0.52 }, { x: 0.76, y: 0.52 });
+    await expect.poll(async () => (await savedProjectRaw(targetPage))?.layers[0]?.strokes.length).toBe(2);
+    const artworkBeforeInvalidImport = await savedProjectRaw(targetPage);
+    const historyBeforeInvalidImport = await savedProjectHistoryRaw(targetPage);
+
+    await targetPage.getByTestId('button-export-menu').click();
+    await targetPage.getByTestId('input-project-backup').setInputFiles({
+      name: 'unsupported.cloudpainter.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify({ format: 'cloudpainter-project', version: 999, project: sourceProject })),
+    });
+    await expect(targetPage.getByTestId('status-toast')).toContainText('version is not supported');
+    expect(await savedProjectRaw(targetPage)).toEqual(artworkBeforeInvalidImport);
+    expect(await savedProjectHistoryRaw(targetPage)).toEqual(historyBeforeInvalidImport);
+
+    await expect(targetPage.getByTestId('input-project-backup')).toBeEnabled();
+    await targetPage.getByTestId('button-export-menu').click();
+    await targetPage.getByTestId('input-project-backup').setInputFiles({
+      name: 'oversized.cloudpainter.json',
+      mimeType: 'application/json',
+      buffer: Buffer.alloc(2 * 1024 * 1024 + 1),
+    });
+    await expect(targetPage.getByTestId('status-toast')).toContainText('larger than 2 MB');
+    expect(await savedProjectRaw(targetPage)).toEqual(artworkBeforeInvalidImport);
+    expect(await savedProjectHistoryRaw(targetPage)).toEqual(historyBeforeInvalidImport);
+
+    assertSourceNoProviderRequests();
+    assertTargetNoProviderRequests();
+  } finally {
+    await sourceContext.close();
+    await targetContext.close();
+  }
+});

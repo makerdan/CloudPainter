@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:image-dimensions": "node --experimental-strip-types --test src/lib/imageDimensions.test.ts",
     "test:outline": "node --experimental-strip-types --test --test-timeout=10000 src/lib/outlinePrivacy.test.ts",
+    "test:outline-model-browser": "node --test --test-timeout=430000 tests/outline-subject-regression.browser.mjs",
     "test:outline-ui": "vitest run --config vitest.outline.config.ts",
     "test:stroke-renderer": "node --experimental-strip-types --test --test-timeout=10000 src/lib/strokeRenderer.test.ts",
     "test:layer-clipboard": "node --experimental-strip-types --test --test-timeout=10000 src/lib/layerClipboard.test.ts",
@@ -19,12 +20,16 @@
     "test:brushes-browser": "playwright test --config playwright.brush.config.ts",
     "test:drawing-colors": "node --experimental-strip-types --test src/lib/drawingColors.test.ts",
     "test:palettes": "node --experimental-strip-types --test src/lib/palettePersistence.test.ts",
+    "test:settings": "node --experimental-strip-types --test src/lib/settingsPersistence.test.ts",
+    "test:settings-ui": "vitest run --config vitest.logo.config.ts src/components/SettingsPage.test.tsx",
+    "test:admin-ui": "vitest run --config vitest.logo.config.ts src/pages/AdminAccountsPage.test.tsx src/components/AdminNavigation.test.tsx",
     "test:drawing-colors-browser": "node --test tests/drawing-colors.browser.test.mjs",
     "test:keyboard-shortcuts": "node --test tests/keyboard-shortcuts.browser.test.mjs",
     "test:photo-export": "node --test tests/photo-export.browser.test.mjs",
     "test:photo-card": "playwright test --config playwright.config.ts",
+    "test:anonymous-photo-and-images": "playwright test --config playwright.config.ts",
     "test:logo-browser": "node --test tests/logo-preview.browser.test.mjs",
-    "test:poe-images": "playwright test --config playwright.config.ts ImageGenerator.test.tsx",
+    "test:poe-images": "playwright test --config playwright.signed-in.config.ts ImageGenerator.test.tsx",
     "test:tooltips": "playwright test --config playwright.tooltip.config.ts",
     "test:logo-ui": "vitest run --config vitest.logo.config.ts",
     "test:upscale-ui": "vitest run --config vitest.logo.config.ts src/components/PoeUpscaleExport.test.tsx"
@@ -73,6 +78,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "@workspace/api-zod": "workspace:*",
     "@workspace/api-client-react": "workspace:*",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
@@ -106,6 +112,7 @@
     "@clerk/react": "^6.17.7",
     "@clerk/themes": "^2.4.57",
     "@huggingface/transformers": "3.8.1",
-    "@workspace/outline-core": "workspace:*"
+    "@workspace/outline-core": "workspace:*",
+    "perfect-freehand": "^1.2.3"
   }
 }

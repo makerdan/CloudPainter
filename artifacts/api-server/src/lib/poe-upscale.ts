@@ -7,6 +7,7 @@ import {
   validatePoeMedia,
   type PoeMedia,
 } from "@workspace/integrations-openai-ai-server/poe";
+import { buildPoeUpscalePrompt } from "@workspace/api-zod";
 
 export const POE_ASSISTANT_MODEL = "assistant";
 export const MAX_UPSCALE_INPUT_BYTES = 8 * 1024 * 1024;
@@ -154,10 +155,6 @@ function imageUrlFromResponse(payload: unknown): URL {
   }
 }
 
-export function buildUpscalePrompt(scale: 4 | 8): string {
-  return `Please upscale the attached image to be ${scale}x`;
-}
-
 export async function validateUpscaleRequest(value: unknown): Promise<Input> {
   const input = parseUpscaleInput(value);
   await validateInput(input);
@@ -202,7 +199,7 @@ export async function upscaleWithPoeAssistant(
         messages: [{
           role: "user",
           content: [
-            { type: "text", text: buildUpscalePrompt(input.scale) },
+            { type: "text", text: buildPoeUpscalePrompt(input.scale) },
             { type: "image_url", image_url: { url: `data:image/png;base64,${source.bytes.toString("base64")}` } },
           ],
         }],

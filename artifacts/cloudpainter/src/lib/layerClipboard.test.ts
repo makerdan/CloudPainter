@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { copyDrawing, isPaste, pasteDrawing, pasteIntoLayers, redoDrawing, renderDrawing, undoDrawing, type DrawingEntry } from './layerClipboard.ts';
+import { clearDrawing, copyDrawing, hasDrawing, isBackgroundFill, isClear, isPaste, normalizeDrawingEntries, pasteDrawing, pasteIntoLayers, redoDrawing, renderDrawing, undoDrawing, type DrawingEntry } from './layerClipboard.ts';
 import { renderStroke, type Stroke } from './strokeRenderer.ts';
 
 const stroke: Stroke = { tool: 'brush', color: '#336699', size: 14, points: [{ x: 0.2, y: 0.3 }, { x: 0.7, y: 0.3 }], brush: { style: 'dry', version: 1, seed: 42 } };
@@ -23,6 +23,93 @@ test('clipboard is an immutable independent snapshot; deleting or editing source
   assert.ok(Object.isFrozen(clipboard));
   assert.ok(Object.isFrozen((clipboard[0] as Stroke).points[0]));
   assert.ok(Object.isFrozen((clipboard[0] as Stroke).brush));
+});
+
+test('background fills copy, paste, undo, redo and replay as one full-layer action', options, () => {
+  const fill = { kind: 'background-fill', color: '#cc2200' } as const;
+  const original = { ...source(), strokes: [structuredClone(fill)] as DrawingEntry[] };
+  const clipboard = copyDrawing(original)!;
+  assert.ok(Object.isFrozen(clipboard));
+  assert.ok(isBackgroundFill(clipboard[0]));
+  assert.ok(Object.isFrozen(clipboard[0]));
+  const pasted = pasteDrawing(destination(), clipboard);
+  assert.ok(isPaste(pasted.strokes.at(-1)!));
+
+  const log = recorder();
+  renderDrawing(log.context, pasted.strokes, 1200, 800, log.createCanvas);
+  assert.ok(log.events.some(event => event[1] === 'fillRect' && event[2] === 0 && event[3] === 0 && event[4] === 1200 && event[5] === 800));
+  assert.ok(log.events.some(event => event[1] === 'fillStyle' && event[2] === fill.color));
+
+  const undone = undoDrawing(pasted);
+  assert.deepEqual(undone.strokes, destination().strokes);
+  const restored = redoDrawing(JSON.parse(JSON.stringify(undone)));
+  assert.deepEqual(restored, JSON.parse(JSON.stringify(pasted)));
+  const restoredPaste = restored.strokes.at(-1)!;
+  assert.ok(isPaste(restoredPaste));
+  assert.ok(isBackgroundFill(restoredPaste.entries[0]));
+});
+
+test('clearing a layer is one undoable and redoable action that branches past older redo entries', options, () => {
+  const fill = { kind: 'background-fill', color: '#cc2200' } as const;
+  const original = { ...source(), strokes: [structuredClone(stroke), structuredClone(fill)] as DrawingEntry[], redo: [structuredClone(eraser)] };
+  const cleared = clearDrawing(original);
+  assert.deepEqual(cleared.strokes, [...original.strokes, { kind: 'clear' }]);
+  assert.deepEqual(cleared.redo, []);
+  assert.deepEqual(original.redo, [eraser]);
+  assert.deepEqual(original.strokes, [stroke, fill]);
+  assert.ok(isClear(cleared.strokes.at(-1)!));
+  assert.equal(hasDrawing(cleared), false);
+
+  const undone = undoDrawing(cleared);
+  assert.deepEqual(undone.strokes, original.strokes);
+  assert.deepEqual(undone.redo, [{ kind: 'clear' }]);
+  const redone = redoDrawing(undone);
+  assert.deepEqual(redone, cleared);
+
+  const log = recorder();
+  renderDrawing(log.context, redone.strokes, 1200, 800, log.createCanvas);
+  assert.ok(log.events.some(event => event[1] === 'clearRect' && event[2] === 0 && event[3] === 0 && event[4] === 1200 && event[5] === 800));
+  const nested = copyDrawing({
+    strokes: [{ kind: 'paste', entries: [stroke, { kind: 'clear' }] }],
+    redo: [],
+  })!;
+  assert.ok(Object.isFrozen((nested[0] as { entries: DrawingEntry[] }).entries[1]));
+});
+
+test('copying after a clear includes only the current drawing and an empty cleared layer cannot be copied', options, () => {
+  const afterClear = { strokes: [stroke, { kind: 'clear' }, eraser] as DrawingEntry[], redo: [] };
+  assert.equal(hasDrawing({ strokes: [stroke, { kind: 'clear' }], redo: [] }), false);
+  assert.deepEqual(copyDrawing(afterClear), [eraser]);
+  assert.equal(copyDrawing({ strokes: [stroke, { kind: 'clear' }], redo: [] }), null);
+});
+
+test('clearing an already empty layer adds no undo action and drops only unusable redo history', options, () => {
+  const empty = { strokes: [] as DrawingEntry[], redo: [structuredClone(stroke)] };
+  assert.deepEqual(clearDrawing(empty), { strokes: [], redo: [] });
+  const alreadyClear = { strokes: [{ kind: 'clear' }] as DrawingEntry[], redo: [] };
+  assert.equal(clearDrawing(alreadyClear), alreadyClear);
+});
+
+test('pressure-aware pen samples survive layer copy, paste, undo/redo and JSON replay', options, () => {
+  const pressurePen: Stroke = {
+    tool: 'pen', color: '#315d4d', size: 12, points: [{ x: 0.2, y: 0.3 }, { x: 0.7, y: 0.3 }],
+    instrument: { kind: 'pen', version: 2, seed: 5 },
+    pressure: { version: 1, samples: [0.2, 0.8] },
+  };
+  const original = { ...source(), strokes: [pressurePen] as DrawingEntry[] };
+  const clipboard = copyDrawing(original)!;
+  const copied = clipboard[0] as Stroke;
+  assert.deepEqual(copied.pressure, pressurePen.pressure);
+  assert.ok(Object.isFrozen(copied.pressure!.samples));
+  const pasted = pasteDrawing(destination(), clipboard);
+  const undone = undoDrawing(pasted);
+  const restored = redoDrawing(JSON.parse(JSON.stringify(undone)));
+  assert.deepEqual(restored, JSON.parse(JSON.stringify(pasted)));
+  const before = recorder(), after = recorder();
+  renderDrawing(before.context, pasted.strokes, 1200, 800, before.createCanvas);
+  renderDrawing(after.context, restored.strokes, 1200, 800, after.createCanvas);
+  assert.deepEqual(after.events, before.events);
+  assert.ok(after.events.some(event => event[1] === 'closePath'));
 });
 
 test('paste appends one independent action, preserves destination settings, clears redo and leaves source untouched', options, () => {
@@ -126,4 +213,47 @@ test('legacy fixtures replay unchanged; new groups/history preserve all brush an
   renderDrawing(before.context, pasted.strokes, 1200, 800, before.createCanvas);
   renderDrawing(after.context, restored.strokes, 1200, 800, after.createCanvas);
   assert.deepEqual(after.events, before.events);
+});
+
+test('saved drawing recovery keeps valid legacy marks and rejects malformed or over-nested entries', options, () => {
+  const malformedPressure = {
+    ...stroke,
+    instrument: { kind: 'pen', version: 2, seed: 12 },
+    pressure: { version: 1, samples: null },
+  };
+  let tooDeep: unknown = [structuredClone(stroke)];
+  for (let depth = 0; depth < 10; depth += 1) tooDeep = [{ kind: 'paste', entries: tooDeep }];
+
+  const recovered = normalizeDrawingEntries([
+    structuredClone(stroke),
+    null,
+    { ...stroke, points: null },
+    { ...stroke, points: [{ x: 0.2, y: null }] },
+    { ...stroke, size: 'large' },
+    { ...stroke, color: 'red; fillRect(0,0,999,999)' },
+    malformedPressure,
+    { kind: 'clear' },
+    { kind: 'background-fill', color: '#cc2200' },
+    { kind: 'background-fill', color: 'red; fillRect(0,0,999,999)' },
+    ...tooDeep as unknown[],
+  ]);
+
+  assert.deepEqual(recovered, [
+    stroke,
+    { ...stroke, instrument: { kind: 'pen', version: 2, seed: 12 } },
+    { kind: 'clear' },
+    { kind: 'background-fill', color: '#cc2200' },
+  ]);
+});
+
+test('stroke point limits retain a valid edge-sized mark and its neighboring artwork', options, () => {
+  const points = Array.from({ length: 50_000 }, () => ({ x: 0.2, y: 0.3 }));
+  const atLimit = { ...stroke, points };
+  const overLimit = { ...stroke, points: [...points, { x: 0.2, y: 0.3 }] };
+  const recovered = normalizeDrawingEntries([stroke, atLimit, overLimit]);
+
+  assert.equal(recovered.length, 2);
+  assert.deepEqual(recovered[0], stroke);
+  assert.equal((recovered[1] as Stroke).points.length, 50_000);
+  assert.deepEqual((recovered[1] as Stroke).points.at(-1), { x: 0.2, y: 0.3 });
 });

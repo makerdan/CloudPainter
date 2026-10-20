@@ -75,9 +75,9 @@ export function ImageGenerator({ onUse }: Props) {
             <DialogDescription>Create an image through Poe, then draw what you see in it.</DialogDescription>
           </DialogHeader>
           {!isLoaded ? <p role="status">Loading your account…</p> : !isSignedIn ? (
-            <div><p>Sign in with an approved account to spend the connected Poe account’s points. You can still draw without signing in.</p><SignInButton><button type="button" className="button button-primary">Sign in</button></SignInButton></div>
+            <div><p>Sign in to use Poe. Signed-in accounts receive the standard request allowance unless access has been disabled. You can still draw without signing in.</p><SignInButton><button type="button" className="button button-primary">Sign in</button></SignInButton></div>
           ) : <AccountControls />}
-          {isSignedIn && configuration.data && !configuration.data.allowed && <p role="status">This account is not approved to generate images. Ask the project owner for access.</p>}
+          {isSignedIn && configuration.data && !configuration.data.allowed && <p role="status">Poe image access is disabled for this account. Ask the project owner for help.</p>}
           {isSignedIn && configuration.data?.allowed && <p role="status">{configuration.data.remaining} of {configuration.data.dailyLimit} account attempts remaining today; {configuration.data.globalRemaining} of 20 shared attempts remaining. Resets at midnight UTC. Failed or timed-out attempts count and are never retried automatically.</p>}
           <form onSubmit={generate} className="image-generator-form">
             <label htmlFor="image-prompt">Describe your image</label>

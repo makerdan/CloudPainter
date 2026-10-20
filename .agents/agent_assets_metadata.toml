@@ -42,3 +42,17 @@ mtime_ms = 1791693554238
 storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:685909fe-be37-4979-baa7-4ef2f47d224b/e3dce147-901d-4b1f-852e-1a8dbf9cf4fe/85e5bf40-87a9-46b1-97ee-d7340816a65f"
 storage_version_token = "1791693596759886"
 content_type = "image/png"
+
+[[outputs]]
+id = "tj8e_FHjxq733KT3otBrN"
+uri = "file://generated-artifacts/runtime-safety-validation-evidence.zip"
+type = "unspecified"
+title = "Runtime Safety validation evidence"
+description = "Handoff, exact tier snapshots, observed sealed context, raw reports and logs from both complete final runs. Both runs ended FAIL; no live controls were activated."
+logical_id = "520040f2-e4ab-401f-a3d7-76905a7c07d7"
+content_hash = "sha256:ff57a2cf40ef622a4cd8473d3f615f119329fd3c8e266cf2809ae6c5e107f22e"
+size = 351258
+mtime_ms = 1792380280709
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:4b60cdc8-3fdb-439e-b554-21dd7e77a03e/520040f2-e4ab-401f-a3d7-76905a7c07d7/34a1e7ab-eee3-4c8c-a183-59de391a0e24"
+storage_version_token = "1792380319659174"
+content_type = "application/octet-stream"

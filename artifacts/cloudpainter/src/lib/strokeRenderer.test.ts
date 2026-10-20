@@ -45,7 +45,7 @@ test('legacy multi-point strokes retain the exact original round operations', { 
 });
 
 test('legacy tap and eraser fixtures keep their original round geometry', { timeout: 1000 }, () => {
-  const tap = { ...fixture, points: [fixture.points[0]] };
+  const tap: Stroke = { ...fixture, points: [fixture.points[0]] };
   assert.deepEqual(replay(tap).slice(7), [
     ['beginPath'], ['arc', 10, 40, 5, 0, Math.PI * 2], ['fill'], ['restore'],
   ]);
@@ -53,6 +53,63 @@ test('legacy tap and eraser fixtures keep their original round geometry', { time
     operation[0] === 'globalCompositeOperation' ? ['globalCompositeOperation', 'destination-out'] : operation,
   ));
   assert.deepEqual(replay({ ...fixture, brush: { style: 'round', version: 1, seed: 42 } }), replay(fixture));
+});
+
+test('versioned pen pressure creates deterministic tapered outlines and changes with pressure', { timeout: 1000 }, () => {
+  const pressurePen: Stroke = {
+    ...fixture,
+    instrument: { kind: 'pen', version: 2, seed: 7 },
+    pressure: { version: 1, samples: [0.15, 0.9, 0.35] },
+  };
+  const expected = replay(pressurePen);
+  assert.ok(expected.some(operation => operation[0] === 'closePath'));
+  assert.ok(expected.some(operation => operation[0] === 'fill'));
+  assert.ok(expected.filter(operation => operation[0] === 'lineTo').length > fixture.points.length);
+  assert.deepEqual(replay(JSON.parse(JSON.stringify(pressurePen))), expected);
+  assert.deepEqual(replay(pressurePen), expected);
+
+  const light = replay({ ...pressurePen, pressure: { version: 1, samples: [0.1, 0.1, 0.1] } });
+  const firm = replay({ ...pressurePen, pressure: { version: 1, samples: [0.9, 0.9, 0.9] } });
+  assert.notDeepEqual(light, firm);
+
+  const fallback = replay({ ...pressurePen, pressure: undefined });
+  assert.deepEqual(fallback, replay({
+    ...pressurePen, pressure: { version: 1, samples: pressurePen.points.map(() => 0.5) },
+  }));
+});
+
+test('pressure sensitivity changes the rendered width response while existing and fallback strokes keep their response', { timeout: 1000 }, () => {
+  const lightPressure: Stroke = {
+    ...fixture,
+    instrument: { kind: 'pen', version: 2, seed: 7 },
+    pressure: { version: 1, samples: [0.2, 0.2, 0.2] },
+  };
+  const original = replay(lightPressure);
+  const steady = replay({ ...lightPressure, pressure: { ...lightPressure.pressure!, sensitivity: 0 } });
+  const responsive = replay({ ...lightPressure, pressure: { ...lightPressure.pressure!, sensitivity: 100 } });
+  assert.notDeepEqual(steady, original);
+  assert.notDeepEqual(responsive, original);
+  assert.notDeepEqual(steady, responsive);
+  assert.deepEqual(replay(lightPressure), original);
+  assert.deepEqual(
+    replay({ ...lightPressure, pressure: { version: 1, samples: lightPressure.pressure!.samples, sensitivity: 50 } }),
+    original,
+  );
+  assert.deepEqual(
+    replay({ ...lightPressure, pressure: { ...lightPressure.pressure!, sensitivity: Number.NaN } }),
+    original,
+  );
+});
+
+test('versioned pressure pen taps render a filled mark and empty strokes do no work', { timeout: 1000 }, () => {
+  const tap: Stroke = {
+    ...fixture,
+    points: [fixture.points[0]],
+    instrument: { kind: 'pen', version: 2, seed: 7 },
+    pressure: { version: 1, samples: [0.6] },
+  };
+  assert.ok(replay(tap).some(operation => operation[0] === 'fill'));
+  assert.deepEqual(replay({ ...tap, points: [], pressure: { version: 1, samples: [] } }), []);
 });
 
 for (const { style } of BRUSH_STYLES) {
@@ -125,4 +182,24 @@ test('every brush uses its recorded color and size; empty strokes perform no wor
     assert.notDeepEqual(ops, replay({ ...small, size: 48 }));
     assert.deepEqual(replay({ ...small, points: [] }), []);
   }
+});
+
+test('malformed runtime stroke data is rejected without issuing canvas operations', { timeout: 1000 }, () => {
+  for (const malformed of [
+    { ...fixture, points: null },
+    { ...fixture, points: [{ x: 0.2, y: Number.NaN }] },
+    { ...fixture, size: Infinity },
+  ]) {
+    const recording = recordingContext();
+    renderStroke(recording.ctx, malformed as unknown as Stroke, 100, 200);
+    assert.deepEqual(recording.operations, []);
+  }
+  const malformedPressure = {
+    ...fixture,
+    instrument: { kind: 'pen', version: 2, seed: 8 },
+    pressure: { version: 1, samples: null },
+  };
+  const recording = recordingContext();
+  renderStroke(recording.ctx, malformedPressure as unknown as Stroke, 100, 200);
+  assert.ok(recording.operations.some(operation => operation[0] === 'closePath'));
 });

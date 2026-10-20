@@ -1,0 +1,12 @@
+{
+  "title": "Narrow local Failure Gate Unified migration",
+  "tier": "test-fast",
+  "why": "Gate-only JavaScript policy and control changes are covered by gate integration fixtures and Regression Guard without application database or browser changes.",
+  "what": "Verify a filesystem-bound authoritative workspace, restrict pre-cutover admission to this migration, preserve permanent IDs and original contracts, and condition activation on observed bound-tier PASS and independent acceptance.",
+  "regression": {
+    "covers": "Copied-workspace admission, wrong-tier execution, context loss, concurrent allocation and activation without acceptance.",
+    "testLocation": "scripts/tests/failure-gate.test.mjs",
+    "checks": "Real subprocess fixtures exercise provisioning and plan guards, copied receipts fail closed, and activation rejects missing or stale evidence."
+  },
+  "baselines": []
+}

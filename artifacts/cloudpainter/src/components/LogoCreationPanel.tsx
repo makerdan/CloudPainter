@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { generateLogoImage } from '@workspace/api-client-react';
+import { SignInButton } from '@clerk/react';
+import {
+  generateLogoImage,
+  getGetImageGenerationConfigQueryKey,
+  useGetImageGenerationConfig,
+} from '@workspace/api-client-react';
+import { usePaletteAccount } from './Account';
 import './LogoCreationPanel.css';
 
 export type LogoDirectionId = 'cloudline' | 'viewfinder' | 'gesture' | 'paperfold' | 'sunstudy';
@@ -20,6 +26,11 @@ const SAFE_MESSAGES: Record<string, string> = {
   PROVIDER_FAILED: 'The concept could not be created this time.',
   INVALID_IMAGE: 'The service returned an unusable image. Try again.',
   TIMEOUT: 'The concept took too long to create. Try again.',
+  unauthorized: 'Your sign-in changed. Sign in again before generating a logo concept.',
+  authorization_denied: 'Poe image access is disabled for this account.',
+  quota_exhausted: 'The shared Poe request allowance is used for now. Try again after it resets.',
+  rate_limited: 'The image service is busy. Wait a few minutes, then try again.',
+  budget_unavailable: 'Spending limits could not be checked, so no logo request was sent. Please try again.',
 };
 const GENERIC = 'The concept could not be created. Please try again.';
 
@@ -54,6 +65,22 @@ type Status = 'idle' | 'generating' | 'error' | 'success';
 type Concept = { id: number; url: string };
 
 export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly LogoDirectionOption[] }) {
+  const { isLoaded, userId, sessionId } = usePaletteAccount();
+  const identity = `${userId ?? ''}:${sessionId ?? ''}`;
+  const identityRef = useRef(identity);
+  identityRef.current = identity;
+  const configuration = useGetImageGenerationConfig({
+    query: {
+      queryKey: [...getGetImageGenerationConfigQueryKey(), identity],
+      enabled: isLoaded,
+      staleTime: 0,
+      refetchInterval: 30_000,
+      retry: false,
+    },
+  });
+  const signedIn = Boolean(userId && sessionId);
+  const eligible = Boolean(signedIn && configuration.data?.signedIn && configuration.data.allowed
+    && configuration.data.configured && configuration.data.remaining > 0 && configuration.data.globalRemaining > 0);
   const [prompt, setPrompt] = useState('');
   const [direction, setDirection] = useState<LogoDirectionId | ''>('');
   const [status, setStatus] = useState<Status>('idle');
@@ -75,6 +102,19 @@ export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly
     };
   }, []);
 
+  useEffect(() => {
+    controllerRef.current?.abort();
+    controllerRef.current = null;
+    inFlight.current = false;
+    for (const concept of conceptsRef.current) URL.revokeObjectURL(concept.url);
+    conceptsRef.current = [];
+    setConcepts([]);
+    setPrompt('');
+    setDirection('');
+    setFailure(null);
+    setStatus('idle');
+  }, [identity]);
+
   const trimmed = prompt.trim();
   const tooLong = prompt.length > PROMPT_MAX;
   const validation = !trimmed ? 'Describe the logo concept first.' : tooLong ? `Keep the description within ${PROMPT_MAX} characters.` : '';
@@ -87,6 +127,7 @@ export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly
       return;
     }
     inFlight.current = true;
+    const actor = identity;
     const controller = new AbortController();
     controllerRef.current = controller;
     let timedOut = false;
@@ -96,9 +137,13 @@ export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly
     try {
       const result = await generateLogoImage(
         { prompt: trimmed, ...(direction ? { direction } : {}) },
-        { signal: controller.signal },
+        {
+          signal: controller.signal,
+          credentials: 'same-origin',
+          headers: { 'X-Logo-Session': sessionId ?? '' },
+        },
       );
-      if (!mounted.current || controller.signal.aborted && !timedOut) return;
+      if (!mounted.current || actor !== identityRef.current || controller.signal.aborted && !timedOut) return;
       if (timedOut) throw { data: { code: 'TIMEOUT', retryable: true } };
       const blob = result?.width === 1024 && result?.height === 1024 ? pngBase64ToBlob(result.pngBase64) : null;
       if (!blob) throw { data: { code: 'INVALID_IMAGE', retryable: true } };
@@ -107,16 +152,18 @@ export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly
       setConcepts(conceptsRef.current);
       setStatus('success');
     } catch (error) {
-      if (!mounted.current) return;
+      if (!mounted.current || actor !== identityRef.current) return;
       if (controller.signal.aborted && !timedOut) return;
       setFailure(timedOut ? { message: SAFE_MESSAGES.TIMEOUT, retryable: true } : describeError(error));
       setStatus('error');
     } finally {
       clearTimeout(timer);
-      if (controllerRef.current === controller) controllerRef.current = null;
-      inFlight.current = false;
+      if (controllerRef.current === controller) {
+        controllerRef.current = null;
+        inFlight.current = false;
+      }
     }
-  }, [trimmed, prompt, direction]);
+  }, [trimmed, prompt, direction, identity, sessionId]);
 
   const remove = (id: number) => {
     const concept = conceptsRef.current.find(item => item.id === id);
@@ -139,7 +186,12 @@ export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly
   const busy = status === 'generating';
   const full = concepts.length >= MAX_CONCEPTS;
   const selected = logoDirections.find(d => d.id === direction);
-  const liveText = busy ? 'Generating your logo concept. This can take up to a minute and a half.'
+  const liveText = !isLoaded ? 'Checking your account…'
+    : !signedIn ? 'Sign in to generate logo concepts.'
+    : configuration.data && !configuration.data.allowed ? 'This account cannot currently use Poe image requests.'
+    : configuration.isError ? 'Could not check Poe access. Reopen this page to retry.'
+    : !configuration.data?.configured ? 'Poe image generation is not configured for this project.'
+    : busy ? 'Generating your logo concept. This can take up to a minute and a half.'
     : status === 'error' && failure ? failure.message
     : status === 'success' ? 'Concept ready. Compare your concepts and download any PNG.' : '';
 
@@ -149,20 +201,31 @@ export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly
         <p className="eyebrow">Raster exploration</p>
         <h2 id="logo-create-title">Create a logo concept</h2>
         <p className="logo-create-lede">Describe a mark in words and get one square PNG to react to.</p>
+         {!isLoaded ? <p role="status">Checking your account…</p> : !signedIn ? (
+           <p>Sign in to use Poe for logo generation. You can browse the built-in directions without an account. <SignInButton><button type="button" className="button">Sign in</button></SignInButton></p>
+        ) : !configuration.data?.configured && !configuration.isLoading ? (
+          <p role="status">Poe is not configured for this project. Logo directions remain available.</p>
+        ) : configuration.data?.allowed ? (
+           <p role="status">{configuration.data.remaining} of {configuration.data.dailyLimit} account attempts and {configuration.data.globalRemaining} shared attempts remain today. Requests count toward CloudPainter’s shared Poe limits.</p>
+         ) : configuration.data ? (
+           <p role="status">Poe image access is unavailable for this account. Explicitly disabled accounts remain blocked.</p>
+         ) : configuration.isError ? (
+           <p role="alert">Could not check Poe access. Reopen this page to retry.</p>
+         ) : null}
         <label htmlFor="logo-prompt">Describe the concept</label>
-        <textarea id="logo-prompt" value={prompt} onChange={e => setPrompt(e.target.value)} aria-describedby="logo-prompt-count" aria-invalid={tooLong || undefined} data-testid="input-logo-prompt" />
+         <textarea id="logo-prompt" value={prompt} onChange={e => setPrompt(e.target.value)} aria-describedby="logo-prompt-count" aria-invalid={tooLong || undefined} disabled={!eligible || busy} data-testid="input-logo-prompt" />
         <div className="logo-create-count" id="logo-prompt-count">
           <span className={tooLong ? 'over' : ''}>{prompt.length} / {PROMPT_MAX}</span>
           {validation && prompt.length > 0 && <span className="over">{validation}</span>}
         </div>
         <label htmlFor="logo-direction">Inspiration direction (optional)</label>
-        <select id="logo-direction" value={direction} onChange={e => setDirection(e.target.value as LogoDirectionId | '')} data-testid="select-logo-direction">
+         <select id="logo-direction" value={direction} onChange={e => setDirection(e.target.value as LogoDirectionId | '')} disabled={!eligible || busy} data-testid="select-logo-direction">
           <option value="">No direction</option>
            {logoDirections.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
          {selected && <p className="logo-create-lede" style={{ margin: '7px 0 0' }}>Text-only inspiration: {selected.description}</p>}
         <div className="logo-create-actions">
-          <button type="submit" className="button button-primary" disabled={busy || full} aria-describedby="logo-gallery-limit" data-testid="button-generate-logo">
+           <button type="submit" className="button button-primary" disabled={busy || full || !eligible} aria-describedby="logo-gallery-limit" data-testid="button-generate-logo">
              {busy ? 'Generating…' : concepts.length ? 'Generate again' : 'Generate image'}
           </button>
           {status === 'error' && failure?.retryable && trimmed && !tooLong && (
@@ -173,7 +236,7 @@ export function LogoCreationPanel({ logoDirections }: { logoDirections: readonly
         <div className="logo-create-notice">
           <ul>
              <li>Your prompt and optional direction text are sent to Poe for image generation, using Poe points.</li>
-            <li>Photos, drawings and browser projects are never uploaded.</li>
+             <li>Your sketch and reference photo are not sent for logo generation.</li>
             <li>Generated raster concepts cannot replace the live CloudPainter identity, and transparency is not guaranteed.</li>
             <li>Results last only for this visit. Download favorites before leaving this page.</li>
           </ul>

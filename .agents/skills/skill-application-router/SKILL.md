@@ -112,7 +112,9 @@ Process target skills in dependency order:
    requirements and gates. Do not assume unproven project capabilities,
    frameworks, providers, services, or deployment models.
 4. **Baseline:** Run required pre-edit checks. When files will change, follow
-   Failure Gate and separate evidenced pre-existing failures from task-owned
+   the project's explicitly adopted canonical validation policy (never an
+   inferred policy from an installed file or historical alias), and separate
+   evidenced pre-existing failures from task-owned
    failures.
 5. **Plan:** Map every applicable requirement to an action or evidenced
    `not applicable`; include required companion skills and Regression Guard

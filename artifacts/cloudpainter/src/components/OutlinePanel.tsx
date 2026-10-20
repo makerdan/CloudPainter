@@ -132,6 +132,7 @@ export function OutlinePanel({ image, contextKey, onAccept, onClose }: Props) {
 
   const path = candidates[selected]?.points ?? [];
   const poly = path.map(p => `${p.x},${p.y}`).join(' ');
+  const qualityMessage = message.startsWith('Ignored ') ? message : '';
 
   return (
     <div className="outline-backdrop">
@@ -178,8 +179,8 @@ export function OutlinePanel({ image, contextKey, onAccept, onClose }: Props) {
       <div role="status" aria-live="polite" className="outline-status" data-testid="status-outline">
         {status === 'loading' && `Working… ${message}`}
         {status === 'error' && <span className="generation-error">{message} You can retry.</span>}
-        {status === 'empty' && 'No candidates found. Adjust the region or sensitivity and retry.'}
-        {status === 'ready' && `${candidates.length} candidate${candidates.length === 1 ? '' : 's'} found. Review the preview, then accept.`}
+        {status === 'empty' && <>No useful candidates found. {qualityMessage || 'Adjust the region or sensitivity and retry.'}</>}
+        {status === 'ready' && <>{candidates.length} candidate{candidates.length === 1 ? '' : 's'} found. Review the preview, then accept. {qualityMessage}</>}
         {status === 'cancelled' && 'Outline cancelled.'}
         {status === 'accepted' && 'Outline accepted.'}
       </div>
@@ -191,7 +192,7 @@ export function OutlinePanel({ image, contextKey, onAccept, onClose }: Props) {
       )}
 
       <div className="outline-actions">
-        <TooltipButton description={blocked ? 'Hosted outlining requires account approval, configuration, a subject and explicit consent.' : 'Find outlines in the selected region. Hosted Run spends a Poe request.'}
+        <TooltipButton description={blocked ? 'Hosted outlining requires sign-in, configured Poe access, a subject and explicit consent. Disabled accounts cannot make Poe requests.' : 'Find outlines in the selected region. Hosted Run spends a Poe request.'}
           className="button button-primary" disabled={blocked || status === 'loading'} onClick={run} data-testid="button-outline-run">
           {status === 'error' || status === 'empty' ? 'Retry' : 'Run'}
         </TooltipButton>

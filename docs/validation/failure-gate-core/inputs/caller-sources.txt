@@ -1,0 +1,47 @@
+# Core host discovery — caller source inventory
+
+Observed 2026-10-13 by read-only file and native record inspection. This is a source-derived inventory, not a launch plan, authorization, or claim that the callers were executed.
+
+## Project entry points and transitive commands
+
+- `package.json:5-15`
+  - `preinstall` removes root `package-lock.json` and `yarn.lock`, then rejects non-pnpm package managers.
+  - `build` calls `pnpm run typecheck`, then recursively runs available package `build` scripts.
+  - `typecheck` calls `typecheck:libs`, then recursively runs typecheck for artifacts and `scripts`.
+  - `typecheck:libs`, `typecheck:cloudpainter`, and `typecheck:api-server` call `scripts/workspace-typecheck.mjs`; it invokes `tsc --build`, and focused routes additionally run the selected project `tsc --noEmit`.
+  - `test:workspace-typecheck`, `test:regression-guard`, and `test:readme-sync` invoke Node's test runner. `validate:task-plans` invokes `scripts/validate-task-plans.mjs`.
+- `scripts/validate-task-plans.mjs:1-27` spawns `scripts/check-regression-guard.mjs` first with `--fix-stub`, then without a mode; it passes the caller's environment and inherited stdio.
+- `scripts/check-regression-guard.mjs:1-49` reads `.local/tasks` or `TASK_PLAN_FILE`; its `--fix-stub` path is a mutating guard mode. Neither guard is a Core checked runner or a registered validation tier.
+- `artifacts/api-server/package.json:6-23` declares API setup/admin commands, test commands, `verify:outline-fixtures`, `build`, `start`, and `typecheck`. `dev` builds and then starts the server. `scripts/post-merge.sh:1-5` runs dependency installation, `@workspace/db push`, and `@workspace/api-server setup:image-access`; it is a post-merge setup caller, not an ordinary validation route.
+- `artifacts/cloudpainter/package.json:6-35` declares Vite dev/build/serve/typecheck and focused Node, Vitest, Playwright, and browser checks. These are directly callable commands, not registered tiers.
+- `.replit:11-20` sets a `Project` Run button and a post-merge script with a 20,000 ms host timeout. It contains no project-local Core route or validation tier. The current host workflow snapshot lists CloudPainter web, API Server, and Component Preview Server development workflows; those start services and are not validation callers.
+
+## GitHub Actions callers
+
+- `.github/workflows/cloudpainter-ci.yml:3-7` configures `pull_request` and pushes to `main`. This is source configuration only; remote activation, run status, and merge-required check settings were not queried.
+- `cloudpainter-ci.yml:12-30` defines a validation job with a 45-minute job timeout and a PostgreSQL 16.10 disposable service named `cloudpainter_test`.
+- `cloudpainter-ci.yml:47-72` runs frozen dependency installation, API contract code generation/freshness checks, root build, aggregate-result guard, API coverage guard, regression-plan guard, and README-sync test.
+- `cloudpainter-ci.yml:74-129` runs a portable suite group: API outline/upscale/logo, Poe adapter, and CloudPainter image-dimensions/outline/outline-UI/stroke-renderer/layer-clipboard/drawing-tools/drawing-colors/palettes/logo-UI/upscale-UI checks.
+- `cloudpainter-ci.yml:131-172` runs API image-access, palettes, and settings database suites using the disposable PostgreSQL service URL.
+- `cloudpainter-ci.yml:174-236` installs Chromium; starts a CI-scoped CloudPainter Vite server; checks readiness; derives the Chromium path; and runs instruments, browser drawing colors, keyboard shortcuts, photo export, logo, clipboard, tooltips, and anonymous photo/image flows.
+- `cloudpainter-ci.yml:78-100,137-159` has shell-local `setsid` process-group timing with a 5-minute wait, TERM then KILL attempts, and raw exit propagation for portable/database suites. `184-209` starts the server in its own session and installs an EXIT cleanup trap that sends TERM. `238-259` adds a separate always-run `ci-required` job (5-minute job timeout) that requires the validation job result.
+- `.github/workflows/daily-readme-sync.yml:1-20` is a separate scheduled writer workflow with `contents: write`; it runs `scripts/daily-readme-sync.sh`, not Core or the validation graph.
+
+## Focused local browser harness and other supervisors
+
+- `artifacts/cloudpainter/tests/run-instrument-checks.py:1-37,55-117,119-155` defines a local, task-scoped harness with a Linux subreaper, monotonic deadline record, per-check limits, output logs under ignored `generated-artifacts/`, and process-descendant cleanup checks. Its source comment explicitly says it is not a Failure Gate tier or activation. It is a bounded caller resource, not general authority or Core accounting.
+- `scripts/workspace-typecheck.mjs:13-46` uses a cooperative lock only around TypeScript declaration preparation, spawns `tsc`, and removes its lock in `finally`. It does not coordinate general task runs or provide a Core supervisor.
+- `.agents/skills/port-authority/scripts/validation-lock.mjs` and its related files are present, but the tracked installer handoff at `docs/validation/port-authority-bundle-install-handoff.md:5-11,84-97` labels runtime controls STAGED, reports no active external caller, and says no adopted governance or authorized private-fixture supervisor was established. Current repository searches found no root/package/CI/post-merge invocation. Its own `SKILL.md` says it supplies neither a task registry, approval system, tiers, nor completion service.
+- `.agents/skills/port-authority/SKILL.md:14-18` names Failure Gate Core, full v4, or a verified existing policy as possible adopted contracts; this is conditional guidance, not proof any is adopted. `.agents/skills/skill-application-router/references/custom-skill-commands.md:27-31` and historical task records also contain earlier Failure Gate material. These references require separate authority/dependency reconciliation before any package retirement; they are not observed runtime callers.
+
+## Core, data, and evidence boundaries
+
+- The task-plan paths `docs/validation/failure-gate-core/manifest.md`, `requirements.md`, `inputs/caller-sources.txt`, and `scripts/failure-gate-core/` were absent at discovery start. This inventory is the first newly written file at the caller-sources path; there was no Core source tree to traverse.
+- `.replit:1` lists a PostgreSQL module. `lib/db/src/index.ts:1-16` requires `DATABASE_URL` and initializes the shared app Drizzle connection; `lib/db/src/schema/index.ts:20-23` exports application palettes, image-generation, settings, and CloudPainter-admin schemas. Neither file supplies Core records or authorizes database reuse.
+- `.gitignore` ignores `.local/` and `/generated-artifacts/`; `.replitignore` excludes those paths from deployment. The task plans and local harness reports therefore are not a durable Core evidence store.
+- `artifacts/cloudpainter/src/App.tsx:185-240` reads project/recovery data from browser `localStorage`; `artifacts/cloudpainter/src/lib/projectBackup.ts:27-34` defines a user sketch backup format and size limits. These are application sketch persistence/import/export, not Core task identity, audit, or isolated host restore.
+- The repository-declared post-merge setup, independent CI, and Replit service workflows are separate lifecycles. No Core writer, closure reader, task/run evidence index, recovery adapter, or command wiring was found by source search.
+
+## Read-only boundary
+
+Only source/configuration, filesystem names, Git file inventory/status, task plan text, and read-only native task records were inspected. No project command, import, test, guard, build, store connection/initialization, workflow start/restart, CI dispatch, cleanup, signal, activation, or cutover was performed.

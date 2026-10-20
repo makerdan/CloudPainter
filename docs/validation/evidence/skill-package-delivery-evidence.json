@@ -1,0 +1,290 @@
+{
+  "schemaVersion": 1,
+  "sourceCommitBefore": "743e17e3100779c3628a96b29d2e26558cd4ff8d",
+  "nativeTaskRef": "#68",
+  "id": "FGU-836b3c19-83da-4639-95fb-75420a1f8973",
+  "planHash": "a910de40bbc251acd9f3c5350e7d58d92dba55790e127dc8e7fa221c2b099c2c",
+  "contract": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+  "tier": "test-fast",
+  "tierHash": "053047da1f12470f6d06d4c87f1c38522799819f606473d8ff24c7ceb6b4385e",
+  "runId": "e9d4382c-8a4a-416c-86ce-9ab663a60808",
+  "reportPath": ".local/failure-gate/runs/FGU-836b3c19-83da-4639-95fb-75420a1f8973/e9d4382c-8a4a-416c-86ce-9ab663a60808/report.json",
+  "startedAt": "2026-10-20T01:47:10.721Z",
+  "finishedAt": "2026-10-20T01:48:42.107Z",
+  "state": "PASS",
+  "rawAllPassed": true,
+  "changedGateSources": [],
+  "steps": [
+    {
+      "name": "workspace-skill-sync",
+      "argv": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-timeout=45000",
+        "scripts/tests/workspace-skill-sync.test.mjs"
+      ],
+      "log": ".local/failure-gate/runs/FGU-836b3c19-83da-4639-95fb-75420a1f8973/e9d4382c-8a4a-416c-86ce-9ab663a60808/step-0.log",
+      "logHash": "cd144e7966a94568cb8e2fbd36d06116d51be0c84477cb22cdcd8c5be86923c6",
+      "exit": 0,
+      "blocked": null,
+      "quiescent": true,
+      "counts": {
+        "tests": 19,
+        "pass": 19,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      }
+    },
+    {
+      "name": "gate-unit",
+      "argv": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-timeout=45000",
+        "scripts/tests/failure-gate.test.mjs"
+      ],
+      "log": ".local/failure-gate/runs/FGU-836b3c19-83da-4639-95fb-75420a1f8973/e9d4382c-8a4a-416c-86ce-9ab663a60808/step-1.log",
+      "logHash": "0350617e512e662f3251d051d52ead67d77835bb971be004219f438e3ff4b829",
+      "exit": 0,
+      "blocked": null,
+      "quiescent": true,
+      "counts": {
+        "tests": 79,
+        "pass": 79,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      }
+    },
+    {
+      "name": "regression-guard",
+      "argv": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-timeout=45000",
+        "scripts/tests/check-regression-guard.test.mjs"
+      ],
+      "log": ".local/failure-gate/runs/FGU-836b3c19-83da-4639-95fb-75420a1f8973/e9d4382c-8a4a-416c-86ce-9ab663a60808/step-2.log",
+      "logHash": "d7f470a95a62ca774ed992ba6385b3f2d9fbd3d7b1219f8638f91d98179efc2a",
+      "exit": 0,
+      "blocked": null,
+      "quiescent": true,
+      "counts": {
+        "tests": 33,
+        "pass": 33,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      }
+    },
+    {
+      "name": "port-authority-clock",
+      "argv": [
+        "node",
+        "scripts/port-authority-clock-proof.mjs"
+      ],
+      "log": ".local/failure-gate/runs/FGU-836b3c19-83da-4639-95fb-75420a1f8973/e9d4382c-8a4a-416c-86ce-9ab663a60808/step-3.log",
+      "logHash": "dacb97674f30aaedfcd12ddcfec1ced9d4fd18ba7f5f0dc14ebb2e98cd66fa6d",
+      "exit": 0,
+      "blocked": null,
+      "quiescent": true,
+      "counts": {
+        "tests": 10,
+        "pass": 10,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      }
+    },
+    {
+      "name": "skill-package-integrity",
+      "argv": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-timeout=10000",
+        "scripts/tests/skill-package-integrity.test.mjs"
+      ],
+      "log": ".local/failure-gate/runs/FGU-836b3c19-83da-4639-95fb-75420a1f8973/e9d4382c-8a4a-416c-86ce-9ab663a60808/step-4.log",
+      "logHash": "fdc6b95df56bb52dfdb7d01c5b0c9ee37cefab6e313a0a914958e1de6496075a",
+      "exit": 0,
+      "blocked": null,
+      "quiescent": true,
+      "counts": {
+        "tests": 11,
+        "pass": 11,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0
+      }
+    }
+  ],
+  "totalPassed": 152,
+  "maintenance": {
+    "command": [
+      "node",
+      "--test",
+      "--test-reporter=tap",
+      "--test-timeout=45000",
+      "scripts/tests/failure-gate.test.mjs"
+    ],
+    "supervisor": "scripts/failure-gate/supervisor.py",
+    "timeoutMs": 60000,
+    "cleanupMs": 5000,
+    "log": ".local/skill-package-maintenance/gate.log",
+    "logHash": "dffc950afa55000d2a4e3957ad4459ae8d80e6a93bb246befd709ca2863e6e9f",
+    "exit": 0,
+    "blocked": null,
+    "quiescent": true,
+    "tests": 79,
+    "passed": 79,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0,
+    "tierPass": false
+  },
+  "protected": {
+    "preexistingRecordCount": 12,
+    "allPreexistingRecordsUnchanged": true,
+    "protectedUnchangedFiles": {
+      ".agents/skills/app-support-ops/SKILL.md": "571805eb3a9bcbce80200d283d59ccf47eba017cb6cd2967b59d9c4aaa82e774",
+      ".agents/skills/app-support-ops/evals/evals.json": "2af729eca0d64dda30879e7eeef9d9bafd907a824730ae097b74f94b8b169204",
+      ".agents/skills/port-authority/AUTHORING-SPECIFICATION.md": "c31b62855c9ecbdcb6350dc2814a5aa6127896aac2249debee5deb177a49cca2",
+      ".agents/skills/port-authority/CLOCK-TEST-REPAIR.md": "f64fe3f32dee0bba60257f9e5641d75380fc9ca4d485fba94d1bfe9150b4df9d",
+      ".agents/skills/port-authority/COMPATIBILITY-VERIFICATION.md": "871ec600d4fbf8b6c078cddead3ab46a9722d27f318ffcc18c32bbbf9b92b40a",
+      ".agents/skills/port-authority/PACKAGE-MANIFEST.json": "c7f64555b5eca5e7440768a561b17a16620840d073a63c553e9bdd2818fb42a7",
+      ".agents/skills/port-authority/PREFLIGHT-REVIEW-VERIFICATION.md": "dd3d2e162949e49d9d4ad43ffae53a3a1d5db811657f54006f0bec23bc6836f8",
+      ".agents/skills/port-authority/README.md": "07ab48c1df748026b4223dc6aa69ff6487277e70ea70c5d48bd60cf4ce46f14f",
+      ".agents/skills/port-authority/SKILL.md": "b495c93a5fe9495d396fb8615a1cca6eaf66d01244072f05ff58790406102717",
+      ".agents/skills/port-authority/SOURCE-MANIFEST.json": "a6b6493af3758d7d0a070705d3eaa05248ca7f13f895e91fd9d5c66a9063f2e3",
+      ".agents/skills/port-authority/VERIFICATION-REPORT.md": "a87ba50187dc428000ecce287a2b49a99d211e4efdc6c1e5e69294428bf22606",
+      ".agents/skills/port-authority/usage-prompt.txt": "217dfab7140b11a33137de13cb5912ada069265792a7a15c73ea4c8a026fbdc7",
+      ".agents/skills/port-authority/reference/advanced-controls.md": "bd1875817e5a64338bb9453c763b58208e16fd2b469a564eb03d7d97183b58ef",
+      ".agents/skills/port-authority/reference/runtime-contract.md": "fa022a5b1749f9ea53b1e88c5264a28b845799927cbac6588e14fc21ae47384a",
+      ".agents/skills/port-authority/reference/symptom-guidance.md": "5d5479363dd0c04c53fbc4b7b48e2c8df4e7548863cc32f531c89d2966d4d322",
+      ".agents/skills/port-authority/scripts/free-ports.mjs": "1fb47e7278228055b7ecfb3cc10cccdca88e3526cd3c986aa8190d1704375c74",
+      ".agents/skills/port-authority/scripts/host-capabilities.mjs": "5cfc85eb2fa283037d4f1f4c01b6b5c28973fc255661f8227caab5697bc939cc",
+      ".agents/skills/port-authority/scripts/runtime-environment.mjs": "530e8a18d6dbd50ef764ee4b276319f0cfa4307e1c6889f43f1686af95bae9b6",
+      ".agents/skills/port-authority/scripts/validation-lock.mjs": "7d1ac732db42a85bfc6c5a747e24fa293dd398ed9ca4499cd549a751e99bdfe2",
+      ".agents/skills/port-authority/tests/core.test.mjs": "2590751747ebc92f10eab53f6ccca429cd05fd3cee113a51e1d3d31c605c1a56",
+      ".agents/skills/port-authority/tests/hardening.test.mjs": "db0d6185b4d5e7d218c6850446eb8832627fb2c11fe6e3c2ce3d65545eabeb47",
+      ".agents/skills/port-authority/validation/budget-startup-repair-focused.log": "e728c06a18bb860914c59dba171b319082ac8f09018bd17dc892b335bebd2b87",
+      ".agents/skills/port-authority/validation/budget-startup-repair-full-run-1.log": "a6202c33caf3ec7a552fcf1d6660c330f3b3a8e8b55c7482cc72975b29e07453",
+      ".agents/skills/port-authority/validation/budget-startup-repair-full-run-2.log": "cf11af629776a912e54fd24b7e58260130aaba68386e8819a974d3756fa2eee4",
+      ".agents/skills/port-authority/validation/clock-budget-final-run-1.log": "a0ac021fa7f63896c832c2209cc7b607d0fe1bd6e9bcfb6d83aa1050b7ec7084",
+      ".agents/skills/port-authority/validation/clock-budget-final-run-2.log": "5ef0062e2262b05c3b7d26faaabd7f253af25d6ef674c203b78333f47cbe15e5",
+      ".agents/skills/port-authority/validation/clock-repair-full-run-1.log": "8e52393ba14d744cdcfedb72eeb484df45430741c44caf8d5a8ed99407401c0e",
+      ".agents/skills/port-authority/validation/clock-repair-full-run-2.log": "b1e4d7d82c2644c6e6351c18d07213d7d4f58ba8525985cf833cfbacbdd959f1",
+      ".agents/skills/port-authority/validation/clock-stage-focused.log": "bcbf42651a2d971d723a95bb36db16193292cdda106ca5db9e6af48ad0192842",
+      ".agents/skills/port-authority/validation/core-budget-fixture-focused.log": "39dbf30f5269b2c06dc42fdbe59867f20371e911e9645ef5810bab208ee15a99",
+      ".agents/skills/port-authority/validation/late-race-and-reentry-focused.log": "621febb16adcc2fab764ce2c95e7e1a6825652bcd585cafdaa32cfbe94dccdd8",
+      ".agents/skills/port-authority/validation/preflight-review-contract.log": "cfe8fce7ae3550f363f4ef3c789ed5bf12876cd5131407abc915e6c21b1e7b11",
+      ".agents/skills/port-authority/validation/run-1.log": "3d97592499605199f19aabda4a5749fe0cf4182faae00cbd38a63ef250d8dece",
+      ".agents/skills/port-authority/validation/run-2.log": "a2bb0b54af5f4d94d8f44c0556b75555d6e59d0699ee9a693d88b910374c5568",
+      ".agents/skills/port-authority/validation/unified-compatibility-run-1.log": "c92c1b5778b417e57e2b1a038dfac5867c41fc0bc4260b9963fb698f3b62b6b4",
+      ".agents/skills/port-authority/validation/unified-compatibility-run-2.log": "02d6b23f6a055d0ec51323ea28ed0dbcd6820aedca6d32f995a088ba35d223b9",
+      ".agents/skills/skill-application-router/CHANGELOG.md": "5fdc24c93ff3db13866f6d80e37df10f780be4fa292b5476e4818cf1e6885b51",
+      ".agents/skills/skill-application-router/README.md": "873ea815bfbd1d0f88834e0e2c6a5b66b69d39bc21681f21d4bfa51bb1da6a12",
+      ".agents/skills/skill-application-router/SKILL.md": "3ced0827ecc17ef6883de30de7b8246b53d55babab5030fe6d9dacad61d8778d",
+      ".agents/skills/skill-application-router/references/custom-skill-command-manifest.json": "4b143695c17095a9321e024b540ebb0459088cb6851507e83a9322ae72d3644c",
+      ".agents/skills/skill-application-router/references/delivery-reconciliation.md": "fd908bd54a3d2db4d25cc6a3f2e6fbdfece0e9276a28e02db48d5dcfdfa3f3ca",
+      ".agents/skills/skill-application-router/references/handoff-binding-and-recovery.md": "7e95d74645e0c1184b2ae24488ffd5936237fb6fc1d9596734a3e57bb1fe0ff5",
+      ".agents/skills/skill-application-router/references/installation-verification-plan.md": "99bc98079967ed47f8f524c187b9823fc99dddca55d4b61a9220dcbb5b3f8cb9",
+      ".agents/skills/skill-application-router/references/router-task-handoff-acceptance.md": "811bc5201d5067a4dc09d74c73880c4798f3407d7955182a923c95b3b897c849",
+      ".agents/skills/skill-application-router/references/custom-skill-commands.md": "92404c39211689460b3d9d88304cb550cfb8ea52a50b14a5377ca044f221af87",
+      ".agents/skills/failure-gate-unified/SKILL.md": "2025d914d570b364dea2e7b8bd9dda35881a9b60ccaca67d9d904060b37f6c22",
+      ".agents/skills/install-github-actions/SKILL.md": "d34cd47ccb669f562a110285c2f34a0edb576c956ff8b262e25a59d37da3ccf5",
+      ".agents/skills/ci-validation-parity/SKILL.md": "0032fdb9a316a2912d0bc6b6a2d6d8a1fc4147df2df27a82878be0bb35dacecd",
+      ".agents/skills/regression-guard/REVISION-NOTES.md": "0e1b11b5900591eafd6bb4134b25c91cf5a19416d4158feef5807f0edf8cf868",
+      ".agents/skills/regression-guard/SKILL.md": "6ae83efa7b986e684debd120a4c7f816379a8584cbe8b700ed5716e45993b7a1",
+      ".agents/skills/regression-guard/reference/delivery-handoff.md": "2df6f93305e3757989bff36be1ab1bc7cc9deb3229ad703cec83e3ef1a4c9910",
+      ".agents/skills/regression-guard/reference/enforcement-contract.md": "bdae119a887cda74dadbc6fded7ff7360e94c54fb57a858756ee4fdfa192d964",
+      "docs/validation/unified-policy.json": "6a59bad4c1ad86cb18d3fa3161643047b023dbe2b39e8e37a8a24198d72ad583",
+      "docs/validation/failure-baseline.json": "352892da28d8320bb6fcaa1d482bba8eecd9510786f3baf464e0b7343a57b871",
+      "scripts/port-authority-clock-proof.mjs": "66458c568d37da44e5f5c700043a5a98a9abb9ea55b4dda2c73ec969d53dee97",
+      ".github/workflows/cloudpainter-ci.yml": "0bbca81653ad721a9738b2c40601cbc2d5b472114b979f5fa443367ee3c66cfa",
+      "AGENTS.md": "da3bcd12c6affe490dee14de34f24c11ef337b73303c15f50c102fa0bf3325ef",
+      "replit.md": "3a17e96ba3b386dc5ef0e82727c334b49e17a5ccfafb0e754e0216b648069ea8"
+    },
+    "newIdentityOnly": "FGU-836b3c19-83da-4639-95fb-75420a1f8973",
+    "registryRevision": 121,
+    "priorRegistryHash": "ae1c73e2b1ec6a873e06c51d3f93599cbe201b88a7bc36539204616840a4de19",
+    "baselineEntries": 0
+  },
+  "deliveredFileHashes": {
+    ".agents/skills/app-support-ops/PACKAGE-MANIFEST.json": "34ac62a86b2c504ef4100dd99d5cb276147dcc401d90ce8b2a4e04b4848f6c5d",
+    ".agents/skills/app-support-ops/REVISION-NOTES.md": "6bacdbdba65b7a2e1f5c1a5ee18c41433eb512d21053e88390cc4017020c7f21",
+    ".agents/skills/app-support-ops/SKILL.md": "571805eb3a9bcbce80200d283d59ccf47eba017cb6cd2967b59d9c4aaa82e774",
+    ".agents/skills/app-support-ops/application-prompt.txt": "3929e6d62b41fe8c3cf958ff54e88262eef6f067708834137556d906b538784e",
+    ".agents/skills/app-support-ops/authoring/B0-SKILL.md": "de57d054bcd39880e741975f29a9cf0f38c300912f35791511a6b471d4d73983",
+    ".agents/skills/app-support-ops/authoring/CHANGES.diff": "1ac3a485d543e01568c7117d8c6d0e53784c34b72872a0a29fc8ddb0b24d0bdd",
+    ".agents/skills/app-support-ops/authoring/TEXT-VERIFICATION.json": "b237a9a37f9499528baeb0dc99a818b065ea5c4849a2da49b481aa843fe2010d",
+    ".agents/skills/app-support-ops/evals/evals.json": "2af729eca0d64dda30879e7eeef9d9bafd907a824730ae097b74f94b8b169204",
+    "docs/validation/evidence/skill-package-tiers-before.json": "6ccd5a5300f75e7bc0bb4a26ba3e80adfe8d7d8478c8319c1f20a264a76ba2de",
+    "docs/validation/unified-tiers.json": "8e32725168fa9d2cc0b878a03916958816cf72815aafda6f9ee44814706d2162",
+    "scripts/tests/failure-gate.test.mjs": "8844ae8bb5519f69f7f4cce84b64920ec0dae97d3c08f7bfb20f4bbcb24c6dee",
+    "scripts/tests/skill-package-integrity.test.mjs": "f19ea018bbbee621cfe0f5b9fca9f0841e3695968c2ae4ba8a8e65218cf0734f"
+  },
+  "packageComparison": [
+    {
+      "skill": "app-support-ops",
+      "archiveSha256": "90e32389a8f8038824507c3e87cab81525efa2557da37e90c903ff171adbad66",
+      "sameMembers": 8,
+      "preservedInstalledDifferences": [],
+      "intentionallyNotInstalled": []
+    },
+    {
+      "skill": "port-authority",
+      "archiveSha256": "9ea10f440242655f9a0bfa800e7cf803602186365de243ed2356c191111f3098",
+      "sameMembers": 34,
+      "preservedInstalledDifferences": [],
+      "intentionallyNotInstalled": []
+    },
+    {
+      "skill": "install-github-actions",
+      "archiveSha256": "61f3bcdf135c73d55093a9adcb10603e1e57480ddaba6a8f0039ad1f47776758",
+      "sameMembers": 1,
+      "preservedInstalledDifferences": [],
+      "intentionallyNotInstalled": []
+    },
+    {
+      "skill": "ci-validation-parity",
+      "archiveSha256": "afd85017d0001d5830db6614aee6af8114d28bc04908958415b4f0d5c358aa1b",
+      "sameMembers": 1,
+      "preservedInstalledDifferences": [],
+      "intentionallyNotInstalled": []
+    },
+    {
+      "skill": "skill-application-router",
+      "archiveSha256": "30aa9cf2d048185dc78501f32ac278d99377133128f79b555c6b9f3f922fcbe0",
+      "sameMembers": 7,
+      "preservedInstalledDifferences": [
+        "SKILL.md",
+        "references/custom-skill-commands.md"
+      ],
+      "intentionallyNotInstalled": []
+    },
+    {
+      "skill": "failure-gate-unified",
+      "archiveSha256": "e12ef26d91a5f02244b8c54abe278422a242f0451e5965838d0cc13da6c13469",
+      "sameMembers": 1,
+      "preservedInstalledDifferences": [],
+      "intentionallyNotInstalled": [
+        "application-prompt.txt",
+        "PACKAGE-MANIFEST.json"
+      ]
+    }
+  ],
+  "hostChecks": "Agent performed supported full native readback, eligible current lifecycle and scope authorization checks; local preflight separately reports host checks NOT_OBSERVED.",
+  "remainingLimits": [
+    "Port Authority canonical fixture corrections absent; private proof adjustments retained.",
+    "Workspace publication and mirror parity unverified/unavailable.",
+    "Portable integrity suite not added to remote CI; intentional gap, repository maintainer owns a future explicit decision.",
+    "Remix relationship is owner-confirmed, not independently agent-verified.",
+    "No runtime activation, recovery drill, production access, deployment or optional independent review."
+  ]
+}

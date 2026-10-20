@@ -3,6 +3,25 @@ export type Dimensions = {
   height: number;
 };
 
+export const MAX_PROJECT_DIMENSION = 2000;
+const DEFAULT_PROJECT_ASPECT_RATIO = 3 / 2;
+
+export function normalizeProjectDimensions(width: unknown, height: unknown): Dimensions {
+  const isUsable = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 1_000_000;
+  const validWidth = isUsable(width);
+  const validHeight = isUsable(height);
+
+  let safeWidth = validWidth ? width : validHeight ? height * DEFAULT_PROJECT_ASPECT_RATIO : 1200;
+  let safeHeight = validHeight ? height : validWidth ? width / DEFAULT_PROJECT_ASPECT_RATIO : 800;
+  const scale = Math.min(1, MAX_PROJECT_DIMENSION / Math.max(safeWidth, safeHeight));
+
+  return {
+    width: Math.max(1, Math.round(safeWidth * scale)),
+    height: Math.max(1, Math.round(safeHeight * scale)),
+  };
+}
+
 export function getScaledImageDimensions(
   sourceWidth: number,
   sourceHeight: number,

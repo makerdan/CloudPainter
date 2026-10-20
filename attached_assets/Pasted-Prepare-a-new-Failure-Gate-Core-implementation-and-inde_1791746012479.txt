@@ -1,0 +1,52 @@
+Prepare a new Failure Gate Core implementation and independent verification-and-repair pair for this project using canonical paired-task-orchestration.
+
+This project has no known Failure Gate architecture. Verify that assumption through discovery; do not overwrite an undiscovered existing authority.
+
+Use only canonical sources under .agents. Read the complete failure-gate-core contract and paired-task-orchestration’s applicable references. If required canonical sources are unavailable, identify the missing package rather than inventing or using alternate definitions.
+
+DISCOVERY AND SCOPE
+
+Discover the actual project identity, existing governance, validation commands and complete command graphs, task interfaces, persistence, approval sources, registered validation tiers, independent supervision/containment, evidence transport, completion readers and recovery capabilities.
+
+Build one tracked capability manifest and requirement-to-evidence matrix. Classify capabilities as present, missing or unavailable. Existing files, native task labels and passing mocks are not proof of implementation or authority.
+
+Implement Failure Gate Core only—not full v4. Do not introduce baseline ignores, flakiness/provenance diagnostics, auxiliary diagnostic retries, pre-existing-process reclaim, remote/distributed dispatch, export/import, automatic progression, pruning automation, merge or deployment.
+
+Do not require Port Authority as a prerequisite. Reuse genuine existing safety capabilities where suitable; implement missing retained Core capabilities within the approved scope.
+
+PAIRED TASKS
+
+Reconcile existing tasks and uncertain writes before creating anything. Prepare one complete implementation task and one genuinely dependent independent verification-and-repair task through supported project interfaces.
+
+Keep complete authoritative plans and durable evidence outside .local. Read back the full persisted plans, actual dependencies and required bindings. If native task interfaces are unavailable, preserve complete tracked plans and report that limitation without fabricating task records.
+
+Pin the entire applicable Core specification, original acceptance criteria, exclusions, execution permissions, limits, expected positive/negative outcomes and independent-review obligations before implementation. Include applicable Regression Guard requirements.
+
+IMPLEMENTATION OUTCOME
+
+The implementation must establish the actual retained Core architecture:
+- Transactional project-local Task IDs and non-reusable allocation history.
+- Exact durable plan, policy, approval and single-approved-tier bindings per task.
+- Genuine activation and selected-tier checked execution.
+- Complete participating command-graph admission and coverage.
+- Independent whole-entry finite supervision, original parent-budget accounting, exact owned-process tracking, bounded cleanup and retained uncertain exclusion.
+- Bounded raw-result/report capture and durable authorization/run/incident evidence.
+- Current-snapshot local completion checks, separate genuine owner-directed closure, and authorized recovery/restore.
+
+Core task single-flight and necessary cross-task resource exclusion must be real, not filename-only claims. Preserve independent callers under their actual authority without making their direct results satisfy checked-task evidence.
+
+Separate inert staging, bootstrap proof, integrated acceptance and ordinary cutover. Bootstrap requires genuine exact bounded permission under prior governance and an independently safe carrier—not self-approval by the new runner. Keep prior governance controlling until separately authorized transition; never activate two ordinary validation authorities.
+
+INDEPENDENT VERIFICATION
+
+The verifier must independently inspect actual installed routes, stores, writers, approvals, supervision, accounting, evidence, completion/closure boundaries and recovery behavior against the original complete criteria.
+
+List gaps before repairs. Repair only authorized in-scope gaps, invalidate affected evidence and obtain fresh independent post-repair acceptance. Include safely authorized negative cases and the actual isolated restore required by Core.
+
+Require independent pre-cutover acceptance, separate genuine transition approval and fresh independent post-transition acceptance under specifically approved smoke scope. Mocks, source presence, task Done labels and correct denials cannot establish missing capabilities.
+
+PERMISSIONS AND DELIVERY
+
+This request authorizes discovery and preparation of the proposed pair, including complete tracked plans and supported proposed-task creation. It does not authorize implementation execution, bootstrap tests, task activation, policy adoption, cutover, service disruption or deployment.
+
+Present the capability findings, complete proposed pair, acceptance matrix, required bootstrap/transition approvals and specific blockers. Report definition availability, implementation delivery, independent acceptance and ordinary activation separately.
