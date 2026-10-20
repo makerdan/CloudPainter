@@ -2167,6 +2167,36 @@ test("Skill package workload rejects stale and wrong-tier context without rewrit
   for (const id of [historical, tombstone, stale]) assert.deepEqual(registry(root).records[id], priorRecords[id]);
 });
 
+test("current authoring guide preserves renderer and observed native-context preflight", () => {
+  const source = fs.readFileSync(path.join(SOURCE, "docs/validation/unified-local-execution.md"), "utf8");
+  const currentPolicy = JSON.parse(fs.readFileSync(path.join(SOURCE, "docs/validation/unified-policy.json"), "utf8"));
+  function checkGuide(text) {
+    const template = text.match(/newPlanTemplate: ([a-z0-9-]+)/)?.[1];
+    assert.equal(template, currentPolicy.newPlanTemplate, "guide renderer must match current policy");
+    const example = text.match(/```sh\n([\s\S]*?)\n```/)?.[1];
+    assert.ok(example, "supported authoring example required");
+    for (const name of ["UNIFIED_TASK_ID", "TASK_PLAN_FILE", "UNIFIED_CONTEXT_FILE"]) {
+      assert.match(example, new RegExp(`^export ${name}=.+$`, "m"), `missing ${name}`);
+    }
+    const contextAt = example.indexOf("export UNIFIED_CONTEXT_FILE=");
+    const preflightAt = example.indexOf('node scripts/check-unified-preflight.mjs "$UNIFIED_TASK_ID"');
+    const guardAt = example.indexOf("node scripts/validate-task-plans.mjs");
+    const runnerAt = example.indexOf('pnpm run test-fast -- "$UNIFIED_TASK_ID"');
+    assert.ok(contextAt < preflightAt && preflightAt < guardAt && guardAt < runnerAt,
+      "observed context and preflight must precede guards and the bound runner");
+    assert.match(text, /observed\s+native context/, "native readback, not a local assertion");
+  }
+  checkGuide(source);
+  assert.throws(() => checkGuide(source.replace(
+    `newPlanTemplate: ${currentPolicy.newPlanTemplate}`, "newPlanTemplate: obsolete-template")),
+  /guide renderer must match current policy/);
+  assert.throws(() => checkGuide(source.replace(
+    /^export UNIFIED_CONTEXT_FILE=.+\n/m, "")), /missing UNIFIED_CONTEXT_FILE/);
+  assert.throws(() => checkGuide(source.replace(
+    'node scripts/check-unified-preflight.mjs "$UNIFIED_TASK_ID"\n', "")),
+  /observed context and preflight/);
+});
+
 test("output bounds cannot report PASS or leave fixture children running", async t => {
   const root = fixture(t, 'process.stdout.write("x".repeat(2000000));setInterval(()=>{},100);');
   const id = provision(root, spec());

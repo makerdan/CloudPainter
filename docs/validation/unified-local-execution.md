@@ -51,11 +51,22 @@ After cutover, create a filled repository-relative specification and run:
 
 ```sh
 node scripts/new-plan.mjs path/to/spec.json
-export UNIFIED_TASK_ID=FGU-<generated-id>
+export UNIFIED_TASK_ID='FGU-<generated-id>'
 export TASK_PLAN_FILE=.local/tasks/$UNIFIED_TASK_ID.md
+export UNIFIED_CONTEXT_FILE=.local/tasks/observed-native-context.json
+node scripts/check-unified-preflight.mjs "$UNIFIED_TASK_ID"
 node scripts/validate-task-plans.mjs
 pnpm run test-fast -- "$UNIFIED_TASK_ID"
 ```
+
+Replace the ID placeholder with the provisioner's actual result. Before the
+preflight invocation, reconcile the sealed dispatch payload with the native
+task through supported publication and full readback. Save that **observed
+native context** at the illustrated context-file path, or set the variable to
+its actual path. An unobserved local export is not a substitute. Follow
+`unified-preflight-execution.md` for the exact transport and eligibility checks.
+The example is not permission to provision without a complete inspected spec,
+or to validate before native readback and applicable owner authorization.
 
 Replace `test-fast` with the ID's actual bound tier, never a convenient tier.
 All four package tier aliases use the checked CLI; direct `run-validation.mjs`
@@ -70,7 +81,7 @@ the tier definition/workload and supported invocation. An amendment applying the
 current contract requires a complete current specification; it records the
 old/new contract and tier and reseals the same ID.
 
-New plans use the policy's `newPlanTemplate: unified-v3` representation. The
+New plans use the policy's `newPlanTemplate: unified-v4` representation. The
 per-record representation is separate from the canonical skill revision:
 historical `legacy-v1` and `unified-v2` renderers/mappings remain unchanged.
 Amendments explicitly adopt the new complete representation; supply a complete
